@@ -756,18 +756,8 @@ int control_service(unsigned long control, int argc, TCHAR **argv, bool return_s
   if (control == NSSM_SERVICE_CONTROL_START) {
     unsigned long initial_status = SERVICE_STOPPED;
     ret = StartService(service_handle, (unsigned long) argc, (const TCHAR **) argv);
-    error = GetLastError();
+    error = ret ? ERROR_SUCCESS : GetLastError();
     CloseServiceHandle(services);
-
-    if (error == ERROR_IO_PENDING) {
-      /*
-        Older versions of Windows return immediately with ERROR_IO_PENDING
-        indicate that the operation is still in progress.  Newer versions
-        will return it if there really is a delay.
-      */
-      ret = 1;
-      error = ERROR_SUCCESS;
-    }
 
     if (ret) {
       unsigned long cutoff = 0;
@@ -1010,13 +1000,11 @@ void set_service_recovery(nssm_service_t *service) {
   ZeroMemory(&flag, sizeof(flag));
   flag.fFailureActionsOnNonCrashFailures = true;
 
-  /* This functionality was added in Vista so the call may fail */
   if (! ChangeServiceConfig2(service->handle, SERVICE_CONFIG_FAILURE_ACTIONS_FLAG, &flag)) {
     unsigned long error = GetLastError();
-    /* Pre-Vista we expect to fail with ERROR_INVALID_LEVEL */
-    if (error != ERROR_INVALID_LEVEL) {
-      log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_SERVICE_CONFIG_FAILURE_ACTIONS_FAILED, service->name, error_string(error), 0);
-    }
+    log_event(EVENTLOG_ERROR_TYPE,
+              NSSM_EVENT_SERVICE_CONFIG_FAILURE_ACTIONS_FAILED,
+              service->name, error_string(error), 0);
   }
 }
 

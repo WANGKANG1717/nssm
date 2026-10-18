@@ -413,13 +413,8 @@ int print_process(nssm_service_t *service, kill_t *k) {
 
   unsigned long size = _countof(exe);
   if (! QueryFullProcessImageName(k->process_handle, 0, exe, &size)) {
-    /*
-      Fall back to GetModuleFileNameEx(), which won't work for WOW64 processes.
-    */
     if (! GetModuleFileNameEx(k->process_handle, NULL, exe, _countof(exe))) {
-      long error = GetLastError();
-      if (error == ERROR_PARTIAL_COPY) _sntprintf_s(exe, _countof(exe), _TRUNCATE, _T("[WOW64]"));
-      else _sntprintf_s(exe, _countof(exe), _TRUNCATE, _T("???"));
+      _sntprintf_s(exe, _countof(exe), _TRUNCATE, _T("???"));
     }
   }
 
