@@ -402,7 +402,7 @@ static int try_read(logger_t *logger, void *address, unsigned long bufsize, unsi
 
       /* Write was cancelled by the other end. */
       case ERROR_OPERATION_ABORTED:
-        ret = 1;
+        ret = -1;
         goto complain_read;
 
       default:
