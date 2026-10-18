@@ -5,6 +5,7 @@
 #include "service.h"
 #include "nssm_io.h"
 #include "utf8.h"
+#include "win32_handle.h"
 
 #define COMPLAINED_READ (1 << 0)
 #define COMPLAINED_WRITE (1 << 1)
@@ -104,14 +105,19 @@ void close_handle(HANDLE *handle) {
 
 HANDLE write_to_file(TCHAR *path, unsigned long sharing, SECURITY_ATTRIBUTES *attributes, unsigned long disposition, unsigned long flags) {
   const LARGE_INTEGER offset = {};
-  HANDLE ret = CreateFile(path, FILE_WRITE_DATA, sharing, attributes, disposition, flags, 0);
-  if (ret != INVALID_HANDLE_VALUE) {
-    if (SetFilePointerEx(ret, offset, 0, FILE_END)) SetEndOfFile(ret);
-    return ret;
+  unique_handle file(CreateFile(path, FILE_WRITE_DATA, sharing, attributes,
+                                disposition, flags, nullptr));
+  if (file && SetFilePointerEx(file.get(), offset, nullptr, FILE_END) &&
+      SetEndOfFile(file.get())) {
+    return file.release();
   }
 
-  log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_CREATEFILE_FAILED, path, error_string(GetLastError()), 0);
-  return ret;
+  const unsigned long error = GetLastError();
+  file.reset();
+  log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_CREATEFILE_FAILED, path,
+            error_string(error), 0);
+  SetLastError(error);
+  return INVALID_HANDLE_VALUE;
 }
 
 static void rotated_filename(TCHAR *path, TCHAR *rotated, unsigned long rotated_len, SYSTEMTIME *st) {
