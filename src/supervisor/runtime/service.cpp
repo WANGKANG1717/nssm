@@ -18,6 +18,7 @@
 #include "resource_monitor.h"
 
 static constexpr int kStartHandledByRecovery = -1;
+static constexpr int kStartAwaitingProcessExit = -2;
 
 static bool start_detached_thread(LPTHREAD_START_ROUTINE function,
                                   void *context) {
@@ -61,8 +62,7 @@ static int finish_service_start(nssm_service_t *service,
         WaitForSingleObject(service->process_handle,
                             NSSM_SERVICE_STATUS_DEADLINE);
       }
-      end_service(service, false);
-      return kStartHandledByRecovery;
+      return kStartAwaitingProcessExit;
     }
     service->throttle = 0;
     log_event(EVENTLOG_INFORMATION_TYPE, NSSM_EVENT_READINESS_READY,
@@ -73,8 +73,7 @@ static int finish_service_start(nssm_service_t *service,
         service->status_handle, &service->status, service->process_handle,
         service->name, _T("start_service"), NSSM_RESET_THROTTLE_RESTART);
     if (stability == 0) {
-      end_service(service, false);
-      return kStartHandledByRecovery;
+      return kStartAwaitingProcessExit;
     }
     if (stability < 0) {
       if (WaitForSingleObject(service->stop_event, 0) == WAIT_OBJECT_0) {
@@ -390,7 +389,8 @@ int monitor_service(nssm_service_t *service) {
   /* Set service status to started */
   int ret = start_service(service);
   if (ret == kStartHandledByRecovery) return 0;
-  if (ret) {
+  const bool awaiting_process_exit = ret == kStartAwaitingProcessExit;
+  if (ret && ! awaiting_process_exit) {
     TCHAR code[16];
     _sntprintf_s(code, _countof(code), _TRUNCATE, _T("%d"), ret);
     log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_START_SERVICE_FAILED,
@@ -401,8 +401,6 @@ int monitor_service(nssm_service_t *service) {
       WaitForSingleObject(service->stop_event, 0) == WAIT_OBJECT_0) {
     return 0;
   }
-  log_event(EVENTLOG_INFORMATION_TYPE, NSSM_EVENT_STARTED_SERVICE, service->exe, service->flags, service->name, service->dir, 0);
-
   /* Monitor service */
   if (! RegisterWaitForSingleObject(
           &service->wait_handle, service->process_handle, end_service, service,
@@ -413,6 +411,10 @@ int monitor_service(nssm_service_t *service) {
               service->exe, error_string(error), 0);
     return stop_service(service, 3);
   }
+  if (awaiting_process_exit) return 0;
+
+  log_event(EVENTLOG_INFORMATION_TYPE, NSSM_EVENT_STARTED_SERVICE,
+            service->exe, service->flags, service->name, service->dir, 0);
   if (! start_health_monitor(service)) {
     log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_HEALTH_MONITOR_START_FAILED,
               service->name, error_string(GetLastError()), 0);
