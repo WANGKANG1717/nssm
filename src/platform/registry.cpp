@@ -756,7 +756,7 @@ int get_parameters(nssm_service_t *service, STARTUPINFO *si) {
   HKEY key = open_registry(service->name, KEY_READ);
   if (! key) return 1;
 
-  /* Don't expand parameters when retrieving for the GUI. */
+  /* Expand parameters only when preparing the child process environment. */
   bool expand = si ? true : false;
 
   /* Try to get environment variables - may fail */

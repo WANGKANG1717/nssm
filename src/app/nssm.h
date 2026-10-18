@@ -42,11 +42,7 @@
 #define NTDDI_VERSION 0x0A000000
 #endif
 
-#define APSTUDIO_HIDDEN_SYMBOLS
 #include <windows.h>
-#include <prsht.h>
-#undef APSTUDIO_HIDDEN_SYMBOLS
-#include <commctrl.h>
 #include <tchar.h>
 #ifndef NSSM_COMPILE_RC
 #include <fcntl.h>
@@ -68,7 +64,6 @@
 #include "registry.h"
 #include "settings.h"
 #include "nssm_io.h"
-#include "gui.h"
 #endif
 
 void nssm_exit(int);

@@ -702,8 +702,7 @@ int pre_install_service(int argc, TCHAR **argv) {
   set_nssm_service_defaults(service);
   if (argc) _sntprintf_s(service->name, _countof(service->name), _TRUNCATE, _T("%s"), argv[0]);
 
-  /* Show the dialogue box if we didn't give the service name and path */
-  if (argc < 2) return nssm_gui(IDD_INSTALL, service);
+  if (argc < 2) return usage(1);
 
   if (! service) {
     print_message(stderr, NSSM_MESSAGE_OUT_OF_MEMORY, _T("service"), _T("pre_install_service()"));
@@ -908,10 +907,9 @@ int pre_edit_service(int argc, TCHAR **argv) {
     if (mode != MODE_GETTING && mode != MODE_DUMPING) print_message(stderr, NSSM_MESSAGE_INVALID_SERVICE, service->name, NSSM, service->image);
   }
 
-  /* Editing with the GUI. */
   if (mode == MODE_EDITING) {
-    nssm_gui(IDD_EDIT, service);
-    return 0;
+    cleanup_nssm_service(service);
+    return usage(1);
   }
 
   HKEY key = 0;
@@ -1054,8 +1052,11 @@ int pre_remove_service(int argc, TCHAR **argv) {
   set_nssm_service_defaults(service);
   if (argc) _sntprintf_s(service->name, _countof(service->name), _TRUNCATE, _T("%s"), argv[0]);
 
-  /* Show dialogue box if we didn't pass service name and "confirm" */
-  if (argc < 2) return nssm_gui(IDD_REMOVE, service);
+  if (argc < 2) {
+    cleanup_nssm_service(service);
+    print_message(stderr, NSSM_MESSAGE_PRE_REMOVE_SERVICE);
+    return 100;
+  }
   if (str_equiv(argv[1], _T("confirm"))) {
     int ret = remove_service(service);
     cleanup_nssm_service(service);
@@ -1126,7 +1127,7 @@ int edit_service(nssm_service_t *service, bool editing) {
     Username must be NULL if we aren't changing or an account name.
     We must explicitly use LOCALSYSTEM to change it when we are editing.
     Password must be NULL if we aren't changing, a password or "".
-    Empty passwords are valid but we won't allow them in the GUI.
+    Empty passwords remain valid for this legacy settings path.
   */
   TCHAR *username = 0;
   TCHAR *canon = 0;

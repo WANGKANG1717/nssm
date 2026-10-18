@@ -92,7 +92,7 @@ int username_sid(const TCHAR *username, SID **sid, LSA_HANDLE *policy) {
     if (translated_sid->Use != SidTypeUnknown || _tcsnicmp(NSSM_VIRTUAL_SERVICE_ACCOUNT_DOMAIN _T("\\"), username, _tcslen(NSSM_VIRTUAL_SERVICE_ACCOUNT_DOMAIN) + 1)) {
       LsaFreeMemory(translated_domains);
       LsaFreeMemory(translated_sid);
-      print_message(stderr, NSSM_GUI_INVALID_USERNAME, username);
+      print_message(stderr, NSSM_MESSAGE_INVALID_USERNAME, username);
       return 6;
     }
   }
@@ -101,7 +101,7 @@ int username_sid(const TCHAR *username, SID **sid, LSA_HANDLE *policy) {
   if (! trust || ! IsValidSid(trust->Sid)) {
     LsaFreeMemory(translated_domains);
     LsaFreeMemory(translated_sid);
-    print_message(stderr, NSSM_GUI_INVALID_USERNAME, username);
+    print_message(stderr, NSSM_MESSAGE_INVALID_USERNAME, username);
     return 7;
   }
 
@@ -135,7 +135,7 @@ int username_sid(const TCHAR *username, SID **sid, LSA_HANDLE *policy) {
 
   ret = 0;
   if (translated_sid->Use == SidTypeWellKnownGroup && ! well_known_sid(*sid)) {
-    print_message(stderr, NSSM_GUI_INVALID_USERNAME, username);
+    print_message(stderr, NSSM_MESSAGE_INVALID_USERNAME, username);
     ret = 10;
   }
 

@@ -12,6 +12,5 @@ static inline void free_message_string(TCHAR *s) {
 }
 void log_event(unsigned short, unsigned long, ...);
 void print_message(FILE *, unsigned long, ...);
-int popup_message(HWND, unsigned int, unsigned long, ...);
 
 #endif

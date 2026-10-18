@@ -1,45 +1,24 @@
 # NSSM (Non-Sucking Service Manager)
 
-NSSM 是一个将任意可执行程序作为 Windows 服务运行并进行管理的工具，提供安装/编辑/移除、启动/停止/重启、I/O 重定向、环境变量与工作目录等能力。
+NSSM 是一个将普通应用程序作为原生 Windows 服务运行的轻量监督器。本分支以原版 NSSM 为基础进行全新开发，提供声明式 JSON 配置、机器可读输出、进程监督、健康检查、恢复策略、资源治理和日志轮转。
 
-## 兼容性说明
-- 最低支持系统：Windows 10（`_WIN32_WINNT=0x0A00`）。
-- 仅提供 x64 构建，不再支持 32 位 Windows。
-- 交互式服务（`SERVICE_INTERACTIVE_PROCESS`，“与桌面交互”）在现代 Windows 中已不再作为可用能力，GUI 中已移除相关选项。
+项目仅提供 CLI 和 Windows 服务运行时，不包含 Win32 GUI。未来的 Web 或桌面管理端应调用稳定的 JSON CLI，不将界面逻辑并入服务监督核心。
 
-![NSSM 界面](doc/界面.png)
+## 平台与工具链
 
-### 版本说明
-本仓库基于 NSSM 原作（作者 Iain Patterson，上游网站：[nssm.cc](https://nssm.cc/)），遵循 Public Domain 许可。
-在原版基础上主要进行了以下维护与增强：
-- 版本信息升级到 `3.0.0`（`src/app/version.h`）。
-- 最低系统基线升级为 Windows 10（`_WIN32_WINNT=0x0A00`），仅构建 x64。
-- 清理并修复多处稳定性问题（句柄泄漏、内存释放一致性、边界/指针判断、注册表类型校验等）。
-- 服务类型与现代 Windows 行为对齐：不再使用交互式服务类型，统一按 `SERVICE_WIN32_OWN_PROCESS` 处理。
-- GUI 调整：移除现代 Windows 中无效的“与桌面交互”选项，避免误导。
-- GUI 现代化：使用 Common Controls v6、Segoe UI 与 Per-Monitor DPI v2，采用左侧分类导航，并统一表单控件尺寸与高 DPI 间距。
-- “描述”字段支持多行输入；CPU 亲和性列表按字体、CPU 编号和当前 DPI 动态计算列宽。
-- 中文文案持续校对与统一（GUI 与 `messages.mc`），修复中英混杂和术语不一致问题。
-- 构建链路迁移到 CMake、Ninja 和 MinGW-w64 GCC 14+，统一使用 C++20。
-- Windows 消息与资源分别由 `windmc` 和 `windres` 编译，不依赖 Visual Studio。
-- UTF-8 对话框资源在构建阶段转换为明确的 Unicode 转义，避免受 Windows 系统代码页影响。
-- MinGW 运行库静态链接；Windows 系统库仍使用系统提供的 DLL。
-- Release 链接不写入时间戳；相同源码和工具链可生成一致的二进制文件。
-- 声明式服务默认使用独立虚拟账户和 Service SID，避免默认以 LocalSystem 运行。
+- Windows 10 或更高版本。
+- 仅支持 x64 和 Unicode。
+- C++20。
+- 仅支持 MinGW-w64 GCC 14 或更高版本。
+- CMake 3.25+、Ninja、`windmc` 和 `windres`。
+- 不需要 Visual Studio，不支持 MSVC 工程或 32 位构建。
+- 不支持交互式服务（`SERVICE_INTERACTIVE_PROCESS`）。
 
-核心功能与命令行参数保持与原版兼容；如需原版发布与英文文档，请参见上游站点。
+本项目基于 Iain Patterson 的 NSSM，遵循 Public Domain 许可。本分支不保留原版 GUI、旧工程和注册表式配置命令的兼容性。
 
-## 构建方式
-### 1) 本地构建
+## 构建
 
-不需要安装 Visual Studio。请准备以下 x64 UCRT 工具，且确保它们位于 `PATH`：
-
-- MinGW-w64 GCC/G++ 14 或更高版本
-- CMake 3.25 或更高版本
-- Ninja
-- GNU Binutils（必须包含 `windmc`、`windres` 和 `objdump`）
-
-使用 MSYS2 时，可在 UCRT64 终端安装工具：
+使用 MSYS2 UCRT64 可安装所需工具：
 
 ```sh
 pacman -S --needed mingw-w64-ucrt-x86_64-gcc \
@@ -60,319 +39,102 @@ cmake --build --preset mingw-release
 ctest --preset mingw-release
 ```
 
-产物分别位于 `out\Debug\win64\nssm.exe` 和 `out\Release\win64\nssm.exe`。
+产物位于 `out\Debug\win64\nssm.exe` 和 `out\Release\win64\nssm.exe`。MinGW 运行库静态链接，Windows 系统库仍使用系统 DLL。Release 构建不嵌入时间戳，便于可复现构建。
 
-版本输出默认使用稳定的 `release` 构建标签，不嵌入编译时间，以保证相同输入可生成可复现的二进制。需要区分内部构建时可在配置阶段传入 `-DNSSM_BUILD_LABEL=<标签>`。
-
-本仓库开发环境还可将便携 MSYS2 放在被 Git 忽略的 `.tools\msys64`，然后在 PowerShell 中临时启用：
+本地便携 MSYS2 也可放在已忽略的 `.tools\msys64` 中：
 
 ```powershell
 $toolBin = (Resolve-Path '.tools\msys64\ucrt64\bin').Path
 $env:PATH = "$toolBin;$env:PATH"
 ```
 
-### 2) GitHub Actions
+GitHub Actions 会构建并测试 Debug/Release，验证 x64 PE 和静态 MinGW 运行库，并生成 ZIP、SHA-256 校验文件和 SPDX 2.3 SBOM。配置签名 secrets 后，Release 作业还会签名并验证 `nssm.exe`。
 
-`.github/workflows/build.yml` 会在 push、pull request 或手动触发时，使用 MSYS2 UCRT64 分别构建和测试 Debug、Release。工作流还会验证产物是 x64 PE，并检查其没有动态依赖 `libgcc`、`libstdc++` 或 `libwinpthread`，最后上传 `nssm-win64-Debug` 和 `nssm-win64-Release` 工件。
+## 快速使用
 
-Release 作业还会生成版本化 ZIP、SHA-256 校验文件和 SPDX 2.3 SBOM。仓库配置
-`WINDOWS_SIGNING_CERT_BASE64` 与 `WINDOWS_SIGNING_CERT_PASSWORD` secrets 后，会先
-使用 SHA-256 和可信时间戳签名、验证 `nssm.exe`，再进行打包；未配置证书时明确
-产出未签名构件。
-
-## 构建与资源说明
-
-- `CMakeLists.txt`：唯一受支持的构建入口；旧 VS2008 工程已删除。
-- `CMakePresets.json`：提供 Debug、Release 和 RelWithDebInfo 预设。
-- `cmake/CompileMessages.cmake`：调用 `windmc` 编译事件消息资源。
-- `cmake/ConvertMessages.ps1`：把 UTF-8 消息源转换为 `windmc` 所需格式。
-- `cmake/ConvertResource.ps1`：生成不依赖系统代码页的 Unicode 对话框资源。
-- `cmake/VerifyResources.ps1`：检查编译后的 EXE 包含正确中文且不含常见乱码。
-- `cmake/CompilerOptions.cmake`：集中维护 C++20、静态 MinGW 运行库及 PE 安全链接选项。
-
-CTest 当前包含：
-
-- `nssm.version`：验证版本、架构和程序可执行性。
-- `nssm.validate`：验证声明式配置样例及 UTF-8/Unicode 解析。
-- `nssm.resources`：验证中文资源的 UTF-16 内容并检测乱码回归。
-- `nssm.unit`：覆盖命令行转义、环境隔离、Job Object、探针、恢复与配置校验。
-
-## 项目结构
-
-```text
-src/
-  app/          程序入口、全局编译契约与版本信息
-  cli/          命令行和控制台适配
-  config/       JSON 配置模型、校验及 SCM 应用
-  supervisor/
-    process/     进程创建、Job Object、CPU/优先级选项与进程树终止
-    monitoring/  Readiness、Health Check 与资源监控
-    runtime/     服务状态机、恢复、Hooks、日志和账户
-  platform/     Windows API、注册表、环境及编码适配
-  ui/           旧 Win32 GUI（与核心运行时隔离）
-resources/      RC、消息目录、图标和 manifest
-tests/          单元测试及配置样例
-cmake/          构建、资源转换和验证脚本
-```
-
-`CMakeLists.txt` 按相同职责分组列出源文件。新增功能应放入对应模块，避免再次把实现堆回仓库根目录。
-
-CPU 亲和性和进程优先级的解析与转换集中在
-`src/supervisor/process/process_options.*`，不再耦合到服务状态机实现。
-GUI 暂时保留在 `src/ui/`，但不承载新的核心能力；声明式 CLI 是推荐的管理入口。
-
-提交代码前建议至少执行：
-
-```powershell
-cmake --preset mingw-release
-cmake --build --preset mingw-release
-ctest --preset mingw-release
-```
-
-## 图形界面说明
-
-- 左侧分类导航用于切换应用程序、详情、登录、依赖、进程、关闭、退出操作、I/O、日志轮转、环境变量和事件钩子。
-- 界面支持 Windows 10 高 DPI 缩放；CPU 亲和性列表会根据当前 DPI 自动调整列宽。
-- 单行输入框与浏览按钮使用统一的行高和垂直中心线。
-- “描述”、依赖和环境变量为多行输入；“描述”中可直接按 Enter 换行。
-- 中英文对话框资源均以 Unicode 形式写入 EXE，不依赖“非 Unicode 程序的语言”等区域设置。
-
-## 使用与命令（摘要）
-参考官方命令行文档整理要点，详情见：[nssm commands](https://nssm.cc/commands)。
-
-面向自动化的声明式命令：
+先验证并预览配置，再以管理员权限应用：
 
 ```powershell
 nssm validate --json .\service.json
 nssm plan --json .\service.json
 nssm apply --json .\service.json
-nssm export --json MyService .\backup\MyService.json
 ```
 
-`plan` 只读取 JSON、ACL 和 SCM，不修改系统；结果为 `create`、`update` 或
-`noChange`，并列出发生变化的配置区段。`--json` 输出稳定的 JSON 对象，失败时
-同样输出结构化错误。声明式命令使用统一退出码：`0` 成功、`1` 配置校验失败、
-`2` 参数错误、`3` 权限不足、`4` 与现有服务冲突、`5` Windows/SCM 错误、
-`6` 路径安全审计失败。
-JSON 模式不会弹出 UAC 提权窗口；权限不足时直接返回退出码 `3` 和结构化错误，
-便于 CI/CD 做出确定性判断。
+管理服务：
 
-`export` 从 SCM 中登记的 `ConfigPath` 读取并重新校验配置，再通过同目录临时文件、
-`FlushFileBuffers` 和原子替换写入目标，目标路径已有文件时不会出现“只写了一半”的
-状态。配置 schema 目前严格固定为 `1`；项目尚未投入生产，因此不保留或猜测旧
-schema 的兼容迁移。
+```powershell
+nssm start MyService
+nssm status --json MyService
+nssm stop MyService
+nssm export --json MyService .\backup\MyService.json
+nssm remove MyService confirm
+```
 
-声明式配置的安全基线默认等价于：
+常用命令：
+
+- `validate <config>`：校验 JSON 和业务规则。
+- `plan <config>`：只读比较期望配置与 SCM 状态。
+- `apply <config>`：创建或原子更新服务配置。
+- `export <service> <path>`：导出已登记的声明式配置。
+- `start|stop|restart|pause|continue <service>`：控制服务。
+- `status [--verbose|--json] <service>`：查询 SCM 与运行时状态。
+- `rotate <service>`：触发在线日志轮转。
+- `list [all]`：列出 NSSM 管理的服务，或列出全部 Windows 服务。
+- `processes <service>`：列出包装进程树。
+- `remove <service> confirm`：删除服务，必须显式确认。
+- `version`：显示版本和架构。
+
+旧 `install/edit/get/set/reset/unset/dump` 命令已删除。请修改 JSON 并重新执行 `apply`。
+
+## 声明式配置
+
+最小示例位于 `tests/fixtures/minimal-service.json`。当前 schema 严格固定为 `1`，不猜测或迁移旧 schema。
 
 ```json
 {
+  "schema": 1,
   "service": {
+    "name": "example-service",
+    "displayName": "Example Service",
+    "startup": "automatic",
     "account": { "type": "virtual" }
   },
-  "security": {
-    "serviceSid": "unrestricted"
-  }
+  "application": {
+    "path": "C:\\apps\\example\\example.exe",
+    "arguments": ["--serve"],
+    "workingDirectory": "C:\\apps\\example"
+  },
+  "security": { "serviceSid": "unrestricted" }
 }
 ```
 
-`serviceSid` 可取 `unrestricted`、`restricted` 或 `none`。`restricted` 会把
-服务 SID 同时加入受限 SID 列表，适用于已为 `NT SERVICE\\<服务名>` 精确配置
-文件、注册表和其他对象 ACL 的服务；否则可能因权限不足而无法启动。配置文件不
-接受明文密码字段，需要域身份时优先使用 gMSA。
+声明式命令的统一退出码为：`0` 成功、`1` 配置校验失败、`2` 参数错误、`3` 权限不足、`4` 配置冲突、`5` Windows/SCM 错误、`6` 路径安全审计失败。`--json` 模式不弹出 UAC，方便 CI/CD 确定性处理。
 
-执行 `apply` 以及服务启动时会审计配置文件、应用程序、工作目录、命令探针和
-日志目录的 Windows ACL。对象必须由 SYSTEM、Administrators 或
-TrustedInstaller 控制，且不能向其他主体授予修改权限；不安全路径会被拒绝，
-以防止低权限用户替换配置或程序后借服务身份执行代码。
+`apply` 和服务启动时会审计配置文件、应用程序、工作目录、命令探针与日志目录的 Windows ACL。对象必须由 SYSTEM、Administrators 或 TrustedInstaller 控制，且不能向其他主体授予修改权限。
 
-- 安装
-  - GUI：`nssm install <ServiceName>`
-  - 直接安装：`nssm install <ServiceName> <Program> [<Arguments>]`
+服务默认建议使用独立虚拟账户和 Service SID，而非 LocalSystem。配置不接受明文密码；需要域身份时优先使用 gMSA。
 
-- 编辑/导出/获取/设置/重置
-  - GUI 编辑：`nssm edit <ServiceName>`
-  - 导出当前配置：`nssm dump <ServiceName>`
-  - 获取参数：`nssm get <ServiceName> <Parameter> [<Subparam>]`
-  - 设置参数：`nssm set <ServiceName> <Parameter> [<Subparam>] <Value>`
-  - 重置为默认：`nssm reset <ServiceName> <Parameter>`
-  - 删除参数：`nssm unset <ServiceName> <Parameter> [<Subparam>]`
+## 运行时状态
 
-- 启动/停止/重启/状态
-  - 启动：`nssm start <ServiceName>`
-  - 停止：`nssm stop <ServiceName>`
-  - 重启：`nssm restart <ServiceName>`
-  - 状态：`nssm status <ServiceName>`
-  - 状态码：`nssm statuscode <ServiceName>`
-  - 控制：`nssm pause <ServiceName>` / `nssm continue <ServiceName>` / `nssm rotate <ServiceName>`（按需轮转需启用在线轮转）
-  - 进程树：`nssm processes <ServiceName>`
+`nssm status --json <service>` 除了返回 SCM 状态和包装进程 PID，还会返回子进程 PID、运行时长、Readiness、Health Check、恢复重启次数，以及 Job Object 的 CPU、内存和进程数。运行时数据通过只读 ACL 的共享内存快照发布；服务停止或快照不可用时，`runtimeAvailable` 为 `false`。
 
-详细状态可使用 `nssm status --verbose <ServiceName>`；自动化程序使用
-`nssm status --json <ServiceName>`。除了 SCM 状态和包装进程 PID，还会返回
-实际子进程 PID、运行时长、健康状态、恢复重启次数，以及整个 Job Object 的
-CPU、内存和进程数。运行时数据通过带只读用户 ACL 的共享内存快照发布，不会
-高频写入注册表；服务停止或旧版本服务没有快照时，`runtimeAvailable` 为 `false`。
+## 仓库结构
 
-- 账户与登录（Log on）
-  - 本地系统账户：`nssm set <ServiceName> ObjectName LocalSystem`
-  - 指定账户+密码：`nssm set <ServiceName> ObjectName <username> "<password>"`（空密码可用 `""`）
+```text
+src/
+  app/          程序入口、命令分派和版本信息
+  cli/          参数、控制台与 JSON 输出
+  config/       JSON 配置模型、校验、导出与 SCM 应用
+  supervisor/
+    process/     子进程、Job Object 和进程树终止
+    monitoring/  Readiness、Health Check、资源监控与快照
+    runtime/     服务状态机、恢复、Hooks 和日志
+  platform/     Windows API、注册表、安全、事件日志与编码
+resources/      版本信息、消息目录、图标和 manifest
+tests/          单元测试、样例配置和 SCM 集成测试
+cmake/          构建、资源编译和验证脚本
+```
 
-- 依赖（Dependencies）
-  - 依赖服务：`nssm set <ServiceName> DependOnService <Name>`
-  - 依赖组：`DependOnGroup`（查询时统一带 `+` 前缀）。
+## 测试
 
-- 进程（优先级/亲和性/控制台）
-  - 优先级：`nssm set <ServiceName> AppPriority NORMAL_PRIORITY_CLASS`
-  - 允许控制台：`nssm set <ServiceName> AppNoConsole 0`
-  - 亲和性：`nssm set <ServiceName> AppAffinity All`
-
-- 关闭（Shutdown）
-  - 停止方法与超时（毫秒）：
-    - 跳过方法：`nssm set <ServiceName> AppStopMethodSkip 0`
-    - Console/Window/Threads 超时：`nssm set <ServiceName> AppStopMethodConsole 1500`、`...Window 1500`、`...Threads 1500`
-
-- 退出动作与节流（Exit actions）
-  - 节流时间：`nssm set <ServiceName> AppThrottle 1500`
-  - 默认退出动作：`nssm set <ServiceName> AppExit Default Restart`
-  - 固定重启延时：`nssm set <ServiceName> AppRestartDelay 0`
-
-- I/O 重定向
-  - 输出/错误：
-    ```cmd
-    nssm set <ServiceName> AppStdout C:\path\service.log
-    nssm set <ServiceName> AppStderr C:\path\service.log
-    ```
-  - 若要合并 stdout 与 stderr，两个值必须是完全相同的路径字符串。
-
-- 日志轮转（File rotation）
-  - 启用轮转：`nssm set <ServiceName> AppRotate 1`
-  - 仅在重启时轮转（默认），或在线轮转：`nssm set <ServiceName> AppRotateOnline 0|1`
-  - 限制条件：
-    - 最小时间（秒）：`nssm set <ServiceName> AppRotateSeconds 86400`
-    - 最小大小（字节/高位）：`nssm set <ServiceName> AppRotateBytes 1048576`、`AppRotateBytesHigh <hi>`
-  - 按需轮转：`nssm rotate <ServiceName>`（等待下一行输出后生效）
-
-- 环境变量（Environment）
-  - 兼容 srvany 的替换式环境：`AppEnvironment`（REG_MULTI_SZ，KEY=VALUE，每行一项）
-  - 追加环境：`AppEnvironmentExtra`（与默认环境合并）
-  - 示例：`nssm set <ServiceName> AppEnvironmentExtra JAVA_HOME=C:\java`
-
-- 获取/设置/重置
-  - 获取：`nssm get <ServiceName> <Parameter> [<Subparam>]`
-  - 设置：`nssm set <ServiceName> <Parameter> [<Subparam>] <Value>`（多余参数会以空格拼接）
-  - 重置：`nssm reset <ServiceName> <Parameter> [<Subparam>]`
-
-- 常用参数要点
-  - 启动目录：`AppDirectory`；安装后可覆盖：`nssm set <ServiceName> AppDirectory <Path>`
-  - 环境：`AppEnvironment`（替换）、`AppEnvironmentExtra`（追加）；`nssm get` 可带子参数只取指定变量
-  - 退出动作：`AppExit` 需子参数（`Default` 或退出码），例如：`nssm get <ServiceName> AppExit Default`
-  - 原生属性：
-    - 依赖：`DependOnService` / `DependOnGroup`
-    - 启动类型：`Start`（AUTO/DELAYED_AUTO/DEMAND/DISABLED）
-    - 类型：`Type`（仅 `WIN32_OWN_PROCESS`；`INTERACTIVE_PROCESS` 不作为受支持配置）
-
-- 其他命令
-  - 列出所有 NSSM 管理的服务：`nssm list`
-  - 显示版本信息：`nssm version` 或 `nssm -v`
-  - 移除服务：
-    - GUI：`nssm remove [<ServiceName>]`
-    - 直接移除：`nssm remove <ServiceName> confirm`
-
-## GUI 选项卡说明
-
-### 应用程序
-- 指定可执行文件路径、启动参数、工作目录。
-- 常见项：`Application`、`Arguments`、`AppDirectory`。
-
-### 详情
-- 设置显示名称、描述、启动类型（自动/延迟自动/手动/禁用）。
-- 常见项：`DisplayName`、`Description`、`Start`。
-
-### 登录
-- 设置服务运行账户与密码，或使用 `LocalSystem`/虚拟服务账户。
-- 常见项：`ObjectName`（用户名与可选密码）。
-
-### 依赖
-- 配置服务或服务组依赖顺序，确保依赖先启动。
-- 常见项：`DependOnService`、`DependOnGroup`（组名前需 `+`）。
-
-### 进程
-- 配置优先级、CPU 亲和性、控制台可用性等进程级选项。
-- 常见项：`AppPriority`、`AppAffinity`、`AppNoConsole`。
-
-### 关闭
-- 设置优雅关闭方法与各阶段超时（Console/Window/Threads）。
-- 常见项：`AppStopMethodSkip`、`AppStopMethodConsole/Window/Threads`（毫秒）。
-
-### 退出操作
-- 为默认或特定退出码配置操作：重启/忽略/退出（一次性模式）/假崩溃（遗留兼容）。
-- 常见项：`AppExit Default Restart|Ignore|Exit`，以及针对码值的映射。
-  - 说明：`假崩溃（遗留兼容）` 对应 `Suicide`，用于兼容历史恢复策略；在 Windows 10+ 仍可用，但通常不建议作为首选策略。
-
-### I/O
-- 作用：将服务进程的标准输出(stdout)与标准错误(stderr)写入到文件，便于排查问题。
-- 常见项：`AppStdout`、`AppStderr`（两个路径完全相同即可合并 stdout 与 stderr）。
-- 注意：若程序直接写文件，文件句柄会被占用，影响“在线轮转”（见下）。
-- 示例：
-  - 合并输出：
-    - `nssm set MySvc AppStdout C:\logs\mysvc.log`
-    - `nssm set MySvc AppStderr C:\logs\mysvc.log`
-  - 分开输出：
-    - `nssm set MySvc AppStdout C:\logs\mysvc.out.log`
-    - `nssm set MySvc AppStderr C:\logs\mysvc.err.log`
-
-### 日志轮转
-- 作用：当日志过大或运行过久时切分归档，避免日志无限增长。
-- 模式：
-  - 离线轮转（默认）：仅在服务停止/重启时轮转（`AppRotate=1` 且 `AppRotateOnline=0`）。
-  - 在线轮转：服务运行中也能轮转（`AppRotate=1` 且 `AppRotateOnline=1`，通过管道写日志）。
-- 触发条件（可同时设定）：
-  - 按时间：`AppRotateSeconds <seconds>`（达到最小时间阈值后可轮转）。
-  - 按大小：`AppRotateBytes <bytes>` 和 `AppRotateBytesHigh <hi>`（支持 >4GB）。
-- 按需轮转（手动触发）：`nssm rotate <ServiceName>`（需已启用在线轮转才会立即生效）。
-- 常见项：`AppRotate`、`AppRotateOnline`、`AppRotateSeconds`、`AppRotateBytes`、`AppRotateBytesHigh`。
-- 示例：
-  - 离线轮转（每天、至少 10MB）：
-    - `nssm set MySvc AppRotate 1`
-    - `nssm set MySvc AppRotateOnline 0`
-    - `nssm set MySvc AppRotateSeconds 86400`
-    - `nssm set MySvc AppRotateBytes 10485760`
-  - 在线轮转（运行中到 100MB 切分）：
-    - `nssm set MySvc AppRotate 1`
-    - `nssm set MySvc AppRotateOnline 1`
-    - `nssm set MySvc AppRotateBytes 104857600`
-
-### 环境变量
-- 设置替换式环境或追加环境（与默认环境合并）。
-- 常见项：`AppEnvironment`（替换，REG_MULTI_SZ），`AppEnvironmentExtra`（追加）。
-
-### 事件钩子
-- 在 start/stop/exit/power/rotate 的 pre/post/change/resume 阶段执行脚本或程序。
-- 常见项：注册表下 per-event/action 的命令；GUI 提供逐项配置与测试。
-
-## 模块概览
-
-| 模块 | 文件 | 作用描述 |
-|---|---|---|
-| 配置与 SCM 应用 | `src/config/` | 严格 JSON 校验、配置加载、服务创建与更新。 |
-| 服务监督核心 | `src/supervisor/` | 生命周期、Job Object、探针、恢复策略、资源治理、日志和 Hooks。 |
-| Windows 平台适配 | `src/platform/` | 注册表、环境块、事件日志、动态 API 导入和 Unicode 转换。 |
-| CLI 与入口 | `src/app/`, `src/cli/` | 命令分派、服务入口和控制台交互。 |
-| 旧 GUI | `src/ui/` | 与核心隔离的 Win32 界面，便于后续独立移除。 |
-| 资源与本地化 | `resources/` | RC、manifest、图标以及中英文事件消息目录。 |
-
-### 头文件接口层（建议入口）
-- 核心头文件位于 `src/app/`、`src/config/` 和 `src/supervisor/`；平台兼容接口位于 `src/platform/`。
-- 作用：定义跨模块结构体、常量、注册表参数名与公共函数声明，是理解模块边界和调用关系的首选入口。
-
-### 消息编译链路
-- 文本来源：`resources/messages.mc`（中英文消息模板）。
-- 构建产物：通过消息编译工具（`mc.exe`）与资源编译流程生成消息资源，最终由程序/事件日志加载使用。
-- 说明：运行时不会直接读取 `.mc`，而是读取编译后的消息表资源。
-
-### 测试与验证现状
-- CTest 覆盖纯逻辑与本地 Win32 API 测试，不依赖外网。
-- 真实 SCM 安装、启停和账户权限场景仍需在管理员环境执行集成测试。
-- `tests/integration/service_lifecycle.ps1` 在管理员环境执行完整 SCM 生命周期：
-  apply、start、运行时 JSON 状态、原子 export、stop 和 remove。GitHub Actions 的
-  Release 作业会运行该脚本，并通过唯一服务名和 `finally` 清理避免污染运行器。
-
+CTest 覆盖版本/架构、Unicode 资源、声明式配置、命令行转义、环境隔离、Job Object、探针、恢复与安全校验。`tests/integration/service_lifecycle.ps1` 在管理员环境中执行完整 SCM 生命周期：`apply`、`list`、`start`、运行时 JSON 状态、原子 `export`、`stop` 和 `remove`。

@@ -508,7 +508,7 @@ static int setting_set_environment(const TCHAR *service_name, void *param, const
 
   if (test_environment(unformatted)) {
     HeapFree(GetProcessHeap(), 0, unformatted);
-    print_message(stderr, NSSM_GUI_INVALID_ENVIRONMENT);
+    print_message(stderr, NSSM_MESSAGE_INVALID_ENVIRONMENT);
     return -1;
   }
 

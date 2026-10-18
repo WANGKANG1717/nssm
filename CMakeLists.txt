@@ -62,7 +62,7 @@ add_custom_command(
   DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/resources/nssm.rc"
     "${CMAKE_CURRENT_SOURCE_DIR}/cmake/ConvertResource.ps1"
-  COMMENT "Escaping UTF-8 dialog resources for windres"
+  COMMENT "Escaping UTF-8 executable resources for windres"
   VERBATIM
 )
 
@@ -108,17 +108,12 @@ set(NSSM_PLATFORM_SOURCES
   src/platform/utf8.cpp
 )
 
-set(NSSM_UI_SOURCES
-  src/ui/gui.cpp
-)
-
 set(NSSM_SOURCES
   ${NSSM_APP_SOURCES}
   ${NSSM_CLI_SOURCES}
   ${NSSM_CONFIG_SOURCES}
   ${NSSM_SUPERVISOR_SOURCES}
   ${NSSM_PLATFORM_SOURCES}
-  ${NSSM_UI_SOURCES}
   resources/nssm.manifest
   "${NSSM_RESOURCE_SOURCE}"
 )
@@ -146,7 +141,6 @@ target_include_directories(nssm PRIVATE
   "${CMAKE_CURRENT_SOURCE_DIR}/src/supervisor/monitoring"
   "${CMAKE_CURRENT_SOURCE_DIR}/src/supervisor/runtime"
   "${CMAKE_CURRENT_SOURCE_DIR}/src/platform"
-  "${CMAKE_CURRENT_SOURCE_DIR}/src/ui"
   "${CMAKE_CURRENT_SOURCE_DIR}/resources"
   "${CMAKE_CURRENT_BINARY_DIR}/generated"
 )
@@ -164,15 +158,10 @@ nssm_configure_compiler(nssm)
 
 target_link_libraries(nssm PRIVATE
   advapi32
-  comctl32
-  comdlg32
-  gdi32
-  ole32
   psapi
   shell32
   shlwapi
   user32
-  uuid
   winhttp
   ws2_32
   yyjson
