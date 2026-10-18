@@ -7,8 +7,9 @@
 #include <string>
 
 int await_single_handle(SERVICE_STATUS_HANDLE status_handle,
-                        SERVICE_STATUS *status, HANDLE handle, TCHAR *name,
-                        TCHAR *function_name, unsigned long timeout,
+                        SERVICE_STATUS *status, HANDLE handle,
+                        const TCHAR *name, const TCHAR *function_name,
+                        unsigned long timeout,
                         SRWLOCK *status_lock) {
   const std::wstring function = std::wstring(function_name) + _T("()");
   TCHAR timeout_milliseconds[16] = {};

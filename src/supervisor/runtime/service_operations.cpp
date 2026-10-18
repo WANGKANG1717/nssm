@@ -1,7 +1,12 @@
 #include "service_operations.h"
 
 #include "service_constants.h"
+#include "process.h"
 #include "win32_handle.h"
+#include "windows_limits.h"
+
+#include <new>
+#include <utility>
 
 namespace {
 
@@ -77,6 +82,36 @@ unsigned long service_control_access(unsigned long control) {
   }
 }
 
+struct process_collection_t {
+  std::vector<service_process_entry_t> *entries = nullptr;
+  unsigned long error = ERROR_SUCCESS;
+};
+
+int collect_process(nssm_service_t *, kill_t *process) {
+  auto *collection = static_cast<process_collection_t *>(process->user_data);
+  if (! collection || ! collection->entries) return 1;
+  if (collection->error) return 1;
+  try {
+    service_process_entry_t entry;
+    entry.pid = process->pid;
+    entry.depth = process->depth;
+    entry.executable.assign(PATH_LENGTH, L'\0');
+    unsigned long length = static_cast<unsigned long>(entry.executable.size());
+    if (QueryFullProcessImageNameW(process->process_handle, 0,
+                                   entry.executable.data(), &length)) {
+      entry.executable.resize(length);
+    }
+    else {
+      entry.executable = L"???";
+    }
+    collection->entries->push_back(std::move(entry));
+  }
+  catch (const std::bad_alloc &) {
+    collection->error = ERROR_NOT_ENOUGH_MEMORY;
+  }
+  return 1;
+}
+
 }  // namespace
 
 bool execute_service_control(unsigned long control,
@@ -140,4 +175,68 @@ bool execute_service_control(unsigned long control,
       control, service.get(), &result->status, initial_status,
       &result->windows_error);
   return result->wait_response == 0;
+}
+
+bool query_service_process_tree(
+    const std::wstring &service_name,
+    std::vector<service_process_entry_t> *entries, unsigned long *error) {
+  if (! entries || service_name.empty()) {
+    if (error) *error = ERROR_INVALID_PARAMETER;
+    return false;
+  }
+  entries->clear();
+  unique_service_handle manager(OpenSCManagerW(
+      nullptr, SERVICES_ACTIVE_DATABASE, SC_MANAGER_CONNECT));
+  if (! manager) {
+    if (error) *error = GetLastError();
+    return false;
+  }
+  unique_service_handle service(OpenServiceW(
+      manager.get(), service_name.c_str(), SERVICE_QUERY_STATUS));
+  if (! service) {
+    if (error) *error = GetLastError();
+    return false;
+  }
+  SERVICE_STATUS_PROCESS status = {};
+  unsigned long needed = 0;
+  if (! QueryServiceStatusEx(service.get(), SC_STATUS_PROCESS_INFO,
+                             reinterpret_cast<unsigned char *>(&status),
+                             sizeof(status), &needed)) {
+    if (error) *error = GetLastError();
+    return false;
+  }
+  if (! status.dwProcessId) {
+    if (error) *error = ERROR_SUCCESS;
+    return true;
+  }
+
+  unique_handle debug_token(get_debug_token());
+  unique_handle process(OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE,
+                                    status.dwProcessId));
+  if (! process) {
+    if (error) *error = GetLastError();
+    return false;
+  }
+  kill_t context = {};
+  context.name = service_name.c_str();
+  context.pid = status.dwProcessId;
+  context.process_handle = process.get();
+  if (get_process_creation_time(process.get(), &context.creation_time)) {
+    if (error) *error = GetLastError();
+    return false;
+  }
+  GetSystemTimeAsFileTime(&context.exit_time);
+  process_collection_t collection = {entries, ERROR_SUCCESS};
+  context.user_data = &collection;
+  walk_process_tree(nullptr, collect_process, &context, context.pid);
+  const unsigned long traversal_error = collection.error
+                                            ? collection.error
+                                            : context.traversal_error;
+  if (traversal_error) {
+    entries->clear();
+    if (error) *error = traversal_error;
+    return false;
+  }
+  if (error) *error = ERROR_SUCCESS;
+  return true;
 }

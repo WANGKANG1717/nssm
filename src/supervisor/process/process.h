@@ -8,7 +8,7 @@ typedef struct nssm_service_t nssm_service_t;
 #include <tlhelp32.h>
 
 typedef struct {
-  TCHAR *name;
+  const TCHAR *name;
   HANDLE process_handle;
   unsigned long depth;
   unsigned long pid;
@@ -22,6 +22,8 @@ typedef struct {
   FILETIME creation_time;
   FILETIME exit_time;
   int signalled;
+  unsigned long traversal_error;
+  void *user_data;
 } kill_t;
 
 typedef int (*walk_function_t)(nssm_service_t *, kill_t *);
@@ -38,8 +40,6 @@ int kill_console(nssm_service_t *, kill_t *);
 int kill_console(kill_t *);
 int kill_process(nssm_service_t *, kill_t *);
 int kill_process(kill_t *);
-int print_process(nssm_service_t *, kill_t *);
-int print_process(kill_t *);
 void walk_process_tree(nssm_service_t *, walk_function_t, kill_t *, unsigned long);
 void kill_process_tree(kill_t *, unsigned long);
 

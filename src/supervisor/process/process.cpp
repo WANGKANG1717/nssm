@@ -5,8 +5,6 @@
 #include "service_wait.h"
 #include "win32_handle.h"
 
-#include <string>
-
 HANDLE get_debug_token() {
   unique_handle token;
   const unsigned long access = TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY;
@@ -105,14 +103,20 @@ int check_parent(kill_t *k, PROCESSENTRY32 *pe, unsigned long ppid) {
   unique_handle process_handle(OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION,
                                             false, pe->th32ProcessID));
   if (! process_handle) {
+    const unsigned long error = GetLastError();
+    if (! k->traversal_error) k->traversal_error = error;
     TCHAR pid_string[16];
     _sntprintf_s(pid_string, _countof(pid_string), _TRUNCATE, _T("%lu"), pe->th32ProcessID);
-    log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_OPENPROCESS_FAILED, pid_string, k->name, error_string(GetLastError()), 0);
+    log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_OPENPROCESS_FAILED, pid_string,
+              k->name, error_string(error), 0);
     return 2;
   }
 
   FILETIME ft;
-  if (get_process_creation_time(process_handle.get(), &ft)) return 3;
+  if (get_process_creation_time(process_handle.get(), &ft)) {
+    if (! k->traversal_error) k->traversal_error = GetLastError();
+    return 3;
+  }
 
   /* Verify that the parent's creation time is not later. */
   if (CompareFileTime(&k->creation_time, &ft) > 0) return 4;
@@ -344,12 +348,21 @@ void walk_process_tree(nssm_service_t *service, walk_function_t fn, kill_t *k, u
 
     k->process_handle = previous_process_handle;
   }
-  else log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_OPENPROCESS_FAILED, pid_string, k->name, error_string(GetLastError()), 0);
+  else {
+    const unsigned long error = GetLastError();
+    if (! k->traversal_error) k->traversal_error = error;
+    log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_OPENPROCESS_FAILED, pid_string,
+              k->name, error_string(error), 0);
+  }
 
   /* Get a snapshot of all processes in the system. */
   unique_handle snapshot(CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0));
   if (! snapshot) {
-    log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_CREATETOOLHELP32SNAPSHOT_PROCESS_FAILED, k->name, error_string(GetLastError()), 0);
+    const unsigned long error = GetLastError();
+    if (! k->traversal_error) k->traversal_error = error;
+    log_event(EVENTLOG_ERROR_TYPE,
+              NSSM_EVENT_CREATETOOLHELP32SNAPSHOT_PROCESS_FAILED, k->name,
+              error_string(error), 0);
     return;
   }
 
@@ -358,7 +371,10 @@ void walk_process_tree(nssm_service_t *service, walk_function_t fn, kill_t *k, u
   pe.dwSize = sizeof(pe);
 
   if (! Process32First(snapshot.get(), &pe)) {
-    log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_PROCESS_ENUMERATE_FAILED, k->name, error_string(GetLastError()), 0);
+    const unsigned long error = GetLastError();
+    if (! k->traversal_error) k->traversal_error = error;
+    log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_PROCESS_ENUMERATE_FAILED,
+              k->name, error_string(error), 0);
     return;
   }
 
@@ -375,6 +391,7 @@ void walk_process_tree(nssm_service_t *service, walk_function_t fn, kill_t *k, u
     if (! Process32Next(snapshot.get(), &pe)) {
       unsigned long ret = GetLastError();
       if (ret == ERROR_NO_MORE_FILES) break;
+      if (! k->traversal_error) k->traversal_error = ret;
       log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_PROCESS_ENUMERATE_FAILED,
                 k->name, error_string(ret), 0);
       k->depth = depth;
@@ -393,26 +410,4 @@ void walk_process_tree(nssm_service_t *service, walk_function_t fn, kill_t *k, u
 
 void kill_process_tree(kill_t *k, unsigned long ppid) {
   return walk_process_tree(NULL, kill_process, k, ppid);
-}
-
-int print_process(nssm_service_t *service, kill_t *k) {
-  (void) service;
-  std::wstring executable(EXE_LENGTH, L'\0');
-  unsigned long size = static_cast<unsigned long>(executable.size());
-  if (QueryFullProcessImageNameW(k->process_handle, 0, executable.data(),
-                                &size)) {
-    executable.resize(size);
-  }
-  else {
-    executable = L"???";
-  }
-  std::wstring indentation(k->depth, L' ');
-
-  wprintf(L"% 8lu %ls%ls\n", k->pid, indentation.c_str(),
-          executable.c_str());
-  return 1;
-}
-
-int print_process(kill_t *k) {
-  return print_process(NULL, k);
 }

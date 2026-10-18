@@ -5,6 +5,7 @@
 #include <tchar.h>
 
 int await_single_handle(SERVICE_STATUS_HANDLE, SERVICE_STATUS *, HANDLE,
-                        TCHAR *, TCHAR *, unsigned long, SRWLOCK * = nullptr);
+                        const TCHAR *, const TCHAR *, unsigned long,
+                        SRWLOCK * = nullptr);
 
 #endif

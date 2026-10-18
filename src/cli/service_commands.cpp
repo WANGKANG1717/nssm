@@ -2,7 +2,6 @@
 #include "config_registration.h"
 #include "event.h"
 #include "messages.h"
-#include "process.h"
 #include "service.h"
 #include "service_constants.h"
 #include "service_commands.h"
@@ -53,70 +52,20 @@ int list_nssm_services(int argc, TCHAR **argv) {
 
 int service_process_tree(int argc, TCHAR **argv) {
   if (argc < 1) return usage(1);
-
-  unique_service_handle manager(open_service_manager(SC_MANAGER_CONNECT));
-  if (! manager) {
-    print_message(stderr, NSSM_MESSAGE_OPEN_SERVICE_MANAGER_FAILED);
-    return 1;
-  }
-
-  /* Failure is reported later if the process cannot be opened. */
-  unique_handle debug_token(get_debug_token());
   int errors = 0;
   for (int i = 0; i < argc; ++i) {
-    TCHAR canonical_name[SERVICE_NAME_LENGTH] = {};
-    unique_service_handle service_handle(open_service(
-        manager.get(), argv[i], SERVICE_QUERY_STATUS, canonical_name,
-        _countof(canonical_name)));
-    if (! service_handle) {
+    std::vector<service_process_entry_t> entries;
+    unsigned long error = ERROR_SUCCESS;
+    if (! query_service_process_tree(argv[i], &entries, &error)) {
+      _ftprintf(stderr, _T("%s: %s\n"), argv[i], error_string(error));
       ++errors;
       continue;
     }
-
-    SERVICE_STATUS_PROCESS service_status = {};
-    unsigned long size = 0;
-    const BOOL queried = QueryServiceStatusEx(
-        service_handle.get(), SC_STATUS_PROCESS_INFO,
-        reinterpret_cast<LPBYTE>(&service_status), sizeof(service_status),
-        &size);
-    if (! queried) {
-      const unsigned long error = GetLastError();
-      _ftprintf(stderr, _T("%s: %s\n"), canonical_name,
-                error_string(error));
-      ++errors;
-      continue;
+    for (const auto &entry : entries) {
+      std::wstring indentation(entry.depth, L' ');
+      wprintf(L"% 8lu %ls%ls\n", entry.pid, indentation.c_str(),
+              entry.executable.c_str());
     }
-
-    kill_t context = {};
-    context.pid = service_status.dwProcessId;
-    if (! context.pid) continue;
-
-    unique_handle process(OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION,
-                                      FALSE, context.pid));
-    if (! process) {
-      _ftprintf(stderr, _T("%s: %lu: %s\n"), canonical_name, context.pid,
-                error_string(GetLastError()));
-      ++errors;
-      continue;
-    }
-    context.process_handle = process.get();
-    if (get_process_creation_time(context.process_handle,
-                                  &context.creation_time)) {
-      ++errors;
-      continue;
-    }
-    GetSystemTimeAsFileTime(&context.exit_time);
-
-    nssm_service_t *service = alloc_nssm_service();
-    if (! service) {
-      ++errors;
-      continue;
-    }
-    _sntprintf_s(service->name, _countof(service->name), _TRUNCATE,
-                 _T("%s"), canonical_name);
-    context.name = service->name;
-    walk_process_tree(service, print_process, &context, context.pid);
-    cleanup_nssm_service(service);
   }
 
   return errors;
