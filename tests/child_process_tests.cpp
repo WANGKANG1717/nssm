@@ -52,6 +52,15 @@ void command_line_tests() {
   expect(! build_child_command_line(L"app.exe", std::wstring(32767, L'x'),
                                     &command, &error),
          L"oversized command line should fail validation");
+
+  std::vector<std::wstring> arguments = {
+      L"plain", L"two words", L"", L"quoted\"value", L"C:\\path with space\\"};
+  expect(build_child_command_line(LR"(C:\Apps\app.exe)", arguments, &command,
+                                  &error),
+         L"argument array should build a command line");
+  expect(command ==
+             LR"("C:\Apps\app.exe" plain "two words" "" "quoted\"value" "C:\path with space\\")",
+         L"argument array should follow Windows backslash and quote rules");
 }
 
 void environment_merge_tests() {

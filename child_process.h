@@ -19,6 +19,13 @@ bool build_child_command_line(const std::wstring &executable,
                               const std::wstring &arguments,
                               std::wstring *command_line,
                               std::wstring *error);
+bool build_child_command_line(const std::wstring &executable,
+                              const std::vector<std::wstring> &arguments,
+                              std::wstring *command_line,
+                              std::wstring *error);
+
+/* Apply the quoting rules used by CommandLineToArgvW and the Microsoft CRT. */
+std::wstring quote_windows_argument(const std::wstring &argument);
 
 /* Parse a Windows double-NUL-terminated environment block. */
 bool parse_environment_block(const wchar_t *block,

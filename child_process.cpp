@@ -67,6 +67,36 @@ void serialize_environment(const environment_map_t &values,
 
 }  // namespace
 
+std::wstring quote_windows_argument(const std::wstring &argument) {
+  if (! argument.empty() &&
+      argument.find_first_of(L" \t\n\v\"") == std::wstring::npos) {
+    return argument;
+  }
+
+  std::wstring quoted;
+  quoted.push_back(L'"');
+  size_t backslashes = 0;
+  for (wchar_t character : argument) {
+    if (character == L'\\') {
+      ++backslashes;
+      continue;
+    }
+    if (character == L'"') {
+      quoted.append(backslashes * 2 + 1, L'\\');
+      quoted.push_back(L'"');
+    }
+    else {
+      quoted.append(backslashes, L'\\');
+      quoted.push_back(character);
+    }
+    backslashes = 0;
+  }
+  /* Backslashes before the closing quote must be doubled. */
+  quoted.append(backslashes * 2, L'\\');
+  quoted.push_back(L'"');
+  return quoted;
+}
+
 bool build_child_command_line(const std::wstring &executable,
                               const std::wstring &arguments,
                               std::wstring *command_line,
@@ -98,6 +128,18 @@ bool build_child_command_line(const std::wstring &executable,
     return false;
   }
   return true;
+}
+
+bool build_child_command_line(const std::wstring &executable,
+                              const std::vector<std::wstring> &arguments,
+                              std::wstring *command_line,
+                              std::wstring *error) {
+  std::wstring serialized;
+  for (const auto &argument : arguments) {
+    if (! serialized.empty()) serialized.push_back(L' ');
+    serialized.append(quote_windows_argument(argument));
+  }
+  return build_child_command_line(executable, serialized, command_line, error);
 }
 
 bool parse_environment_block(const wchar_t *block,
