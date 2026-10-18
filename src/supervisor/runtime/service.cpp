@@ -24,6 +24,61 @@ const TCHAR *priority_strings[] = { _T("REALTIME_PRIORITY_CLASS"), _T("HIGH_PRIO
 
 static constexpr int kStartHandledByRecovery = -1;
 
+static bool prepare_child_launch(nssm_service_t *service,
+                                 std::wstring *command_line,
+                                 std::vector<wchar_t> *environment) {
+  std::wstring error;
+  if (! build_child_command_line(service->exe, service->flags, command_line,
+                                 &error) ||
+      ! build_child_environment(service->initial_env, service->env,
+                                service->env_extra, environment, &error)) {
+    log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_CREATEPROCESS_FAILED,
+              service->name, service->exe, error.c_str(), 0);
+    return false;
+  }
+  return true;
+}
+
+static int finish_service_start(nssm_service_t *service,
+                                wchar_t *environment) {
+  if (service->config->readiness.enabled()) {
+    readiness_result_t readiness = wait_for_readiness(
+        service->config->readiness, service->process_handle, environment,
+        service->dir, service->status_handle, &service->status);
+    if (! readiness.ready()) {
+      log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_READINESS_FAILED,
+                service->name, readiness.detail.c_str(), 0);
+      if (readiness.state != readiness_state_t::process_exited &&
+          service->job_handle) {
+        terminate_service_job(service->job_handle, ERROR_NOT_READY, nullptr);
+        WaitForSingleObject(service->process_handle,
+                            NSSM_SERVICE_STATUS_DEADLINE);
+      }
+      end_service(service, false);
+      return kStartHandledByRecovery;
+    }
+    service->throttle = 0;
+    log_event(EVENTLOG_INFORMATION_TYPE, NSSM_EVENT_READINESS_READY,
+              service->name, readiness.detail.c_str(), 0);
+  }
+  else if (await_single_handle(
+               service->status_handle, &service->status,
+               service->process_handle, service->name, _T("start_service"),
+               NSSM_RESET_THROTTLE_RESTART) == 1) {
+    service->throttle = 0;
+  }
+
+  if (! service->allow_restart) return 0;
+
+  service->status.dwCurrentState = SERVICE_RUNNING;
+  service->status.dwCheckPoint = 0;
+  service->status.dwWaitHint = 0;
+  service->status.dwControlsAccepted &= ~SERVICE_ACCEPT_PAUSE_CONTINUE;
+  SetServiceStatus(service->status_handle, &service->status);
+  publish_status_snapshot(service);
+  return 0;
+}
+
 static inline unsigned long throttle_milliseconds(unsigned long throttle) {
   if (throttle > 7) throttle = 8;
   /* pow() operates on doubles. */
@@ -407,21 +462,9 @@ int start_service(nssm_service_t *service) {
   PROCESS_INFORMATION pi;
   ZeroMemory(&pi, sizeof(pi));
 
-  std::wstring launch_error;
   std::wstring command_line;
-  if (! build_child_command_line(service->exe, service->flags, &command_line,
-                                 &launch_error)) {
-    log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_CREATEPROCESS_FAILED, service->name,
-              service->exe, launch_error.c_str(), 0);
-    return stop_service(service, 2);
-  }
-
   std::vector<wchar_t> child_environment;
-  if (! build_child_environment(service->initial_env, service->env,
-                                service->env_extra, &child_environment,
-                                &launch_error)) {
-    log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_CREATEPROCESS_FAILED, service->name,
-              service->exe, launch_error.c_str(), 0);
+  if (! prepare_child_launch(service, &command_line, &child_environment)) {
     return stop_service(service, 2);
   }
 
@@ -550,48 +593,7 @@ int start_service(nssm_service_t *service) {
     if (pi.hThread) CloseHandle(pi.hThread);
   }
 
-  if (service->config->readiness.enabled()) {
-    readiness_result_t readiness = wait_for_readiness(
-        service->config->readiness, service->process_handle,
-        child_environment.data(), service->dir, service->status_handle,
-        &service->status);
-    if (! readiness.ready()) {
-      log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_READINESS_FAILED,
-                service->name, readiness.detail.c_str(), 0);
-      if (readiness.state != readiness_state_t::process_exited &&
-          service->job_handle) {
-        terminate_service_job(service->job_handle, ERROR_NOT_READY, nullptr);
-        WaitForSingleObject(service->process_handle,
-                            NSSM_SERVICE_STATUS_DEADLINE);
-      }
-      end_service(service, false);
-      return kStartHandledByRecovery;
-    }
-    service->throttle = 0;
-    log_event(EVENTLOG_INFORMATION_TYPE, NSSM_EVENT_READINESS_READY,
-              service->name, readiness.detail.c_str(), 0);
-  }
-  else {
-    /* Preserve the short process-stability check when no probe is configured. */
-    if (await_single_handle(service->status_handle, &service->status,
-                            service->process_handle, service->name,
-                            _T("start_service"), NSSM_RESET_THROTTLE_RESTART) == 1) {
-      service->throttle = 0;
-    }
-  }
-
-  /* Did another thread receive a stop control? */
-  if (! service->allow_restart) return 0;
-
-  /* Signal successful start */
-  service->status.dwCurrentState = SERVICE_RUNNING;
-  service->status.dwCheckPoint = 0;
-  service->status.dwWaitHint = 0;
-  service->status.dwControlsAccepted &= ~SERVICE_ACCEPT_PAUSE_CONTINUE;
-  SetServiceStatus(service->status_handle, &service->status);
-  publish_status_snapshot(service);
-
-  return 0;
+  return finish_service_start(service, child_environment.data());
 }
 
 /* Stop the service */
