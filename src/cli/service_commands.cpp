@@ -1,5 +1,6 @@
 #include "nssm.h"
 #include "config.h"
+#include "config_registration.h"
 #include "event.h"
 #include "messages.h"
 #include "process.h"
@@ -211,7 +212,7 @@ int pre_remove_service(int argc, TCHAR **argv) {
     _sntprintf_s(service->name, _countof(service->name), _TRUNCATE,
                  _T("%s"), argv[0]);
   }
-  if (argc >= 2 && str_equiv(argv[1], _T("confirm"))) {
+  if (argc == 2 && str_equiv(argv[1], _T("confirm"))) {
     int result = remove_service(service);
     cleanup_nssm_service(service);
     return result;
@@ -336,18 +337,21 @@ int remove_service(nssm_service_t *service) {
   }
 
   service->handle = open_service(manager.get(), service->name, DELETE,
-                                 service->name, _countof(service->name));
+                                 nullptr, 0);
   if (! service->handle) return 3;
 
-  unsigned long length = _countof(service->displayname);
-  GetServiceDisplayName(manager.get(), service->name, service->displayname,
-                        &length);
-  length = _countof(service->name);
-  GetServiceKeyName(manager.get(), service->displayname, service->name,
-                    &length);
+  std::wstring config_path;
+  unsigned long registration_error = ERROR_SUCCESS;
+  if (! registered_service_config_path(service->name, &config_path,
+                                       &registration_error)) {
+    _ftprintf(stderr,
+              _T("%s: refusing to remove a service not managed by this NSSM: %s\n"),
+              service->name, error_string(registration_error));
+    return 4;
+  }
   if (! DeleteService(service->handle)) {
     print_message(stderr, NSSM_MESSAGE_DELETESERVICE_FAILED);
-    return 4;
+    return 5;
   }
   print_message(stdout, NSSM_MESSAGE_SERVICE_REMOVED, service->name);
   return 0;
