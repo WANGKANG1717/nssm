@@ -205,21 +205,20 @@ int service_process_tree(int argc, TCHAR **argv) {
 }
 
 int pre_remove_service(int argc, TCHAR **argv) {
+  if (argc != 2 || ! argv[0] || ! argv[0][0] ||
+      ! str_equiv(argv[1], _T("confirm"))) {
+    print_message(stderr, NSSM_MESSAGE_PRE_REMOVE_SERVICE);
+    return 100;
+  }
+  if (_tcslen(argv[0]) >= SERVICE_NAME_LENGTH) return usage(1);
+
   nssm_service_t *service = alloc_nssm_service();
   if (! service) return 1;
   set_nssm_service_defaults(service);
-  if (argc) {
-    _sntprintf_s(service->name, _countof(service->name), _TRUNCATE,
-                 _T("%s"), argv[0]);
-  }
-  if (argc == 2 && str_equiv(argv[1], _T("confirm"))) {
-    int result = remove_service(service);
-    cleanup_nssm_service(service);
-    return result;
-  }
+  wmemcpy(service->name, argv[0], _tcslen(argv[0]) + 1);
+  int result = remove_service(service);
   cleanup_nssm_service(service);
-  print_message(stderr, NSSM_MESSAGE_PRE_REMOVE_SERVICE);
-  return 100;
+  return result;
 }
 
 int control_service(unsigned long control, int argc, TCHAR **argv,
