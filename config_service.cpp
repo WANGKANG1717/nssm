@@ -1,6 +1,7 @@
 #include "nssm.h"
 #include "child_process.h"
 #include "config.h"
+#include "recovery.h"
 
 #include <new>
 #include <string>
@@ -506,5 +507,20 @@ bool load_registered_service_config(nssm_service_t *service,
   }
 
   service->config = config;
+  service->recovery_state = new (std::nothrow) recovery_state_t();
+  if (! service->recovery_state) {
+    validation->add(L"Out of memory while creating recovery state");
+    service->config = nullptr;
+    if (service->env) {
+      HeapFree(GetProcessHeap(), 0, service->env);
+      service->env = nullptr;
+    }
+    if (service->env_extra) {
+      HeapFree(GetProcessHeap(), 0, service->env_extra);
+      service->env_extra = nullptr;
+    }
+    delete config;
+    return false;
+  }
   return true;
 }

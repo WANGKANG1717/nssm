@@ -30,6 +30,7 @@
 #define NSSM_ROTATE_ONLINE_ASAP 2
 
 struct service_config_t;
+struct recovery_state_t;
 
 typedef struct nssm_service_t {
   bool native;
@@ -45,6 +46,7 @@ typedef struct nssm_service_t {
   TCHAR image[PATH_LENGTH];
   TCHAR config_path[PATH_LENGTH];
   service_config_t *config;
+  recovery_state_t *recovery_state;
   TCHAR exe[EXE_LENGTH];
   TCHAR flags[VALUE_LENGTH];
   TCHAR dir[DIR_LENGTH];
@@ -124,6 +126,8 @@ typedef struct nssm_service_t {
   unsigned long start_requested_count;
   unsigned long start_count;
   unsigned long exit_count;
+  unsigned long next_restart_delay_ms;
+  unsigned long long process_started_ms;
 } nssm_service_t;
 
 void WINAPI service_main(unsigned long, TCHAR **);

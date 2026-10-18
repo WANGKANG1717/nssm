@@ -1,6 +1,7 @@
 #include "../child_process.h"
 #include "../config.h"
 #include "../job_object.h"
+#include "../recovery.h"
 
 #include <iostream>
 #include <string>
@@ -297,6 +298,53 @@ void configuration_tests() {
          L"plaintext password fields must not be accepted");
 }
 
+void recovery_tests() {
+  recovery_config_t config;
+  config.jitter_percent = 0;
+  config.initial_delay_ms = 1000;
+  config.maximum_delay_ms = 5000;
+  config.multiplier = 2;
+  config.maximum_restarts = 3;
+  config.window_ms = 10000;
+  config.reset_after_ms = 6000;
+  recovery_state_t state;
+
+  auto decision = evaluate_recovery(config, &state, 1, 1000, 100, 0);
+  expect(decision.should_restart() && decision.delay_ms == 1000,
+         L"first failed run should use the initial recovery delay");
+  decision = evaluate_recovery(config, &state, 1, 2000, 100, 0);
+  expect(decision.should_restart() && decision.delay_ms == 2000,
+         L"recovery delay should grow exponentially");
+  decision = evaluate_recovery(config, &state, 1, 3000, 100, 0);
+  expect(decision.should_restart() && decision.delay_ms == 4000,
+         L"third recovery delay should continue exponential growth");
+  decision = evaluate_recovery(config, &state, 1, 4000, 100, 0);
+  expect(decision.result == recovery_result_t::rate_limited,
+         L"restart storms should stop at the configured window limit");
+
+  decision = evaluate_recovery(config, &state, 1, 20000, 7000, 0);
+  expect(decision.should_restart() && decision.delay_ms == 1000,
+         L"a stable run should reset backoff and restart history");
+
+  config.mode = recovery_mode_t::on_failure;
+  decision = evaluate_recovery(config, &state, 0, 21000, 100, 0);
+  expect(decision.result == recovery_result_t::clean_exit,
+         L"onFailure recovery should not restart a clean exit");
+  config.mode = recovery_mode_t::never;
+  decision = evaluate_recovery(config, &state, 1, 22000, 100, 0);
+  expect(decision.result == recovery_result_t::mode_disabled,
+         L"never recovery should suppress all restarts");
+
+  config.mode = recovery_mode_t::always;
+  config.jitter_percent = 100;
+  state.consecutive_restarts = 20;
+  state.restart_times_ms.clear();
+  decision = evaluate_recovery(config, &state, 0, 30000, 100, 4999);
+  expect(decision.should_restart() &&
+             decision.delay_ms <= config.maximum_delay_ms,
+         L"jitter must never exceed the configured maximum delay");
+}
+
 }  // namespace
 
 int wmain() {
@@ -307,6 +355,7 @@ int wmain() {
   environment_isolation_tests();
   job_object_tests();
   configuration_tests();
+  recovery_tests();
 
   if (failures) {
     std::wcerr << failures << L" test assertion(s) failed\n";

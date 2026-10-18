@@ -2,6 +2,7 @@
 #include "child_process.h"
 #include "config.h"
 #include "job_object.h"
+#include "recovery.h"
 
 bool is_admin;
 bool use_critical_section;
@@ -826,6 +827,7 @@ void cleanup_nssm_service(nssm_service_t *service) {
   if (service->hook_section_initialised) DeleteCriticalSection(&service->hook_section);
   if (service->initial_env) HeapFree(GetProcessHeap(), 0, service->initial_env);
   delete service->config;
+  delete service->recovery_state;
   HeapFree(GetProcessHeap(), 0, service);
 }
 
@@ -1744,6 +1746,15 @@ unsigned long WINAPI service_control_handler(unsigned long control, unsigned lon
 
       /* Immediately block further controls. */
       service->allow_restart = false;
+      if (use_critical_section) {
+        imports.WakeConditionVariable(&service->throttle_condition);
+      }
+      else if (service->throttle_timer) {
+        ZeroMemory(&service->throttle_duetime,
+                   sizeof(service->throttle_duetime));
+        SetWaitableTimer(service->throttle_timer, &service->throttle_duetime,
+                         0, 0, 0, 0);
+      }
       service->status.dwCurrentState = SERVICE_STOP_PENDING;
       service->status.dwControlsAccepted = 0;
       SetServiceStatus(service->status_handle, &service->status);
@@ -1927,6 +1938,7 @@ int start_service(nssm_service_t *service) {
     service->start_count++;
     service->process_handle = pi.hProcess;
     service->pid = pi.dwProcessId;
+    service->process_started_ms = GetTickCount64();
 
     if (! assign_process_to_service_job(service->job_handle,
                                         service->process_handle, &job_error)) {
@@ -2142,6 +2154,43 @@ void CALLBACK end_service(void *arg, unsigned char why) {
   if (why) return;
   if (! service->allow_restart) return;
 
+  if (service->config) {
+    unsigned long long now_ms = GetTickCount64();
+    unsigned long long run_duration_ms =
+        now_ms >= service->process_started_ms
+            ? now_ms - service->process_started_ms
+            : 0;
+    LARGE_INTEGER counter = {};
+    QueryPerformanceCounter(&counter);
+    recovery_decision_t decision = evaluate_recovery(
+        service->config->recovery, service->recovery_state, exitcode, now_ms,
+        run_duration_ms, static_cast<unsigned long>(counter.QuadPart));
+    if (! decision.should_restart()) {
+      const TCHAR *reason = decision.result == recovery_result_t::clean_exit
+                                ? _T("clean exit")
+                            : decision.result == recovery_result_t::rate_limited
+                                ? _T("restart rate limit reached")
+                                : _T("recovery disabled");
+      log_event(decision.result == recovery_result_t::clean_exit
+                    ? EVENTLOG_INFORMATION_TYPE
+                    : EVENTLOG_WARNING_TYPE,
+                NSSM_EVENT_RECOVERY_STOPPED,
+                service->name, reason, 0);
+      stop_service(service, exitcode, true, true);
+      return;
+    }
+    service->next_restart_delay_ms = decision.delay_ms;
+    log_event(EVENTLOG_INFORMATION_TYPE, NSSM_EVENT_EXIT_RESTART,
+              service->name, code, exit_action_strings[NSSM_EXIT_RESTART],
+              service->exe, 0);
+    while (monitor_service(service)) {
+      log_event(EVENTLOG_WARNING_TYPE, NSSM_EVENT_RESTART_SERVICE_FAILED,
+                service->exe, service->name, 0);
+      Sleep(30000);
+    }
+    return;
+  }
+
   /* What action should we take? */
   int action = NSSM_EXIT_RESTART;
   TCHAR action_string[ACTION_LEN];
@@ -2188,6 +2237,34 @@ void CALLBACK end_service(void *arg, unsigned char why) {
 }
 
 void throttle_restart(nssm_service_t *service) {
+  if (service->config) {
+    unsigned long ms = service->next_restart_delay_ms;
+    service->next_restart_delay_ms = 0;
+    if (! ms) return;
+    ++service->throttle;
+
+    if (use_critical_section) EnterCriticalSection(&service->throttle_section);
+    else if (service->throttle_timer) {
+      ZeroMemory(&service->throttle_duetime, sizeof(service->throttle_duetime));
+      service->throttle_duetime.QuadPart = 0 - (ms * 10000LL);
+      SetWaitableTimer(service->throttle_timer, &service->throttle_duetime, 0,
+                       0, 0, 0);
+    }
+    service->status.dwCurrentState = SERVICE_PAUSED;
+    service->status.dwControlsAccepted |= SERVICE_ACCEPT_PAUSE_CONTINUE;
+    SetServiceStatus(service->status_handle, &service->status);
+    if (use_critical_section) {
+      imports.SleepConditionVariableCS(&service->throttle_condition,
+                                       &service->throttle_section, ms);
+      LeaveCriticalSection(&service->throttle_section);
+    }
+    else if (service->throttle_timer) {
+      WaitForSingleObject(service->throttle_timer, INFINITE);
+    }
+    else Sleep(ms);
+    return;
+  }
+
   /* This can't be a restart if the service is already running. */
   if (! service->throttle++) return;
 

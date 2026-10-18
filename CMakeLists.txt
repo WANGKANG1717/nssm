@@ -82,6 +82,7 @@ set(NSSM_SOURCES
   nssm.cpp
   nssm.manifest
   process.cpp
+  recovery.cpp
   registry.cpp
   service.cpp
   settings.cpp
@@ -168,6 +169,7 @@ if(BUILD_TESTING)
     child_process.cpp
     config.cpp
     job_object.cpp
+    recovery.cpp
   )
   target_compile_definitions(nssm_unit_tests PRIVATE
     UNICODE

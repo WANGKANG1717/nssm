@@ -28,6 +28,23 @@ enum class service_account_type_t {
   user,
 };
 
+enum class recovery_mode_t {
+  never,
+  on_failure,
+  always,
+};
+
+struct recovery_config_t {
+  recovery_mode_t mode = recovery_mode_t::on_failure;
+  unsigned long initial_delay_ms = 1000;
+  unsigned long maximum_delay_ms = 60000;
+  unsigned long multiplier = 2;
+  unsigned long jitter_percent = 10;
+  unsigned long window_ms = 60000;
+  unsigned long maximum_restarts = 5;
+  unsigned long reset_after_ms = 60000;
+};
+
 struct service_account_config_t {
   service_account_type_t type = service_account_type_t::system;
   std::wstring name;
@@ -54,6 +71,7 @@ struct service_config_t {
   unsigned int schema = 0;
   service_metadata_config_t service;
   application_config_t application;
+  recovery_config_t recovery;
 };
 
 struct config_validation_t {

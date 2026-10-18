@@ -2169,6 +2169,16 @@ Language = Chinese
 .
 
 MessageId = +1
+SymbolicName = NSSM_EVENT_RECOVERY_STOPPED
+Severity = Warning
+Language = English
+Service %1 will not be restarted: %2.
+.
+Language = Chinese
+服务 %1 将不再重启：%2。
+.
+
+MessageId = +1
 SymbolicName = NSSM_EVENT_SERVICE_CONFIG_DESCRIPTION_FAILED
 Severity = Informational
 Language = English

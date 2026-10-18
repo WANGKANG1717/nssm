@@ -20,5 +20,15 @@
     "environment": {
       "NSSM_TEST_VALUE": "中文值"
     }
+  },
+  "recovery": {
+    "mode": "onFailure",
+    "initialDelayMs": 1000,
+    "maximumDelayMs": 60000,
+    "multiplier": 2,
+    "jitterPercent": 10,
+    "windowMs": 60000,
+    "maximumRestarts": 5,
+    "resetAfterMs": 60000
   }
 }

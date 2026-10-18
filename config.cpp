@@ -106,6 +106,20 @@ bool read_optional_string(yyjson_val *object, const char *name,
   return read_required_string(object, name, path, destination, validation);
 }
 
+void read_optional_number(yyjson_val *object, const char *name,
+                          const wchar_t *path, unsigned long minimum,
+                          unsigned long maximum, unsigned long *destination,
+                          config_validation_t *validation) {
+  yyjson_val *value = yyjson_obj_get(object, name);
+  if (! value) return;
+  if (! yyjson_is_uint(value) || yyjson_get_uint(value) < minimum ||
+      yyjson_get_uint(value) > maximum) {
+    validation->add(std::wstring(path) + L" is outside the allowed range");
+    return;
+  }
+  *destination = static_cast<unsigned long>(yyjson_get_uint(value));
+}
+
 bool valid_service_name(const std::wstring &name) {
   if (name.empty() || name.size() > kMaximumServiceNameCharacters) return false;
   for (wchar_t character : name) {
@@ -374,6 +388,50 @@ void parse_application(yyjson_val *root, application_config_t *application,
   parse_environment(object, application, validation);
 }
 
+void parse_recovery(yyjson_val *root, recovery_config_t *recovery,
+                    config_validation_t *validation) {
+  yyjson_val *object = yyjson_obj_get(root, "recovery");
+  if (! object) return;
+  if (! yyjson_is_obj(object)) {
+    validation->add(L"recovery must be an object");
+    return;
+  }
+  reject_unknown_fields(
+      object, L"recovery",
+      {"mode", "initialDelayMs", "maximumDelayMs", "multiplier",
+       "jitterPercent", "windowMs", "maximumRestarts", "resetAfterMs"},
+      validation);
+
+  std::wstring mode;
+  if (read_optional_string(object, "mode", L"recovery.mode", &mode,
+                           validation) && ! mode.empty()) {
+    if (mode == L"never") recovery->mode = recovery_mode_t::never;
+    else if (mode == L"onFailure") recovery->mode = recovery_mode_t::on_failure;
+    else if (mode == L"always") recovery->mode = recovery_mode_t::always;
+    else validation->add(L"recovery.mode has an unsupported value");
+  }
+  constexpr unsigned long kDayMs = 24UL * 60UL * 60UL * 1000UL;
+  constexpr unsigned long kWeekMs = 7UL * kDayMs;
+  read_optional_number(object, "initialDelayMs", L"recovery.initialDelayMs",
+                       0, kDayMs, &recovery->initial_delay_ms, validation);
+  read_optional_number(object, "maximumDelayMs", L"recovery.maximumDelayMs",
+                       0, kDayMs, &recovery->maximum_delay_ms, validation);
+  read_optional_number(object, "multiplier", L"recovery.multiplier", 1, 16,
+                       &recovery->multiplier, validation);
+  read_optional_number(object, "jitterPercent", L"recovery.jitterPercent", 0,
+                       100, &recovery->jitter_percent, validation);
+  read_optional_number(object, "windowMs", L"recovery.windowMs", 1, kWeekMs,
+                       &recovery->window_ms, validation);
+  read_optional_number(object, "maximumRestarts", L"recovery.maximumRestarts",
+                       0, 100000, &recovery->maximum_restarts, validation);
+  read_optional_number(object, "resetAfterMs", L"recovery.resetAfterMs", 0,
+                       kWeekMs, &recovery->reset_after_ms, validation);
+  if (recovery->maximum_delay_ms < recovery->initial_delay_ms) {
+    validation->add(
+        L"recovery.maximumDelayMs must be at least recovery.initialDelayMs");
+  }
+}
+
 std::wstring read_error_message(unsigned long error) {
   return L"Unable to read configuration file (Windows error " +
          std::to_wstring(error) + L")";
@@ -409,7 +467,8 @@ bool parse_service_config(const char *json, size_t length,
     yyjson_doc_free(document);
     return false;
   }
-  reject_unknown_fields(root, L"root", {"schema", "service", "application"},
+  reject_unknown_fields(root, L"root",
+                        {"schema", "service", "application", "recovery"},
                         validation);
 
   yyjson_val *schema = yyjson_obj_get(root, "schema");
@@ -420,6 +479,7 @@ bool parse_service_config(const char *json, size_t length,
 
   parse_service(root, &config->service, validation);
   parse_application(root, &config->application, validation);
+  parse_recovery(root, &config->recovery, validation);
   yyjson_doc_free(document);
   return validation->ok();
 }
