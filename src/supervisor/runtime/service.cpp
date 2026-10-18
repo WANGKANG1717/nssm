@@ -639,6 +639,7 @@ int get_service_username(const TCHAR *service_name, const QUERY_SERVICE_CONFIG *
 void set_nssm_service_defaults(nssm_service_t *service) {
   if (! service) return;
 
+  InitializeSRWLock(&service->status_snapshot_lock);
   service->type = SERVICE_WIN32_OWN_PROCESS;
   service->priority = NORMAL_PRIORITY_CLASS;
   service->stdin_sharing = NSSM_STDIN_SHARING;

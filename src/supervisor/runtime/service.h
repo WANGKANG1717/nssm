@@ -133,6 +133,7 @@ typedef struct nssm_service_t {
   unsigned long long resource_memory_bytes;
   HANDLE status_mapping;
   status_snapshot_t *status_snapshot;
+  SRWLOCK status_snapshot_lock;
   CONDITION_VARIABLE throttle_condition;
   HANDLE throttle_timer;
   LARGE_INTEGER throttle_duetime;

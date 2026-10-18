@@ -31,6 +31,27 @@ runtime_health_t current_health(const nssm_service_t *service) {
   return runtime_health_t::starting;
 }
 
+void publish_status_snapshot_unlocked(nssm_service_t *service) {
+  status_snapshot_t *snapshot = service->status_snapshot;
+  if (! snapshot) return;
+  InterlockedIncrement(&snapshot->sequence);
+  MemoryBarrier();
+  snapshot->magic = kStatusMagic;
+  snapshot->version = kStatusVersion;
+  snapshot->wrapper_pid = GetCurrentProcessId();
+  snapshot->child_pid = service->pid;
+  snapshot->health = static_cast<unsigned long>(current_health(service));
+  snapshot->restart_count = service->recovery_state
+                                ? service->recovery_state->consecutive_restarts
+                                : 0;
+  snapshot->cpu_percent = service->resource_cpu_percent;
+  snapshot->process_count = service->resource_processes;
+  snapshot->process_started_ms = service->process_started_ms;
+  snapshot->memory_bytes = service->resource_memory_bytes;
+  MemoryBarrier();
+  InterlockedIncrement(&snapshot->sequence);
+}
+
 }  // namespace
 
 bool create_status_snapshot(nssm_service_t *service) {
@@ -71,31 +92,18 @@ bool create_status_snapshot(nssm_service_t *service) {
 }
 
 void publish_status_snapshot(nssm_service_t *service) {
-  if (! service || ! service->status_snapshot) return;
-  status_snapshot_t *snapshot = service->status_snapshot;
-  InterlockedIncrement(&snapshot->sequence);
-  MemoryBarrier();
-  snapshot->magic = kStatusMagic;
-  snapshot->version = kStatusVersion;
-  snapshot->wrapper_pid = GetCurrentProcessId();
-  snapshot->child_pid = service->pid;
-  snapshot->health = static_cast<unsigned long>(current_health(service));
-  snapshot->restart_count = service->recovery_state
-                                ? service->recovery_state->consecutive_restarts
-                                : 0;
-  snapshot->cpu_percent = service->resource_cpu_percent;
-  snapshot->process_count = service->resource_processes;
-  snapshot->process_started_ms = service->process_started_ms;
-  snapshot->memory_bytes = service->resource_memory_bytes;
-  MemoryBarrier();
-  InterlockedIncrement(&snapshot->sequence);
+  if (! service) return;
+  AcquireSRWLockExclusive(&service->status_snapshot_lock);
+  publish_status_snapshot_unlocked(service);
+  ReleaseSRWLockExclusive(&service->status_snapshot_lock);
 }
 
 void close_status_snapshot(nssm_service_t *service) {
   if (! service) return;
+  AcquireSRWLockExclusive(&service->status_snapshot_lock);
   if (service->status_snapshot) {
     service->pid = 0;
-    publish_status_snapshot(service);
+    publish_status_snapshot_unlocked(service);
     UnmapViewOfFile(service->status_snapshot);
     service->status_snapshot = nullptr;
   }
@@ -103,6 +111,7 @@ void close_status_snapshot(nssm_service_t *service) {
     CloseHandle(service->status_mapping);
     service->status_mapping = nullptr;
   }
+  ReleaseSRWLockExclusive(&service->status_snapshot_lock);
 }
 
 bool read_status_snapshot(const std::wstring &service_name,
