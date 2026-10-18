@@ -1104,6 +1104,18 @@ GetExitCodeProcess() 失败：
 .
 
 MessageId = +1
+SymbolicName = NSSM_EVENT_UNREGISTERWAIT_FAILED
+Severity = Error
+Language = English
+Failed to unregister the process wait for service %1:
+%2
+.
+Language = Chinese
+无法注销服务 %1 的进程等待：
+%2
+.
+
+MessageId = +1
 SymbolicName = NSSM_EVENT_ATTACHCONSOLE_FAILED
 Severity = Error
 Language = English

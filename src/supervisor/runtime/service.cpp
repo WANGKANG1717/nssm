@@ -23,6 +23,20 @@
 static constexpr int kStartHandledByRecovery = -1;
 static constexpr int kStartAwaitingProcessExit = -2;
 
+static void unregister_service_wait(nssm_service_t *service,
+                                    bool wait_for_callbacks) {
+  HANDLE wait_handle = static_cast<HANDLE>(InterlockedExchangePointer(
+      reinterpret_cast<void *volatile *>(&service->wait_handle), nullptr));
+  if (! wait_handle) return;
+
+  HANDLE completion_event = wait_for_callbacks ? INVALID_HANDLE_VALUE : nullptr;
+  if (UnregisterWaitEx(wait_handle, completion_event)) return;
+  const unsigned long error = GetLastError();
+  if (! wait_for_callbacks && error == ERROR_IO_PENDING) return;
+  log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_UNREGISTERWAIT_FAILED,
+            service->name, error_string(error), 0);
+}
+
 template <typename Mutator>
 void update_service_status(nssm_service_t *service, Mutator mutator) {
   AcquireSRWLockExclusive(&service->status_lock);
@@ -249,6 +263,7 @@ nssm_service_t *alloc_nssm_service() {
 /* Free memory for a service. */
 void cleanup_nssm_service(nssm_service_t *service) {
   if (! service) return;
+  unregister_service_wait(service, true);
   stop_resource_monitor(service);
   stop_health_monitor(service);
   close_status_snapshot(service);
@@ -257,7 +272,6 @@ void cleanup_nssm_service(nssm_service_t *service) {
   if (service->handle) CloseServiceHandle(service->handle);
   if (service->process_handle) CloseHandle(service->process_handle);
   if (service->job_handle) CloseHandle(service->job_handle);
-  if (service->wait_handle) UnregisterWait(service->wait_handle);
   if (service->stop_event) CloseHandle(service->stop_event);
   if (service->throttle_section_initialised) DeleteCriticalSection(&service->throttle_section);
   if (service->health_section_initialised) DeleteCriticalSection(&service->health_section);
@@ -611,10 +625,7 @@ int start_service(nssm_service_t *service) {
 int stop_service(nssm_service_t *service, unsigned long exitcode) {
   service->allow_restart = false;
   if (service->stop_event) SetEvent(service->stop_event);
-  if (service->wait_handle) {
-    UnregisterWait(service->wait_handle);
-    service->wait_handle = 0;
-  }
+  unregister_service_wait(service, true);
 
   service->rotate_stdout_online = service->rotate_stderr_online = NSSM_ROTATE_OFFLINE;
 
@@ -726,6 +737,7 @@ void CALLBACK end_service(void *arg, unsigned char why) {
 
   /* Exit logging threads. */
   cleanup_loggers(service);
+  unregister_service_wait(service, false);
 
   /*
     The why argument is true if our wait timed out or false otherwise.
