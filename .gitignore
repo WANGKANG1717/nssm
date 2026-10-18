@@ -10,6 +10,18 @@ Debug/
 Release/
 x64/
 ipch/
+out/
+tmp/
+build/
+artifacts/
+
+# Project-local development toolchains
+.tools/
+
+# Generated message compiler outputs
+messages.h
+messages.rc
+MSG*.bin
 
 # Compiled object files and binaries
 *.obj
