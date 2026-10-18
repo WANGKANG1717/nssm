@@ -76,7 +76,7 @@ nssm remove MyService confirm
 - `plan <config>`：只读比较期望配置与 SCM 状态。
 - `apply <config>`：创建或原子更新服务配置。
 - `export <service> <path>`：导出已登记的声明式配置。
-- `start|stop|restart|pause|continue <service>`：控制服务。
+- `start|stop|restart|continue <service>`：控制服务。
 - `status [--verbose|--json] <service>`：查询 SCM 与运行时状态。
 - `rotate <service>`：触发在线日志轮转。
 - `list [all]`：列出 NSSM 管理的服务，或列出全部 Windows 服务。

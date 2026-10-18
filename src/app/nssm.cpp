@@ -119,7 +119,7 @@ int wmain(int argc, wchar_t **argv) {
   if (argc > 1) {
     /*
       Valid commands are:
-      validate, plan, apply, export, start, stop, restart, pause, continue, remove, status,
+      validate, plan, apply, export, start, stop, restart, continue, remove, status,
       statuscode, rotate, list, processes, version
     */
     if (is_version(argv[1])) {
@@ -159,7 +159,6 @@ int wmain(int argc, wchar_t **argv) {
       if (ret) return ret;
       return control_service(kServiceControlStart, argc - 2, argv + 2);
     }
-    if (strings_equal_ignore_case(argv[1], L"pause")) return control_service(SERVICE_CONTROL_PAUSE, argc - 2, argv + 2);
     if (strings_equal_ignore_case(argv[1], L"continue")) return control_service(SERVICE_CONTROL_CONTINUE, argc - 2, argv + 2);
     if (strings_equal_ignore_case(argv[1], L"status")) {
       cli_arguments_t arguments = parse_cli_arguments(argc - 2, argv + 2);

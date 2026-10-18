@@ -34,8 +34,6 @@ To manage a service:
 
         nssm restart <servicename>
 
-        nssm pause <servicename>
-
         nssm continue <servicename>
 
         nssm status [--verbose] [--json] <servicename>
@@ -62,7 +60,7 @@ NSSM：稳定可靠的服务管理器
   移除（显式确认）: nssm remove <服务名> confirm
 
   管理：
-    nssm start|stop|restart|pause|continue <服务名>
+    nssm start|stop|restart|continue <服务名>
     nssm status [--verbose] [--json] <服务名>
     nssm statuscode <服务名>
     nssm rotate|processes <服务名>

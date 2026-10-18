@@ -61,7 +61,7 @@ SCM, registry, process query, mapping and configuration code use the wrappers in
 | `TCHAR`, `_T()`, generic Win32 API names | replace | Replaced with `wchar_t`, wide formatting and explicit `...W` APIs | Removes a permanently dead ANSI abstraction. | Done | Debug/Release tests |
 | display-name service lookup | delete | Deleted | Commands now require exact SCM service names. | Done | CLI/integration tests |
 | interactive-service handling | delete | Deleted | Session 0 makes it unsupported on the declared baseline. | Done | Build gate |
-| `pause` CLI command |待验证 | Still accepted although the supervisor never implements pausing; `continue` is used to wake a recovery delay. | Remove `pause` in the next intentional CLI-breaking schema revision. | P2 | CLI tests needed |
+| `pause` CLI command | delete | Deleted; the defensive control-handler branch remains because Windows shares the PAUSE/CONTINUE acceptance mask. | `continue` remains available to wake a recovery delay. | Done | CLI/build tests |
 | raw heap environment blocks | preserve | Required by Win32 environment-block APIs and owned by the runtime object. | Wrap only as part of a runtime-object RAII redesign. | P3 | Child-process tests |
 
 ## Release gate
