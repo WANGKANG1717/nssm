@@ -1,4 +1,5 @@
 #include "../child_process.h"
+#include "../job_object.h"
 
 #include <iostream>
 #include <string>
@@ -115,6 +116,74 @@ void environment_isolation_tests() {
   SetEnvironmentVariableW(name, nullptr);
 }
 
+void job_object_tests() {
+  unsigned long error = ERROR_SUCCESS;
+  HANDLE job = create_service_job(&error);
+  expect(job != nullptr && error == ERROR_SUCCESS,
+         L"kill-on-close job should be created");
+  if (! job) return;
+
+  wchar_t system_directory[MAX_PATH] = {};
+  UINT length = GetSystemDirectoryW(system_directory,
+                                    static_cast<UINT>(std::size(system_directory)));
+  expect(length > 0 && length < std::size(system_directory),
+         L"system directory should be available");
+  std::wstring executable = std::wstring(system_directory) + L"\\cmd.exe";
+  std::wstring command = L"\"" + executable + L"\" /d /c exit 0";
+
+  STARTUPINFOW startup = {};
+  startup.cb = sizeof(startup);
+  PROCESS_INFORMATION process = {};
+  bool created = CreateProcessW(executable.c_str(), command.data(), nullptr,
+                                nullptr, FALSE, CREATE_SUSPENDED, nullptr,
+                                nullptr, &startup, &process) != FALSE;
+  expect(created, L"job test child should start suspended");
+  if (! created) {
+    CloseHandle(job);
+    return;
+  }
+
+  expect(assign_process_to_service_job(job, process.hProcess, &error),
+         L"child process should join the job");
+  ResumeThread(process.hThread);
+  expect(WaitForSingleObject(process.hProcess, 10000) == WAIT_OBJECT_0,
+         L"job test child should exit");
+
+  job_accounting_t accounting = {};
+  expect(query_service_job(job, &accounting, &error),
+         L"job accounting should be queryable");
+  expect(accounting.active_processes == 0 && accounting.total_processes >= 1,
+         L"job accounting should record the completed child");
+
+  CloseHandle(process.hThread);
+  CloseHandle(process.hProcess);
+  CloseHandle(job);
+
+  job = create_service_job(&error);
+  expect(job != nullptr, L"second kill-on-close job should be created");
+  if (! job) return;
+
+  executable = std::wstring(system_directory) + L"\\ping.exe";
+  command = L"\"" + executable + L"\" -n 60 127.0.0.1";
+  process = {};
+  created = CreateProcessW(executable.c_str(), command.data(), nullptr, nullptr,
+                           FALSE, CREATE_SUSPENDED | CREATE_NO_WINDOW, nullptr,
+                           nullptr, &startup, &process) != FALSE;
+  expect(created, L"long-running job test child should start suspended");
+  if (! created) {
+    CloseHandle(job);
+    return;
+  }
+  expect(assign_process_to_service_job(job, process.hProcess, &error),
+         L"long-running child should join the job");
+  ResumeThread(process.hThread);
+  CloseHandle(job);
+  expect(WaitForSingleObject(process.hProcess, 5000) == WAIT_OBJECT_0,
+         L"closing the job must terminate its child process tree");
+  CloseHandle(process.hThread);
+  CloseHandle(process.hProcess);
+}
+
 }  // namespace
 
 int wmain() {
@@ -123,6 +192,7 @@ int wmain() {
   environment_replacement_tests();
   environment_validation_tests();
   environment_isolation_tests();
+  job_object_tests();
 
   if (failures) {
     std::wcerr << failures << L" test assertion(s) failed\n";

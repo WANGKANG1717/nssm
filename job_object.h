@@ -1,0 +1,26 @@
+#ifndef JOB_OBJECT_H
+#define JOB_OBJECT_H
+
+#include <windows.h>
+
+struct job_accounting_t {
+  unsigned long active_processes;
+  unsigned long total_processes;
+  unsigned long terminated_processes;
+  unsigned long long user_time_100ns;
+  unsigned long long kernel_time_100ns;
+  size_t peak_job_memory;
+  size_t peak_process_memory;
+};
+
+/* Create an unnamed job which terminates all members when its handle closes. */
+HANDLE create_service_job(unsigned long *error);
+
+bool assign_process_to_service_job(HANDLE job, HANDLE process,
+                                   unsigned long *error);
+bool terminate_service_job(HANDLE job, unsigned long exit_code,
+                           unsigned long *error);
+bool query_service_job(HANDLE job, job_accounting_t *accounting,
+                       unsigned long *error);
+
+#endif

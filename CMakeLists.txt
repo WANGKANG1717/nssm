@@ -62,6 +62,7 @@ set(NSSM_SOURCES
   gui.cpp
   hook.cpp
   imports.cpp
+  job_object.cpp
   nssm_io.cpp
   nssm.cpp
   nssm.manifest
@@ -140,6 +141,7 @@ if(BUILD_TESTING)
   add_executable(nssm_unit_tests
     tests/child_process_tests.cpp
     child_process.cpp
+    job_object.cpp
   )
   target_compile_definitions(nssm_unit_tests PRIVATE
     UNICODE

@@ -2132,6 +2132,54 @@ Language = Chinese
 .
 
 MessageId = +1
+SymbolicName = NSSM_EVENT_CREATE_JOB_FAILED
+Severity = Error
+Language = English
+Failed to create or configure a Job Object for service %1:
+%2
+.
+Language = Chinese
+为服务 %1 创建或配置作业对象失败：
+%2
+.
+
+MessageId = +1
+SymbolicName = NSSM_EVENT_ASSIGN_JOB_FAILED
+Severity = Error
+Language = English
+Failed to assign the application process to the Job Object for service %1:
+%2
+.
+Language = Chinese
+无法将应用程序进程加入服务 %1 的作业对象：
+%2
+.
+
+MessageId = +1
+SymbolicName = NSSM_EVENT_TERMINATE_JOB_FAILED
+Severity = Warning
+Language = English
+Failed to terminate the Job Object for service %1:
+%2
+.
+Language = Chinese
+终止服务 %1 的作业对象失败：
+%2
+.
+
+MessageId = +1
+SymbolicName = NSSM_EVENT_RESUME_PROCESS_FAILED
+Severity = Error
+Language = English
+Failed to resume the application process for service %1:
+%2
+.
+Language = Chinese
+恢复服务 %1 的应用程序进程失败：
+%2
+.
+
+MessageId = +1
 SymbolicName = NSSM_EVENT_SERVICE_CONFIG_DESCRIPTION_FAILED
 Severity = Informational
 Language = English

@@ -1,5 +1,6 @@
 #include "nssm.h"
 #include "child_process.h"
+#include "job_object.h"
 
 bool is_admin;
 bool use_critical_section;
@@ -817,6 +818,7 @@ void cleanup_nssm_service(nssm_service_t *service) {
   if (service->env_extra) HeapFree(GetProcessHeap(), 0, service->env_extra);
   if (service->handle) CloseServiceHandle(service->handle);
   if (service->process_handle) CloseHandle(service->process_handle);
+  if (service->job_handle) CloseHandle(service->job_handle);
   if (service->wait_handle) UnregisterWait(service->wait_handle);
   if (service->throttle_section_initialised) DeleteCriticalSection(&service->throttle_section);
   if (service->throttle_timer) CloseHandle(service->throttle_timer);
@@ -1883,20 +1885,48 @@ int start_service(nssm_service_t *service) {
     bool inherit_handles = false;
     if (si.dwFlags & STARTF_USESTDHANDLES) inherit_handles = true;
     unsigned long flags = service->priority & priority_mask();
-    if (service->affinity) flags |= CREATE_SUSPENDED;
+    flags |= CREATE_SUSPENDED;
     if (! service->no_console) flags |= CREATE_NEW_CONSOLE;
     flags |= CREATE_UNICODE_ENVIRONMENT;
+
+    unsigned long job_error = ERROR_SUCCESS;
+    service->job_handle = create_service_job(&job_error);
+    if (! service->job_handle) {
+      log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_CREATE_JOB_FAILED, service->name,
+                error_string(job_error), 0);
+      close_output_handles(&si);
+      return stop_service(service, 3, true, true);
+    }
+
     if (! CreateProcess(service->exe, command_line.data(), 0, 0, inherit_handles,
                         flags, child_environment.data(), service->dir, &si, &pi)) {
       unsigned long exitcode = 3;
       unsigned long error = GetLastError();
       log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_CREATEPROCESS_FAILED, service->name, service->exe, error_string(error), 0);
       close_output_handles(&si);
+      CloseHandle(service->job_handle);
+      service->job_handle = 0;
       return stop_service(service, exitcode, true, true);
     }
     service->start_count++;
     service->process_handle = pi.hProcess;
     service->pid = pi.dwProcessId;
+
+    if (! assign_process_to_service_job(service->job_handle,
+                                        service->process_handle, &job_error)) {
+      log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_ASSIGN_JOB_FAILED, service->name,
+                error_string(job_error), 0);
+      TerminateProcess(service->process_handle, job_error);
+      WaitForSingleObject(service->process_handle, NSSM_SERVICE_STATUS_DEADLINE);
+      if (pi.hThread) CloseHandle(pi.hThread);
+      CloseHandle(service->process_handle);
+      service->process_handle = 0;
+      service->pid = 0;
+      CloseHandle(service->job_handle);
+      service->job_handle = 0;
+      close_output_handles(&si);
+      return stop_service(service, 3, true, true);
+    }
 
     if (get_process_creation_time(service->process_handle, &service->creation_time)) ZeroMemory(&service->creation_time, sizeof(service->creation_time));
 
@@ -1928,9 +1958,22 @@ int start_service(nssm_service_t *service) {
         log_event(EVENTLOG_WARNING_TYPE, NSSM_EVENT_SETPROCESSAFFINITYMASK_FAILED, service->name, error_string(GetLastError()), 0);
       }
 
-      ResumeThread(pi.hThread);
     }
-    /* We never use the primary thread handle beyond optional ResumeThread(). */
+    if (ResumeThread(pi.hThread) == static_cast<unsigned long>(-1)) {
+      unsigned long resume_error = GetLastError();
+      log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_RESUME_PROCESS_FAILED,
+                service->name, error_string(resume_error), 0);
+      terminate_service_job(service->job_handle, resume_error, nullptr);
+      WaitForSingleObject(service->process_handle, NSSM_SERVICE_STATUS_DEADLINE);
+      CloseHandle(pi.hThread);
+      CloseHandle(service->process_handle);
+      service->process_handle = 0;
+      service->pid = 0;
+      CloseHandle(service->job_handle);
+      service->job_handle = 0;
+      return stop_service(service, 3, true, true);
+    }
+    /* We never use the primary thread handle beyond ResumeThread(). */
     if (pi.hThread) CloseHandle(pi.hThread);
   }
 
@@ -2051,7 +2094,16 @@ void CALLBACK end_service(void *arg, unsigned char why) {
 
   /* Clean up. */
   if (exitcode == STILL_ACTIVE) exitcode = 0;
-  if (service->pid && service->kill_process_tree) {
+  if (service->job_handle) {
+    unsigned long job_error = ERROR_SUCCESS;
+    if (! terminate_service_job(service->job_handle, exitcode, &job_error)) {
+      log_event(EVENTLOG_WARNING_TYPE, NSSM_EVENT_TERMINATE_JOB_FAILED,
+                service->name, error_string(job_error), 0);
+    }
+    CloseHandle(service->job_handle);
+    service->job_handle = 0;
+  }
+  else if (service->pid && service->kill_process_tree) {
     kill_t k;
     service_kill_t(service, &k);
     kill_process_tree(&k, service->pid);

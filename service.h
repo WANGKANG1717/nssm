@@ -98,6 +98,7 @@ typedef struct {
   SERVICE_STATUS status;
   SERVICE_STATUS_HANDLE status_handle;
   HANDLE process_handle;
+  HANDLE job_handle;
   unsigned long pid;
   HANDLE wait_handle;
   unsigned long exitcode;
