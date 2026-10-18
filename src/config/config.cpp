@@ -1,5 +1,6 @@
 #include "config.h"
 #include "child_process.h"
+#include "output.h"
 
 #include <windows.h>
 #include <shlwapi.h>
@@ -917,20 +918,20 @@ bool load_service_config(const wchar_t *path, service_config_t *config,
 }
 
 int validate_service_config_command(int argc, wchar_t **argv) {
-  if (argc != 1 || ! argv || ! argv[0]) {
-    fwprintf(stderr, L"Usage: nssm validate <config.json>\n");
-    return 2;
+  cli_arguments_t arguments = parse_cli_arguments(argc, argv);
+  if (arguments.positional.size() != 1 || ! arguments.positional[0]) {
+    print_cli_error(arguments.json, L"usage",
+                    L"Usage: nssm validate [--json] <config.json>");
+    return static_cast<int>(cli_exit_code::usage);
   }
 
   service_config_t config;
   config_validation_t validation;
-  if (! load_service_config(argv[0], &config, &validation)) {
-    for (const auto &error : validation.errors) {
-      fwprintf(stderr, L"error: %ls\n", error.c_str());
-    }
-    return 1;
+  if (! load_service_config(arguments.positional[0], &config, &validation)) {
+    print_cli_validation_errors(arguments.json, validation.errors);
+    return static_cast<int>(cli_exit_code::validation);
   }
-  fwprintf(stdout, L"Configuration is valid: %ls\n",
-           config.service.name.c_str());
-  return 0;
+  print_cli_success(arguments.json, L"validate", config.service.name,
+                    L"Configuration is valid: " + config.service.name);
+  return static_cast<int>(cli_exit_code::success);
 }

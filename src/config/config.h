@@ -49,6 +49,8 @@ struct recovery_config_t {
   unsigned long window_ms = 60000;
   unsigned long maximum_restarts = 5;
   unsigned long reset_after_ms = 60000;
+
+  bool operator==(const recovery_config_t &) const = default;
 };
 
 enum class health_check_type_t {
@@ -80,6 +82,8 @@ struct health_check_config_t {
 
   std::wstring file_path;
   unsigned long maximum_age_ms = 60000;
+
+  bool operator==(const health_check_config_t &) const = default;
 };
 
 struct readiness_config_t {
@@ -97,6 +101,8 @@ struct readiness_config_t {
   bool enabled() const {
     return probe.type != health_check_type_t::disabled;
   }
+
+  bool operator==(const readiness_config_t &) const = default;
 };
 
 struct resource_limit_config_t {
@@ -109,6 +115,8 @@ struct resource_limit_config_t {
   bool enabled() const {
     return memory_limit_bytes || maximum_processes || maximum_cpu_percent;
   }
+
+  bool operator==(const resource_limit_config_t &) const = default;
 };
 
 struct logging_config_t {
@@ -120,15 +128,21 @@ struct logging_config_t {
   bool enabled() const {
     return ! stdout_path.empty() || ! stderr_path.empty();
   }
+
+  bool operator==(const logging_config_t &) const = default;
 };
 
 struct service_account_config_t {
   service_account_type_t type = service_account_type_t::virtual_account;
   std::wstring name;
+
+  bool operator==(const service_account_config_t &) const = default;
 };
 
 struct security_config_t {
   service_sid_type_t service_sid = service_sid_type_t::unrestricted;
+
+  bool operator==(const security_config_t &) const = default;
 };
 
 struct service_metadata_config_t {
@@ -138,6 +152,8 @@ struct service_metadata_config_t {
   service_startup_t startup = service_startup_t::automatic;
   service_account_config_t account;
   std::vector<std::wstring> dependencies;
+
+  bool operator==(const service_metadata_config_t &) const = default;
 };
 
 struct application_config_t {
@@ -146,6 +162,8 @@ struct application_config_t {
   std::wstring working_directory;
   bool inherit_environment = true;
   std::vector<std::pair<std::wstring, std::wstring>> environment;
+
+  bool operator==(const application_config_t &) const = default;
 };
 
 struct service_config_t {
@@ -158,6 +176,8 @@ struct service_config_t {
   resource_limit_config_t resources;
   logging_config_t logging;
   security_config_t security;
+
+  bool operator==(const service_config_t &) const = default;
 };
 
 struct config_validation_t {
@@ -174,6 +194,7 @@ bool load_service_config(const wchar_t *path, service_config_t *config,
                          config_validation_t *validation);
 int validate_service_config_command(int argc, wchar_t **argv);
 int apply_service_config_command(int argc, wchar_t **argv);
+int plan_service_config_command(int argc, wchar_t **argv);
 bool load_registered_service_config(nssm_service_t *service,
                                     config_validation_t *validation);
 

@@ -1,6 +1,7 @@
 #include "nssm.h"
 #include "child_process.h"
 #include "config.h"
+#include "output.h"
 #include "recovery.h"
 #include "security.h"
 
@@ -352,37 +353,154 @@ bool copy_config_environment(const application_config_t &application,
   return true;
 }
 
+std::vector<std::wstring> config_changes(const service_config_t &current,
+                                         const service_config_t &desired,
+                                         const std::wstring &current_path,
+                                         const std::wstring &desired_path) {
+  std::vector<std::wstring> changes;
+  if (!(current.service == desired.service)) changes.emplace_back(L"service");
+  if (!(current.application == desired.application)) changes.emplace_back(L"application");
+  if (!(current.recovery == desired.recovery)) changes.emplace_back(L"recovery");
+  if (!(current.readiness == desired.readiness)) changes.emplace_back(L"readiness");
+  if (!(current.health == desired.health)) changes.emplace_back(L"health");
+  if (!(current.resources == desired.resources)) changes.emplace_back(L"resources");
+  if (!(current.logging == desired.logging)) changes.emplace_back(L"logging");
+  if (!(current.security == desired.security)) changes.emplace_back(L"security");
+  if (_wcsicmp(current_path.c_str(), desired_path.c_str())) {
+    changes.emplace_back(L"configPath");
+  }
+  return changes;
+}
+
 }  // namespace
 
+int plan_service_config_command(int argc, wchar_t **argv) {
+  cli_arguments_t arguments = parse_cli_arguments(argc, argv);
+  if (arguments.positional.size() != 1 || ! arguments.positional[0]) {
+    print_cli_error(arguments.json, L"usage",
+                    L"Usage: nssm plan [--json] <config.json>");
+    return static_cast<int>(cli_exit_code::usage);
+  }
+
+  service_config_t desired;
+  config_validation_t validation;
+  if (! load_service_config(arguments.positional[0], &desired, &validation)) {
+    print_cli_validation_errors(arguments.json, validation.errors);
+    return static_cast<int>(cli_exit_code::validation);
+  }
+  std::wstring desired_path;
+  std::wstring account;
+  if (! full_config_path(arguments.positional[0], &desired_path, &validation) ||
+      ! account_name(desired, &account, &validation)) {
+    print_cli_validation_errors(arguments.json, validation.errors);
+    return static_cast<int>(cli_exit_code::validation);
+  }
+  if (! audit_service_paths(desired_path, desired, &validation)) {
+    print_cli_validation_errors(arguments.json, validation.errors, L"security");
+    return static_cast<int>(cli_exit_code::security);
+  }
+
+  SC_HANDLE manager = OpenSCManagerW(nullptr, SERVICES_ACTIVE_DATABASE,
+                                     SC_MANAGER_CONNECT);
+  if (! manager) {
+    unsigned long error = GetLastError();
+    print_cli_error(arguments.json,
+                    error == ERROR_ACCESS_DENIED ? L"permission" : L"system",
+                    L"Unable to open the Service Control Manager", error);
+    return static_cast<int>(error == ERROR_ACCESS_DENIED
+                                ? cli_exit_code::permission
+                                : cli_exit_code::system);
+  }
+  SC_HANDLE service = OpenServiceW(manager, desired.service.name.c_str(),
+                                   SERVICE_QUERY_CONFIG);
+  if (! service && GetLastError() == ERROR_SERVICE_DOES_NOT_EXIST) {
+    CloseServiceHandle(manager);
+    print_cli_plan(arguments.json, desired.service.name, L"create",
+                   {L"service", L"application", L"recovery", L"readiness",
+                    L"health", L"resources", L"logging", L"security"});
+    return static_cast<int>(cli_exit_code::success);
+  }
+  if (! service) {
+    unsigned long error = GetLastError();
+    CloseServiceHandle(manager);
+    print_cli_error(arguments.json,
+                    error == ERROR_ACCESS_DENIED ? L"permission" : L"system",
+                    L"Unable to query the service", error);
+    return static_cast<int>(error == ERROR_ACCESS_DENIED
+                                ? cli_exit_code::permission
+                                : cli_exit_code::system);
+  }
+
+  existing_service_state_t state;
+  unsigned long query_error = ERROR_SUCCESS;
+  if (! read_existing_service_state(service, desired.service.name, &state,
+                                    &query_error)) {
+    CloseServiceHandle(service);
+    CloseServiceHandle(manager);
+    print_cli_error(arguments.json, L"conflict",
+                    L"The existing service is not managed by declarative NSSM",
+                    query_error);
+    return static_cast<int>(cli_exit_code::conflict);
+  }
+  CloseServiceHandle(service);
+  CloseServiceHandle(manager);
+
+  service_config_t current;
+  validation.errors.clear();
+  if (! load_service_config(state.config_path.c_str(), &current, &validation)) {
+    print_cli_error(arguments.json, L"conflict",
+                    L"The registered service configuration cannot be loaded");
+    return static_cast<int>(cli_exit_code::conflict);
+  }
+  if (_wcsicmp(current.service.name.c_str(), desired.service.name.c_str())) {
+    print_cli_error(arguments.json, L"conflict",
+                    L"The registered configuration belongs to a different service");
+    return static_cast<int>(cli_exit_code::conflict);
+  }
+  std::vector<std::wstring> changes =
+      config_changes(current, desired, state.config_path, desired_path);
+  const std::wstring expected_account = account.empty() ? L"LocalSystem" : account;
+  const bool scm_matches =
+      state.service_type == SERVICE_WIN32_OWN_PROCESS &&
+      state.start_type == service_start_type(desired.service.startup) &&
+      state.delayed == (desired.service.startup == service_startup_t::delayed) &&
+      !_wcsicmp(state.binary_path.c_str(), nssm_imagepath()) &&
+      state.dependencies == make_dependencies(desired.service.dependencies) &&
+      !_wcsicmp(state.account.c_str(), expected_account.c_str()) &&
+      state.display_name == desired.service.display_name &&
+      state.description == desired.service.description &&
+      state.service_sid_type == service_sid_type(desired.security.service_sid);
+  if (! scm_matches) changes.emplace_back(L"scm");
+  print_cli_plan(arguments.json, desired.service.name,
+                 changes.empty() ? L"noChange" : L"update", changes);
+  return static_cast<int>(cli_exit_code::success);
+}
+
 int apply_service_config_command(int argc, wchar_t **argv) {
-  if (argc != 1 || ! argv || ! argv[0]) {
-    fwprintf(stderr, L"Usage: nssm apply <config.json>\n");
-    return 2;
+  cli_arguments_t arguments = parse_cli_arguments(argc, argv);
+  if (arguments.positional.size() != 1 || ! arguments.positional[0]) {
+    print_cli_error(arguments.json, L"usage",
+                    L"Usage: nssm apply [--json] <config.json>");
+    return static_cast<int>(cli_exit_code::usage);
   }
 
   service_config_t config;
   config_validation_t validation;
-  if (! load_service_config(argv[0], &config, &validation)) {
-    for (const auto &error : validation.errors) {
-      fwprintf(stderr, L"error: %ls\n", error.c_str());
-    }
-    return 1;
+  if (! load_service_config(arguments.positional[0], &config, &validation)) {
+    print_cli_validation_errors(arguments.json, validation.errors);
+    return static_cast<int>(cli_exit_code::validation);
   }
 
   std::wstring path;
   std::wstring account;
-  if (! full_config_path(argv[0], &path, &validation) ||
+  if (! full_config_path(arguments.positional[0], &path, &validation) ||
       ! account_name(config, &account, &validation)) {
-    for (const auto &error : validation.errors) {
-      fwprintf(stderr, L"error: %ls\n", error.c_str());
-    }
-    return 1;
+    print_cli_validation_errors(arguments.json, validation.errors);
+    return static_cast<int>(cli_exit_code::validation);
   }
   if (! audit_service_paths(path, config, &validation)) {
-    for (const auto &error : validation.errors) {
-      fwprintf(stderr, L"error: %ls\n", error.c_str());
-    }
-    return 1;
+    print_cli_validation_errors(arguments.json, validation.errors, L"security");
+    return static_cast<int>(cli_exit_code::security);
   }
 
   std::vector<wchar_t> dependencies =
@@ -390,8 +508,13 @@ int apply_service_config_command(int argc, wchar_t **argv) {
   SC_HANDLE manager = OpenSCManagerW(nullptr, SERVICES_ACTIVE_DATABASE,
                                      SC_MANAGER_CONNECT | SC_MANAGER_CREATE_SERVICE);
   if (! manager) {
-    fwprintf(stderr, L"error: OpenSCManager failed: %lu\n", GetLastError());
-    return 3;
+    unsigned long error = GetLastError();
+    print_cli_error(arguments.json,
+                    error == ERROR_ACCESS_DENIED ? L"permission" : L"system",
+                    L"Unable to open the Service Control Manager", error);
+    return static_cast<int>(error == ERROR_ACCESS_DENIED
+                                ? cli_exit_code::permission
+                                : cli_exit_code::system);
   }
 
   bool created = false;
@@ -412,21 +535,19 @@ int apply_service_config_command(int argc, wchar_t **argv) {
     unsigned long query_error = ERROR_SUCCESS;
     if (! read_existing_service_state(service, config.service.name, &previous,
                                       &query_error)) {
-      fwprintf(stderr,
-               L"error: refusing to update a service not previously managed "
-               L"by this declarative NSSM (Windows error %lu)\n",
-               query_error);
+      print_cli_error(arguments.json, L"conflict",
+                      L"Refusing to update a service not previously managed by this declarative NSSM",
+                      query_error);
       CloseServiceHandle(service);
       CloseServiceHandle(manager);
-      return 4;
+      return static_cast<int>(cli_exit_code::conflict);
     }
     if (! passwordless_service_account(previous.account)) {
-      fwprintf(stderr,
-               L"error: the existing service account cannot be restored "
-               L"without a password; update refused\n");
+      print_cli_error(arguments.json, L"conflict",
+                      L"The existing service account cannot be restored without a password; update refused");
       CloseServiceHandle(service);
       CloseServiceHandle(manager);
-      return 4;
+      return static_cast<int>(cli_exit_code::conflict);
     }
     if (! ChangeServiceConfigW(
             service, SERVICE_WIN32_OWN_PROCESS,
@@ -434,83 +555,93 @@ int apply_service_config_command(int argc, wchar_t **argv) {
             nssm_imagepath(), nullptr, nullptr, dependencies.data(),
             account.empty() ? L"LocalSystem" : account.c_str(), nullptr,
             config.service.display_name.c_str())) {
-      fwprintf(stderr, L"error: ChangeServiceConfig failed: %lu\n",
-               GetLastError());
+      unsigned long error = GetLastError();
+      print_cli_error(arguments.json, L"system",
+                      L"ChangeServiceConfig failed", error);
       CloseServiceHandle(service);
       CloseServiceHandle(manager);
-      return 4;
+      return static_cast<int>(cli_exit_code::system);
     }
   }
 
   if (! service) {
-    fwprintf(stderr, L"error: CreateService/OpenService failed: %lu\n",
-             GetLastError());
+    unsigned long error = GetLastError();
+    print_cli_error(arguments.json,
+                    error == ERROR_ACCESS_DENIED ? L"permission" : L"system",
+                    L"CreateService/OpenService failed", error);
     CloseServiceHandle(manager);
-    return 4;
+    return static_cast<int>(error == ERROR_ACCESS_DENIED
+                                ? cli_exit_code::permission
+                                : cli_exit_code::system);
   }
+
+  auto rollback = [&]() {
+    if (created) return DeleteService(service) != FALSE;
+    return restore_existing_service(service, config.service.name, previous);
+  };
 
   SERVICE_DESCRIPTIONW description = {
       const_cast<wchar_t *>(config.service.description.c_str())};
   if (! ChangeServiceConfig2W(service, SERVICE_CONFIG_DESCRIPTION, &description)) {
-    fwprintf(stderr, L"error: setting service description failed: %lu\n",
-             GetLastError());
-    if (created) DeleteService(service);
-    else if (! restore_existing_service(service, config.service.name, previous)) {
-      fwprintf(stderr, L"error: rollback of the existing service failed\n");
-    }
+    unsigned long error = GetLastError();
+    bool restored = rollback();
+    print_cli_error(arguments.json, L"system",
+                    restored ? L"Setting service description failed"
+                             : L"Setting service description failed and rollback failed",
+                    error);
     CloseServiceHandle(service);
     CloseServiceHandle(manager);
-    return 5;
+    return static_cast<int>(cli_exit_code::system);
   }
 
   SERVICE_DELAYED_AUTO_START_INFO delayed = {
       config.service.startup == service_startup_t::delayed};
   if (! ChangeServiceConfig2W(service, SERVICE_CONFIG_DELAYED_AUTO_START_INFO,
                               &delayed)) {
-    fwprintf(stderr, L"error: setting delayed start failed: %lu\n",
-             GetLastError());
-    if (created) DeleteService(service);
-    else if (! restore_existing_service(service, config.service.name, previous)) {
-      fwprintf(stderr, L"error: rollback of the existing service failed\n");
-    }
+    unsigned long error = GetLastError();
+    bool restored = rollback();
+    print_cli_error(arguments.json, L"system",
+                    restored ? L"Setting delayed start failed"
+                             : L"Setting delayed start failed and rollback failed",
+                    error);
     CloseServiceHandle(service);
     CloseServiceHandle(manager);
-    return 5;
+    return static_cast<int>(cli_exit_code::system);
   }
 
   unsigned long sid_error = ERROR_SUCCESS;
   if (! set_service_sid_type(service, service_sid_type(config.security.service_sid),
                              &sid_error)) {
-    fwprintf(stderr, L"error: setting service SID type failed: %lu\n",
-             sid_error);
-    if (created) DeleteService(service);
-    else if (! restore_existing_service(service, config.service.name, previous)) {
-      fwprintf(stderr, L"error: rollback of the existing service failed\n");
-    }
+    bool restored = rollback();
+    print_cli_error(arguments.json, L"system",
+                    restored ? L"Setting service SID type failed"
+                             : L"Setting service SID type failed and rollback failed",
+                    sid_error);
     CloseServiceHandle(service);
     CloseServiceHandle(manager);
-    return 5;
+    return static_cast<int>(cli_exit_code::system);
   }
 
   unsigned long registry_error = ERROR_SUCCESS;
   if (! write_config_path(config.service.name, path, &registry_error)) {
-    fwprintf(stderr, L"error: storing configuration path failed: %lu\n",
-             registry_error);
-    if (created) DeleteService(service);
-    else if (! restore_existing_service(service, config.service.name, previous)) {
-      fwprintf(stderr, L"error: rollback of the existing service failed\n");
-    }
+    bool restored = rollback();
+    print_cli_error(arguments.json, L"system",
+                    restored ? L"Storing configuration path failed"
+                             : L"Storing configuration path failed and rollback failed",
+                    registry_error);
     CloseServiceHandle(service);
     CloseServiceHandle(manager);
-    return 6;
+    return static_cast<int>(cli_exit_code::system);
   }
 
   CloseServiceHandle(service);
   CloseServiceHandle(manager);
-  fwprintf(stdout, created ? L"Installed service %ls from %ls\n"
-                           : L"Updated service %ls from %ls\n",
-           config.service.name.c_str(), path.c_str());
-  return 0;
+  std::wstring detail =
+      std::wstring(created ? L"Installed service " : L"Updated service ") +
+      config.service.name + L" from " + path;
+  print_cli_success(arguments.json, created ? L"create" : L"update",
+                    config.service.name, detail);
+  return static_cast<int>(cli_exit_code::success);
 }
 
 bool load_registered_service_config(nssm_service_t *service,

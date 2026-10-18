@@ -131,6 +131,22 @@ ctest --preset mingw-release
 ## 使用与命令（摘要）
 参考官方命令行文档整理要点，详情见：[nssm commands](https://nssm.cc/commands)。
 
+面向自动化的声明式命令：
+
+```powershell
+nssm validate --json .\service.json
+nssm plan --json .\service.json
+nssm apply --json .\service.json
+```
+
+`plan` 只读取 JSON、ACL 和 SCM，不修改系统；结果为 `create`、`update` 或
+`noChange`，并列出发生变化的配置区段。`--json` 输出稳定的 JSON 对象，失败时
+同样输出结构化错误。声明式命令使用统一退出码：`0` 成功、`1` 配置校验失败、
+`2` 参数错误、`3` 权限不足、`4` 与现有服务冲突、`5` Windows/SCM 错误、
+`6` 路径安全审计失败。
+JSON 模式不会弹出 UAC 提权窗口；权限不足时直接返回退出码 `3` 和结构化错误，
+便于 CI/CD 做出确定性判断。
+
 声明式配置的安全基线默认等价于：
 
 ```json

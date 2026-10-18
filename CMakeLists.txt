@@ -72,6 +72,7 @@ set(NSSM_APP_SOURCES
 
 set(NSSM_CLI_SOURCES
   src/cli/console.cpp
+  src/cli/output.cpp
 )
 
 set(NSSM_CONFIG_SOURCES
@@ -205,6 +206,7 @@ if(BUILD_TESTING)
 
   add_executable(nssm_unit_tests
     tests/child_process_tests.cpp
+    src/cli/output.cpp
     src/supervisor/process/child_process.cpp
     src/config/config.cpp
     src/supervisor/monitoring/health_check.cpp
@@ -215,6 +217,7 @@ if(BUILD_TESTING)
   )
   target_include_directories(nssm_unit_tests PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/src/config"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/cli"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/supervisor/process"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/supervisor/monitoring"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/supervisor/runtime"
@@ -229,5 +232,13 @@ if(BUILD_TESTING)
   nssm_configure_compiler(nssm_unit_tests)
   target_link_libraries(nssm_unit_tests PRIVATE advapi32 shlwapi winhttp ws2_32 yyjson)
   add_test(NAME nssm.unit COMMAND $<TARGET_FILE:nssm_unit_tests>)
+  add_test(
+    NAME nssm.validate-json
+    COMMAND $<TARGET_FILE:nssm> validate --json
+            "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/minimal-service.json"
+  )
+  set_tests_properties(nssm.validate-json PROPERTIES
+    PASS_REGULAR_EXPRESSION "\"ok\":true.*\"operation\":\"validate\""
+  )
 endif()
 

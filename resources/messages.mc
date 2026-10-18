@@ -16,7 +16,9 @@ To validate or apply a declarative JSON configuration:
 
         nssm validate <config.json>
 
-        nssm apply <config.json>
+        nssm plan [--json] <config.json>
+
+        nssm apply [--json] <config.json>
 
 To show service removal GUI:
 
@@ -49,7 +51,8 @@ NSSM：稳定可靠的服务管理器
 
 常用命令：
   验证配置：nssm validate <配置文件.json>
-  安装或更新：nssm apply <配置文件.json>
+  预览变更：nssm plan [--json] <配置文件.json>
+  安装或更新：nssm apply [--json] <配置文件.json>
 
   移除（GUI）: nssm remove [<服务名>]
   移除（直接）: nssm remove <服务名> confirm

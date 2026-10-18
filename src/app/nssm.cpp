@@ -1,4 +1,5 @@
 #include "nssm.h"
+#include "output.h"
 #include "config.h"
 
 extern unsigned long tls_index;
@@ -261,7 +262,7 @@ int _tmain(int argc, TCHAR **argv) {
   if (argc > 1) {
     /*
       Valid commands are:
-      validate, apply, start, stop, restart, pause, continue, remove, status,
+      validate, plan, apply, start, stop, restart, pause, continue, remove, status,
       statuscode, rotate, list, processes, version
     */
     if (is_version(argv[1])) {
@@ -271,8 +272,17 @@ int _tmain(int argc, TCHAR **argv) {
     if (str_equiv(argv[1], _T("validate"))) {
       nssm_exit(validate_service_config_command(argc - 2, argv + 2));
     }
+    if (str_equiv(argv[1], _T("plan"))) {
+      nssm_exit(plan_service_config_command(argc - 2, argv + 2));
+    }
     if (str_equiv(argv[1], _T("apply"))) {
       if (! is_admin) {
+        cli_arguments_t arguments = parse_cli_arguments(argc - 2, argv + 2);
+        if (arguments.json) {
+          print_cli_error(true, L"permission",
+                          L"Administrator access is required to apply a service configuration");
+          nssm_exit(static_cast<int>(cli_exit_code::permission));
+        }
         nssm_exit(elevate(argc, argv, NSSM_MESSAGE_NOT_ADMINISTRATOR_CANNOT_INSTALL));
       }
       create_messages();
