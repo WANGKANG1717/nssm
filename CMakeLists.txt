@@ -43,6 +43,7 @@ set(NSSM_SOURCES
   imports.cpp
   nssm_io.cpp
   nssm.cpp
+  nssm.manifest
   process.cpp
   registry.cpp
   service.cpp

@@ -36,6 +36,11 @@ static inline void set_logon_enabled(unsigned char credentials_enabled) {
 }
 
 int nssm_gui(int resource, nssm_service_t *service) {
+  INITCOMMONCONTROLSEX common_controls{};
+  common_controls.dwSize = sizeof(common_controls);
+  common_controls.dwICC = ICC_STANDARD_CLASSES | ICC_TAB_CLASSES;
+  InitCommonControlsEx(&common_controls);
+
   /* Create window */
   HWND dlg = dialog(MAKEINTRESOURCE(resource), 0, nssm_dlg, (LPARAM) service);
   if (! dlg) {
