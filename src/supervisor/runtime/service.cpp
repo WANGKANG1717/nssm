@@ -75,6 +75,14 @@ static bool start_detached_thread(LPTHREAD_START_ROUTINE function,
   return true;
 }
 
+static void terminate_after_monitor_start_failure(nssm_service_t *service) {
+  EnterCriticalSection(&service->health_section);
+  if (! service->stopping && service->job_handle) {
+    terminate_service_job(service->job_handle, ERROR_NOT_READY, nullptr);
+  }
+  LeaveCriticalSection(&service->health_section);
+}
+
 static bool prepare_child_launch(nssm_service_t *service,
                                  std::wstring *command_line,
                                  std::vector<wchar_t> *environment) {
@@ -469,18 +477,18 @@ int monitor_service(nssm_service_t *service) {
   log_event(EVENTLOG_INFORMATION_TYPE, NSSM_EVENT_STARTED_SERVICE,
             service->exe, service->flags, service->name, service->dir, 0);
   if (! start_health_monitor(service)) {
+    const unsigned long error = GetLastError();
+    if (error == ERROR_OPERATION_ABORTED) return 0;
     log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_HEALTH_MONITOR_START_FAILED,
-              service->name, error_string(GetLastError()), 0);
-    if (service->job_handle) {
-      terminate_service_job(service->job_handle, ERROR_NOT_READY, nullptr);
-    }
+              service->name, error_string(error), 0);
+    terminate_after_monitor_start_failure(service);
   }
   else if (! start_resource_monitor(service)) {
+    const unsigned long error = GetLastError();
+    if (error == ERROR_OPERATION_ABORTED) return 0;
     log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_RESOURCE_MONITOR_START_FAILED,
-              service->name, error_string(GetLastError()), 0);
-    if (service->job_handle) {
-      terminate_service_job(service->job_handle, ERROR_NOT_READY, nullptr);
-    }
+              service->name, error_string(error), 0);
+    terminate_after_monitor_start_failure(service);
   }
 
   return 0;
