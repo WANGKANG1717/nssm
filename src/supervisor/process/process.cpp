@@ -5,39 +5,6 @@
 #include "service_wait.h"
 #include "win32_handle.h"
 
-HANDLE get_debug_token() {
-  unique_handle token;
-  const unsigned long access = TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY;
-  if (! OpenThreadToken(GetCurrentThread(), access, FALSE, token.put())) {
-    if (GetLastError() != ERROR_NO_TOKEN ||
-        ! ImpersonateSelf(SecurityImpersonation)) {
-      return INVALID_HANDLE_VALUE;
-    }
-    const BOOL opened =
-        OpenThreadToken(GetCurrentThread(), access, FALSE, token.put());
-    const BOOL reverted = RevertToSelf();
-    if (! opened || ! reverted) return INVALID_HANDLE_VALUE;
-  }
-
-  LUID luid = {};
-  if (! LookupPrivilegeValue(NULL, SE_DEBUG_NAME, &luid)) {
-    return INVALID_HANDLE_VALUE;
-  }
-
-  TOKEN_PRIVILEGES privileges = {};
-  privileges.PrivilegeCount = 1;
-  privileges.Privileges[0].Luid = luid;
-  privileges.Privileges[0].Attributes = SE_PRIVILEGE_ENABLED;
-  SetLastError(ERROR_SUCCESS);
-  if (! AdjustTokenPrivileges(token.get(), FALSE, &privileges, 0, nullptr,
-                              nullptr) ||
-      GetLastError() == ERROR_NOT_ALL_ASSIGNED) {
-    return INVALID_HANDLE_VALUE;
-  }
-
-  return token.release();
-}
-
 void service_kill_t(nssm_service_t *service, kill_t *k) {
   if (! service) return;
   if (! k) return;

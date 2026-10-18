@@ -122,6 +122,11 @@ try {
   if ($status.state -ne 'running' -or $status.childPid -eq 0) {
     throw 'runtime status did not expose a running child process'
   }
+  $processTree = @(& $executablePath processes $serviceName)
+  if ($LASTEXITCODE -ne 0 -or
+      -not ($processTree -match "\b$($status.childPid)\b")) {
+    throw 'process-tree query did not include the managed child process'
+  }
 
   $exported = Invoke-NssmJson @('export', '--json', $serviceName, $exportPath)
   if (-not $exported.ok -or -not (Test-Path -LiteralPath $exportPath)) {

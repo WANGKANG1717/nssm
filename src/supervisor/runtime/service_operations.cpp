@@ -3,6 +3,7 @@
 #include "config_registration.h"
 #include "service_constants.h"
 #include "process.h"
+#include "security.h"
 #include "win32_handle.h"
 #include "windows_limits.h"
 
@@ -228,7 +229,7 @@ bool query_service_process_tree(
     return true;
   }
 
-  unique_handle debug_token(get_debug_token());
+  debug_privilege_guard debug_privilege;
   unique_handle process(OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE,
                                     status.dwProcessId));
   if (! process) {

@@ -752,6 +752,49 @@ void path_security_tests() {
   DeleteFileW(temporary_file);
 }
 
+void debug_privilege_guard_tests() {
+  unique_handle before;
+  const bool had_thread_token =
+      OpenThreadToken(GetCurrentThread(), TOKEN_QUERY, FALSE, before.put()) !=
+      FALSE;
+  const unsigned long before_error =
+      had_thread_token ? ERROR_SUCCESS : GetLastError();
+  before.reset();
+
+  {
+    debug_privilege_guard privilege;
+    if (privilege) {
+      unique_handle token;
+      expect(OpenThreadToken(GetCurrentThread(), TOKEN_QUERY, FALSE,
+                             token.put()) != FALSE,
+             L"an enabled debug privilege must belong to the current thread token");
+      LUID luid = {};
+      PRIVILEGE_SET requested = {};
+      requested.PrivilegeCount = 1;
+      requested.Control = PRIVILEGE_SET_ALL_NECESSARY;
+      requested.Privilege[0].Attributes = SE_PRIVILEGE_ENABLED;
+      BOOL enabled = FALSE;
+      const bool checked =
+          token && LookupPrivilegeValueW(nullptr, SE_DEBUG_NAME, &luid);
+      requested.Privilege[0].Luid = luid;
+      expect(checked && PrivilegeCheck(token.get(), &requested, &enabled) &&
+                 enabled,
+             L"debug privilege guard must enable SeDebugPrivilege in scope");
+    }
+  }
+
+  unique_handle after;
+  const bool has_thread_token =
+      OpenThreadToken(GetCurrentThread(), TOKEN_QUERY, FALSE, after.put()) !=
+      FALSE;
+  const unsigned long after_error =
+      has_thread_token ? ERROR_SUCCESS : GetLastError();
+  expect(had_thread_token == has_thread_token &&
+             (had_thread_token ||
+              (before_error == ERROR_NO_TOKEN && after_error == ERROR_NO_TOKEN)),
+         L"debug privilege guard must restore the original thread-token state");
+}
+
 }  // namespace
 
 int wmain() {
@@ -768,6 +811,7 @@ int wmain() {
   health_probe_tests();
   readiness_tests();
   path_security_tests();
+  debug_privilege_guard_tests();
 
   if (failures) {
     std::wcerr << failures << L" test assertion(s) failed\n";

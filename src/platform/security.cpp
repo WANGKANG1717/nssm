@@ -179,6 +179,70 @@ bool audit_existing_path_chain(const std::wstring &path,
 
 }  // namespace
 
+debug_privilege_guard::debug_privilege_guard() noexcept {
+  const unsigned long access = TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY;
+  if (! OpenThreadToken(GetCurrentThread(), access, FALSE, &token_)) {
+    unsigned long error = GetLastError();
+    if (error != ERROR_NO_TOKEN || ! ImpersonateSelf(SecurityImpersonation)) {
+      SetLastError(error == ERROR_NO_TOKEN ? GetLastError() : error);
+      return;
+    }
+    impersonated_ = true;
+    if (! OpenThreadToken(GetCurrentThread(), access, FALSE, &token_)) {
+      error = GetLastError();
+      RevertToSelf();
+      impersonated_ = false;
+      SetLastError(error);
+      return;
+    }
+  }
+
+  LUID luid = {};
+  if (! LookupPrivilegeValueW(nullptr, SE_DEBUG_NAME, &luid)) {
+    const unsigned long error = GetLastError();
+    CloseHandle(token_);
+    token_ = nullptr;
+    if (impersonated_) RevertToSelf();
+    impersonated_ = false;
+    SetLastError(error);
+    return;
+  }
+
+  TOKEN_PRIVILEGES privileges = {};
+  privileges.PrivilegeCount = 1;
+  privileges.Privileges[0].Luid = luid;
+  privileges.Privileges[0].Attributes = SE_PRIVILEGE_ENABLED;
+  unsigned long previous_size = 0;
+  SetLastError(ERROR_SUCCESS);
+  const BOOL adjusted = AdjustTokenPrivileges(
+      token_, FALSE, &privileges, sizeof(previous_), &previous_,
+      &previous_size);
+  const unsigned long error = GetLastError();
+  adjusted_ = adjusted != FALSE;
+  if (! adjusted || error == ERROR_NOT_ALL_ASSIGNED) {
+    if (adjusted_) {
+      AdjustTokenPrivileges(token_, FALSE, &previous_, 0, nullptr, nullptr);
+      adjusted_ = false;
+    }
+    CloseHandle(token_);
+    token_ = nullptr;
+    if (impersonated_) RevertToSelf();
+    impersonated_ = false;
+    SetLastError(adjusted ? error : error ? error : ERROR_GEN_FAILURE);
+    return;
+  }
+
+  enabled_ = true;
+}
+
+debug_privilege_guard::~debug_privilege_guard() noexcept {
+  if (adjusted_ && token_) {
+    AdjustTokenPrivileges(token_, FALSE, &previous_, 0, nullptr, nullptr);
+  }
+  if (token_) CloseHandle(token_);
+  if (impersonated_) RevertToSelf();
+}
+
 bool is_process_administrator() {
   std::vector<unsigned char> administrators;
   if (! make_well_known_sid(WinBuiltinAdministratorsSid, &administrators)) {
