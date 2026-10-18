@@ -72,8 +72,9 @@ bool read_config_path(const std::wstring &service_name, std::wstring *path,
                             nullptr, &bytes);
   constexpr size_t maximum_bytes =
       (kMaximumPathCharacters + 1) * sizeof(wchar_t);
-  if (result != ERROR_SUCCESS || type != REG_SZ || bytes < sizeof(wchar_t) ||
-      bytes > maximum_bytes) {
+  if (result != ERROR_SUCCESS || type != REG_SZ ||
+      bytes < 2 * sizeof(wchar_t) || bytes > maximum_bytes ||
+      bytes % sizeof(wchar_t) != 0) {
     if (error) {
       *error = result == ERROR_SUCCESS ? ERROR_INVALID_DATA
                                        : static_cast<unsigned long>(result);
@@ -85,11 +86,18 @@ bool read_config_path(const std::wstring &service_name, std::wstring *path,
   result = RegQueryValueExW(
       key.get(), kConfigPathValue, nullptr, &type,
       reinterpret_cast<unsigned char *>(buffer.data()), &bytes);
-  if (result != ERROR_SUCCESS) {
-    if (error) *error = static_cast<unsigned long>(result);
+  const size_t characters = bytes / sizeof(wchar_t);
+  if (result != ERROR_SUCCESS || type != REG_SZ ||
+      bytes < 2 * sizeof(wchar_t) || bytes > maximum_bytes ||
+      bytes % sizeof(wchar_t) != 0 || characters >= buffer.size() ||
+      buffer[characters - 1] != L'\0' ||
+      wcsnlen_s(buffer.data(), characters) != characters - 1) {
+    if (error) {
+      *error = result == ERROR_SUCCESS ? ERROR_INVALID_DATA
+                                       : static_cast<unsigned long>(result);
+    }
     return false;
   }
-  buffer.back() = L'\0';
   *path = buffer.data();
   if (error) *error = ERROR_SUCCESS;
   return true;
