@@ -2,7 +2,6 @@
 #define NSSM_IO_H
 
 #include <windows.h>
-#include <tchar.h>
 
 struct nssm_service_t;
 
@@ -17,8 +16,8 @@ struct nssm_service_t;
 #define NSSM_STDERR_FLAGS FILE_ATTRIBUTE_NORMAL
 
 typedef struct {
-  TCHAR *service_name;
-  TCHAR *path;
+  wchar_t *service_name;
+  wchar_t *path;
   unsigned long sharing;
   unsigned long disposition;
   unsigned long flags;
@@ -34,10 +33,10 @@ typedef struct {
 } logger_t;
 
 void close_handle(HANDLE *);
-HANDLE write_to_file(TCHAR *, unsigned long, SECURITY_ATTRIBUTES *, unsigned long, unsigned long);
-void rotate_file(TCHAR *, TCHAR *, unsigned long, unsigned long, unsigned long, unsigned long, bool);
-int get_output_handles(nssm_service_t *, STARTUPINFO *);
-void close_output_handles(STARTUPINFO *);
+HANDLE write_to_file(wchar_t *, unsigned long, SECURITY_ATTRIBUTES *, unsigned long, unsigned long);
+void rotate_file(wchar_t *, wchar_t *, unsigned long, unsigned long, unsigned long, unsigned long, bool);
+int get_output_handles(nssm_service_t *, STARTUPINFOW *);
+void close_output_handles(STARTUPINFOW *);
 void cleanup_loggers(nssm_service_t *);
 unsigned long WINAPI log_and_rotate(void *);
 

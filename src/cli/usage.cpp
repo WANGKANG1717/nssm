@@ -5,7 +5,6 @@
 #include "version.h"
 
 #include <cstdio>
-#include <tchar.h>
 
 int usage(int result) {
   print_message(stderr, NSSM_MESSAGE_USAGE, NSSM_VERSION,

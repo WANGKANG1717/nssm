@@ -4,11 +4,10 @@
 typedef struct nssm_service_t nssm_service_t;
 
 #include <windows.h>
-#include <tchar.h>
 #include <tlhelp32.h>
 
 typedef struct {
-  const TCHAR *name;
+  const wchar_t *name;
   HANDLE process_handle;
   unsigned long depth;
   unsigned long pid;
@@ -32,7 +31,7 @@ HANDLE get_debug_token();
 void service_kill_t(nssm_service_t *, kill_t *);
 int get_process_creation_time(HANDLE, FILETIME *);
 int get_process_exit_time(HANDLE, FILETIME *);
-int check_parent(kill_t *, PROCESSENTRY32 *, unsigned long);
+int check_parent(kill_t *, PROCESSENTRY32W *, unsigned long);
 int CALLBACK kill_window(HWND, LPARAM);
 int kill_threads(nssm_service_t *, kill_t *);
 int kill_threads(kill_t *);

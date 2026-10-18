@@ -90,7 +90,7 @@ int get_process_exit_time(HANDLE process_handle, FILETIME *ft) {
   return 0;
 }
 
-int check_parent(kill_t *k, PROCESSENTRY32 *pe, unsigned long ppid) {
+int check_parent(kill_t *k, PROCESSENTRY32W *pe, unsigned long ppid) {
   /* Check parent process ID matches. */
   if (pe->th32ParentProcessID != ppid) return 1;
 
@@ -105,8 +105,8 @@ int check_parent(kill_t *k, PROCESSENTRY32 *pe, unsigned long ppid) {
   if (! process_handle) {
     const unsigned long error = GetLastError();
     if (! k->traversal_error) k->traversal_error = error;
-    TCHAR pid_string[16];
-    _sntprintf_s(pid_string, _countof(pid_string), _TRUNCATE, _T("%lu"), pe->th32ProcessID);
+    wchar_t pid_string[16];
+    _snwprintf_s(pid_string, _countof(pid_string), _TRUNCATE, L"%lu", pe->th32ProcessID);
     log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_OPENPROCESS_FAILED, pid_string,
               k->name, error_string(error), 0);
     return 2;
@@ -222,7 +222,7 @@ int kill_process(nssm_service_t *service, kill_t *k) {
   EnumWindows((WNDENUMPROC) kill_window, (LPARAM) k);
   if (k->signalled) {
     if (! await_single_handle(k->status_handle, k->status, k->process_handle,
-                              k->name, _T("kill_process"),
+                              k->name, L"kill_process",
                               k->kill_window_delay, k->status_lock)) return 1;
     k->signalled = 0;
   }
@@ -234,7 +234,7 @@ int kill_process(nssm_service_t *service, kill_t *k) {
   */
   if (kill_threads(k)) {
     if (! await_single_handle(k->status_handle, k->status, k->process_handle,
-                              k->name, _T("kill_process"),
+                              k->name, L"kill_process",
                               k->kill_threads_delay, k->status_lock)) return 1;
   }
 
@@ -297,7 +297,7 @@ int kill_console(nssm_service_t *service, kill_t *k) {
 
   /* Wait for process to exit. */
   if (await_single_handle(k->status_handle, k->status, k->process_handle,
-                          k->name, _T("kill_console"),
+                          k->name, L"kill_console",
                           k->kill_console_delay, k->status_lock)) ret = 6;
 
   /* Remove our handler. */
@@ -319,9 +319,9 @@ void walk_process_tree(nssm_service_t *service, walk_function_t fn, kill_t *k, u
   unsigned long pid = k->pid;
   unsigned long depth = k->depth;
 
-  TCHAR pid_string[16], code[16];
-  _sntprintf_s(pid_string, _countof(pid_string), _TRUNCATE, _T("%lu"), pid);
-  _sntprintf_s(code, _countof(code), _TRUNCATE, _T("%lu"), k->exitcode);
+  wchar_t pid_string[16], code[16];
+  _snwprintf_s(pid_string, _countof(pid_string), _TRUNCATE, L"%lu", pid);
+  _snwprintf_s(code, _countof(code), _TRUNCATE, L"%lu", k->exitcode);
   if (fn == static_cast<walk_function_t>(kill_process)) log_event(EVENTLOG_INFORMATION_TYPE, NSSM_EVENT_KILLING, k->name, pid_string, code, 0);
 
   /* We will need a process handle in order to call TerminateProcess() later. */
@@ -330,8 +330,8 @@ void walk_process_tree(nssm_service_t *service, walk_function_t fn, kill_t *k, u
       false, pid));
   if (process_handle) {
     /* Kill this process first, then its descendents. */
-    TCHAR ppid_string[16];
-    _sntprintf_s(ppid_string, _countof(ppid_string), _TRUNCATE, _T("%lu"), ppid);
+    wchar_t ppid_string[16];
+    _snwprintf_s(ppid_string, _countof(ppid_string), _TRUNCATE, L"%lu", ppid);
     if (fn == static_cast<walk_function_t>(kill_process)) log_event(EVENTLOG_INFORMATION_TYPE, NSSM_EVENT_KILL_PROCESS_TREE, pid_string, ppid_string, k->name, 0);
     HANDLE previous_process_handle = k->process_handle;
     k->process_handle = process_handle.get();
@@ -366,11 +366,11 @@ void walk_process_tree(nssm_service_t *service, walk_function_t fn, kill_t *k, u
     return;
   }
 
-  PROCESSENTRY32 pe;
+  PROCESSENTRY32W pe;
   ZeroMemory(&pe, sizeof(pe));
   pe.dwSize = sizeof(pe);
 
-  if (! Process32First(snapshot.get(), &pe)) {
+  if (! Process32FirstW(snapshot.get(), &pe)) {
     const unsigned long error = GetLastError();
     if (! k->traversal_error) k->traversal_error = error;
     log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_PROCESS_ENUMERATE_FAILED,
@@ -388,7 +388,7 @@ void walk_process_tree(nssm_service_t *service, walk_function_t fn, kill_t *k, u
 
   while (true) {
     /* Try to get the next process. */
-    if (! Process32Next(snapshot.get(), &pe)) {
+    if (! Process32NextW(snapshot.get(), &pe)) {
       unsigned long ret = GetLastError();
       if (ret == ERROR_NO_MORE_FILES) break;
       if (! k->traversal_error) k->traversal_error = ret;

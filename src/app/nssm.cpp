@@ -22,10 +22,7 @@
 
 #include <cstdio>
 #include <string>
-#include <tchar.h>
 #include <vector>
-
-static_assert(sizeof(TCHAR) == sizeof(wchar_t));
 
 namespace {
 
@@ -59,11 +56,11 @@ const application_paths_t &application_paths() {
 
 }  // namespace
 
-static const TCHAR *nssm_unquoted_imagepath();
-static const TCHAR *nssm_imagepath();
+static const wchar_t *nssm_unquoted_imagepath();
+static const wchar_t *nssm_imagepath();
 
 /* User requested us to print our version. */
-static bool is_version(const TCHAR *s) {
+static bool is_version(const wchar_t *s) {
   if (! s || ! *s) return false;
   /* /version */
   if (*s == '/') s++;
@@ -71,13 +68,13 @@ static bool is_version(const TCHAR *s) {
     /* -v, -V, -version, --version */
     s++;
     if (*s == '-') s++;
-    else if (strings_equal_ignore_case(s, _T("v"))) return true;
+    else if (strings_equal_ignore_case(s, L"v")) return true;
   }
-  if (strings_equal_ignore_case(s, _T("version"))) return true;
+  if (strings_equal_ignore_case(s, L"version")) return true;
   return false;
 }
 
-static int elevate(int argc, TCHAR **argv, unsigned long message) {
+static int elevate(int argc, wchar_t **argv, unsigned long message) {
   print_message(stderr, message);
 
   std::vector<std::wstring> arguments;
@@ -87,25 +84,25 @@ static int elevate(int argc, TCHAR **argv, unsigned long message) {
   }
   std::wstring parameters = join_windows_arguments(arguments);
 
-  SHELLEXECUTEINFO sei = {};
+  SHELLEXECUTEINFOW sei = {};
   sei.cbSize = sizeof(sei);
-  sei.lpVerb = _T("runas");
+  sei.lpVerb = L"runas";
   sei.lpFile = nssm_unquoted_imagepath();
   sei.lpParameters = parameters.c_str();
   sei.nShow = SW_SHOW;
 
-  return ShellExecuteEx(&sei) ? 0 : 100;
+  return ShellExecuteExW(&sei) ? 0 : 100;
 }
 
-static const TCHAR *nssm_unquoted_imagepath() {
+static const wchar_t *nssm_unquoted_imagepath() {
   return application_paths().unquoted.c_str();
 }
 
-static const TCHAR *nssm_imagepath() {
+static const wchar_t *nssm_imagepath() {
   return application_paths().quoted.c_str();
 }
 
-int _tmain(int argc, TCHAR **argv) {
+int wmain(int argc, wchar_t **argv) {
   if (console_attached()) setup_utf8();
 
   /* Remember our path for later. */
@@ -126,21 +123,21 @@ int _tmain(int argc, TCHAR **argv) {
       statuscode, rotate, list, processes, version
     */
     if (is_version(argv[1])) {
-      _tprintf(_T("%s %s %s %s\n"), kNssmServiceName, NSSM_VERSION,
+      wprintf(L"%ls %ls %ls %ls\n", kNssmServiceName, NSSM_VERSION,
                NSSM_CONFIGURATION, NSSM_DATE);
       return 0;
     }
-    if (strings_equal_ignore_case(argv[1], _T("validate"))) {
+    if (strings_equal_ignore_case(argv[1], L"validate")) {
       return validate_service_config_command(argc - 2, argv + 2);
     }
-    if (strings_equal_ignore_case(argv[1], _T("plan"))) {
+    if (strings_equal_ignore_case(argv[1], L"plan")) {
       return plan_service_config_command(argc - 2, argv + 2,
                                          nssm_imagepath());
     }
-    if (strings_equal_ignore_case(argv[1], _T("export"))) {
+    if (strings_equal_ignore_case(argv[1], L"export")) {
       return export_service_config_command(argc - 2, argv + 2);
     }
-    if (strings_equal_ignore_case(argv[1], _T("apply"))) {
+    if (strings_equal_ignore_case(argv[1], L"apply")) {
       if (! is_admin) {
         cli_arguments_t arguments = parse_cli_arguments(argc - 2, argv + 2);
         if (arguments.json) {
@@ -155,27 +152,27 @@ int _tmain(int argc, TCHAR **argv) {
       return apply_service_config_command(argc - 2, argv + 2,
                                           nssm_imagepath());
     }
-    if (strings_equal_ignore_case(argv[1], _T("start"))) return control_service(kServiceControlStart, argc - 2, argv + 2);
-    if (strings_equal_ignore_case(argv[1], _T("stop"))) return control_service(SERVICE_CONTROL_STOP, argc - 2, argv + 2);
-    if (strings_equal_ignore_case(argv[1], _T("restart"))) {
+    if (strings_equal_ignore_case(argv[1], L"start")) return control_service(kServiceControlStart, argc - 2, argv + 2);
+    if (strings_equal_ignore_case(argv[1], L"stop")) return control_service(SERVICE_CONTROL_STOP, argc - 2, argv + 2);
+    if (strings_equal_ignore_case(argv[1], L"restart")) {
       int ret = control_service(SERVICE_CONTROL_STOP, argc - 2, argv + 2);
       if (ret) return ret;
       return control_service(kServiceControlStart, argc - 2, argv + 2);
     }
-    if (strings_equal_ignore_case(argv[1], _T("pause"))) return control_service(SERVICE_CONTROL_PAUSE, argc - 2, argv + 2);
-    if (strings_equal_ignore_case(argv[1], _T("continue"))) return control_service(SERVICE_CONTROL_CONTINUE, argc - 2, argv + 2);
-    if (strings_equal_ignore_case(argv[1], _T("status"))) {
+    if (strings_equal_ignore_case(argv[1], L"pause")) return control_service(SERVICE_CONTROL_PAUSE, argc - 2, argv + 2);
+    if (strings_equal_ignore_case(argv[1], L"continue")) return control_service(SERVICE_CONTROL_CONTINUE, argc - 2, argv + 2);
+    if (strings_equal_ignore_case(argv[1], L"status")) {
       cli_arguments_t arguments = parse_cli_arguments(argc - 2, argv + 2);
       if (arguments.verbose || arguments.json) {
         return inspect_service_status_command(argc - 2, argv + 2);
       }
       return control_service(SERVICE_CONTROL_INTERROGATE, argc - 2, argv + 2);
     }
-    if (strings_equal_ignore_case(argv[1], _T("statuscode"))) return control_service(SERVICE_CONTROL_INTERROGATE, argc - 2, argv + 2, true);
-    if (strings_equal_ignore_case(argv[1], _T("rotate"))) return control_service(kServiceControlRotate, argc - 2, argv + 2);
-    if (strings_equal_ignore_case(argv[1], _T("list"))) return list_nssm_services(argc - 2, argv + 2);
-    if (strings_equal_ignore_case(argv[1], _T("processes"))) return service_process_tree(argc - 2, argv + 2);
-    if (strings_equal_ignore_case(argv[1], _T("remove"))) {
+    if (strings_equal_ignore_case(argv[1], L"statuscode")) return control_service(SERVICE_CONTROL_INTERROGATE, argc - 2, argv + 2, true);
+    if (strings_equal_ignore_case(argv[1], L"rotate")) return control_service(kServiceControlRotate, argc - 2, argv + 2);
+    if (strings_equal_ignore_case(argv[1], L"list")) return list_nssm_services(argc - 2, argv + 2);
+    if (strings_equal_ignore_case(argv[1], L"processes")) return service_process_tree(argc - 2, argv + 2);
+    if (strings_equal_ignore_case(argv[1], L"remove")) {
       if (! is_admin) {
         return elevate(argc, argv,
                        NSSM_MESSAGE_NOT_ADMINISTRATOR_CANNOT_REMOVE);
@@ -187,9 +184,9 @@ int _tmain(int argc, TCHAR **argv) {
   /* Register messages */
   if (is_admin) create_messages(nssm_unquoted_imagepath());
 
-  SERVICE_TABLE_ENTRY table[] = {
+  SERVICE_TABLE_ENTRYW table[] = {
       {const_cast<wchar_t *>(kNssmServiceName), service_main}, {nullptr, nullptr}};
-  if (! StartServiceCtrlDispatcher(table)) {
+  if (! StartServiceCtrlDispatcherW(table)) {
     unsigned long error = GetLastError();
     if (error == ERROR_FAILED_SERVICE_CONTROLLER_CONNECT) return usage(1);
     log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_DISPATCHER_FAILED,

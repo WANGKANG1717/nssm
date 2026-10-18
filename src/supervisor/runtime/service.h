@@ -4,7 +4,6 @@
 #include "windows_limits.h"
 
 #include <windows.h>
-#include <tchar.h>
 
 /*
   MSDN says the commandline in CreateProcess() is limited to 32768 characters
@@ -25,23 +24,23 @@ struct recovery_state_t;
 struct status_snapshot_t;
 
 typedef struct nssm_service_t {
-  TCHAR name[SERVICE_NAME_LENGTH];
-  TCHAR displayname[SERVICE_NAME_LENGTH];
+  wchar_t name[SERVICE_NAME_LENGTH];
+  wchar_t displayname[SERVICE_NAME_LENGTH];
   service_config_t *config;
   recovery_state_t *recovery_state;
-  TCHAR exe[EXE_LENGTH];
-  TCHAR flags[VALUE_LENGTH];
-  TCHAR dir[DIR_LENGTH];
-  TCHAR *env;
+  wchar_t exe[EXE_LENGTH];
+  wchar_t flags[VALUE_LENGTH];
+  wchar_t dir[DIR_LENGTH];
+  wchar_t *env;
   unsigned long envlen;
-  TCHAR *env_extra;
+  wchar_t *env_extra;
   unsigned long env_extralen;
   unsigned long no_console;
-  TCHAR stdin_path[PATH_LENGTH];
+  wchar_t stdin_path[PATH_LENGTH];
   unsigned long stdin_sharing;
   unsigned long stdin_disposition;
   unsigned long stdin_flags;
-  TCHAR stdout_path[PATH_LENGTH];
+  wchar_t stdout_path[PATH_LENGTH];
   unsigned long stdout_sharing;
   unsigned long stdout_disposition;
   unsigned long stdout_flags;
@@ -50,7 +49,7 @@ typedef struct nssm_service_t {
   HANDLE stdout_pipe;
   HANDLE stdout_thread;
   unsigned long stdout_tid;
-  TCHAR stderr_path[PATH_LENGTH];
+  wchar_t stderr_path[PATH_LENGTH];
   unsigned long stderr_sharing;
   unsigned long stderr_disposition;
   unsigned long stderr_flags;
@@ -112,12 +111,12 @@ typedef struct nssm_service_t {
   FILETIME nssm_creation_time;
   FILETIME creation_time;
   FILETIME exit_time;
-  TCHAR *initial_env;
+  wchar_t *initial_env;
   unsigned long next_restart_delay_ms;
   unsigned long long process_started_ms;
 } nssm_service_t;
 
-void WINAPI service_main(unsigned long, TCHAR **);
+void WINAPI service_main(unsigned long, wchar_t **);
 unsigned long WINAPI service_control_handler(unsigned long, unsigned long, void *, void *);
 
 nssm_service_t *alloc_nssm_service();

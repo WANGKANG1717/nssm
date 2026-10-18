@@ -164,7 +164,7 @@ static int finish_service_start(nssm_service_t *service,
   else {
     const int stability = await_single_handle(
         service->status_handle, &service->status, service->process_handle,
-        service->name, _T("start_service"), kResetThrottleRestartMs,
+        service->name, L"start_service", kResetThrottleRestartMs,
         &service->status_lock);
     if (stability == 0) {
       return kStartAwaitingProcessExit;
@@ -223,7 +223,7 @@ static bool configure_service_job(nssm_service_t *service) {
 }
 
 static bool create_suspended_service_process(
-    nssm_service_t *service, STARTUPINFO *startup_info,
+    nssm_service_t *service, STARTUPINFOW *startup_info,
     std::wstring *command_line, wchar_t *environment,
     PROCESS_INFORMATION *process_info) {
   const bool inherit_handles =
@@ -231,7 +231,7 @@ static bool create_suspended_service_process(
   unsigned long flags = CREATE_SUSPENDED | CREATE_UNICODE_ENVIRONMENT;
   if (! service->no_console) flags |= CREATE_NEW_CONSOLE;
 
-  if (! CreateProcess(service->exe, command_line->data(), nullptr, nullptr,
+  if (! CreateProcessW(service->exe, command_line->data(), nullptr, nullptr,
                       inherit_handles, flags, environment, service->dir,
                       startup_info, process_info)) {
     const unsigned long error = GetLastError();
@@ -325,7 +325,7 @@ void set_nssm_service_defaults(nssm_service_t *service) {
 /* Allocate and zero memory for a service. */
 nssm_service_t *alloc_nssm_service() {
   nssm_service_t *service = (nssm_service_t *) HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(nssm_service_t));
-  if (! service) log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_OUT_OF_MEMORY, _T("service"), _T("alloc_nssm_service()"), 0);
+  if (! service) log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_OUT_OF_MEMORY, L"service", L"alloc_nssm_service()", 0);
   return service;
 }
 
@@ -355,15 +355,15 @@ void cleanup_nssm_service(nssm_service_t *service) {
 
 /* About to install the service */
 /* Service initialisation */
-void WINAPI service_main(unsigned long argc, TCHAR **argv) {
+void WINAPI service_main(unsigned long argc, wchar_t **argv) {
   nssm_service_t *service = alloc_nssm_service();
   if (! service) return;
   set_nssm_service_defaults(service);
 
   (void) argc;
 
-  if (_sntprintf_s(service->name, _countof(service->name), _TRUNCATE, _T("%s"), argv[0]) < 0) {
-    log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_OUT_OF_MEMORY, _T("service->name"), _T("service_main()"), 0);
+  if (_snwprintf_s(service->name, _countof(service->name), _TRUNCATE, L"%ls", argv[0]) < 0) {
+    log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_OUT_OF_MEMORY, L"service->name", L"service_main()", 0);
     cleanup_nssm_service(service);
     return;
   }
@@ -405,7 +405,7 @@ void WINAPI service_main(unsigned long argc, TCHAR **argv) {
   service->allow_restart = true;
 
   /* Register control handler */
-  service->status_handle = RegisterServiceCtrlHandlerEx(
+  service->status_handle = RegisterServiceCtrlHandlerExW(
       kNssmServiceName, service_control_handler, service);
   if (! service->status_handle) {
     log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_REGISTERSERVICECTRLHANDER_FAILED, error_string(GetLastError()), 0);
@@ -478,7 +478,7 @@ static void set_service_recovery(nssm_service_t *service,
   ZeroMemory(&flag, sizeof(flag));
   flag.fFailureActionsOnNonCrashFailures = true;
 
-  if (! ChangeServiceConfig2(service_handle,
+  if (! ChangeServiceConfig2W(service_handle,
                              SERVICE_CONFIG_FAILURE_ACTIONS_FLAG, &flag)) {
     unsigned long error = GetLastError();
     log_event(EVENTLOG_ERROR_TYPE,
@@ -493,8 +493,8 @@ int monitor_service(nssm_service_t *service) {
   if (ret == kStartHandledByRecovery) return 0;
   const bool awaiting_process_exit = ret == kStartAwaitingProcessExit;
   if (ret && ! awaiting_process_exit) {
-    TCHAR code[16];
-    _sntprintf_s(code, _countof(code), _TRUNCATE, _T("%d"), ret);
+    wchar_t code[16];
+    _snwprintf_s(code, _countof(code), _TRUNCATE, L"%d", ret);
     log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_START_SERVICE_FAILED,
               service->exe, service->name, code, 0);
     return ret;
@@ -625,7 +625,7 @@ int start_service(nssm_service_t *service) {
 
   if (service->process_handle) return 0;
   /* Allocate a STARTUPINFO structure for a new process */
-  STARTUPINFO si;
+  STARTUPINFOW si;
   ZeroMemory(&si, sizeof(si));
   si.cb = sizeof(si);
 
@@ -760,7 +760,7 @@ void CALLBACK end_service(void *arg, unsigned char why) {
 
   /* Check exit code */
   unsigned long exitcode = 0;
-  TCHAR code[16];
+  wchar_t code[16];
   if (service->process_handle) {
     if (! GetExitCodeProcess(service->process_handle, &exitcode)) {
       const unsigned long error = GetLastError();
@@ -781,7 +781,7 @@ void CALLBACK end_service(void *arg, unsigned char why) {
     tree.  See below for the possible values of the why argument.
   */
   if (! why) {
-    _sntprintf_s(code, _countof(code), _TRUNCATE, _T("%lu"), exitcode);
+    _snwprintf_s(code, _countof(code), _TRUNCATE, L"%lu", exitcode);
     log_event(EVENTLOG_INFORMATION_TYPE, NSSM_EVENT_ENDED_SERVICE, service->exe, service->name, code, 0);
   }
 
@@ -831,11 +831,11 @@ void CALLBACK end_service(void *arg, unsigned char why) {
   ReleaseSRWLockExclusive(&service->status_snapshot_lock);
   publish_status_snapshot(service);
   if (! decision.should_restart()) {
-    const TCHAR *reason = decision.result == recovery_result_t::clean_exit
-                              ? _T("clean exit")
+    const wchar_t *reason = decision.result == recovery_result_t::clean_exit
+                              ? L"clean exit"
                           : decision.result == recovery_result_t::rate_limited
-                              ? _T("restart rate limit reached")
-                              : _T("recovery disabled");
+                              ? L"restart rate limit reached"
+                              : L"recovery disabled";
     log_event(decision.result == recovery_result_t::clean_exit
                   ? EVENTLOG_INFORMATION_TYPE
                   : EVENTLOG_WARNING_TYPE,
@@ -846,7 +846,7 @@ void CALLBACK end_service(void *arg, unsigned char why) {
   }
   service->next_restart_delay_ms = decision.delay_ms;
   log_event(EVENTLOG_INFORMATION_TYPE, NSSM_EVENT_EXIT_RESTART,
-            service->name, code, _T("Restart"),
+            service->name, code, L"Restart",
             service->exe, 0);
   while (monitor_service(service)) {
     if (WaitForSingleObject(service->stop_event, 0) == WAIT_OBJECT_0) break;

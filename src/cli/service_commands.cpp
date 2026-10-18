@@ -9,18 +9,19 @@
 #include "usage.h"
 #include "windows_limits.h"
 
+#include <cwchar>
 #include <string>
 #include <vector>
 
 namespace {
 
-void print_control_wait_failure(const TCHAR *service_name,
+void print_control_wait_failure(const wchar_t *service_name,
                                 unsigned long control,
                                 const SERVICE_STATUS &status,
                                 int response,
                                 unsigned long query_error) {
   if (response == -2) {
-    _ftprintf(stderr, _T("%s: QueryServiceStatus: %s\n"), service_name,
+    fwprintf(stderr, L"%ls: QueryServiceStatus: %ls\n", service_name,
               error_string(query_error));
     return;
   }
@@ -31,9 +32,9 @@ void print_control_wait_failure(const TCHAR *service_name,
 
 }  // namespace
 
-int list_nssm_services(int argc, TCHAR **argv) {
+int list_nssm_services(int argc, wchar_t **argv) {
   const bool including_native =
-      argc > 0 && strings_equal_ignore_case(argv[0], _T("all"));
+      argc > 0 && strings_equal_ignore_case(argv[0], L"all");
   std::vector<std::wstring> names;
   unsigned long error = ERROR_SUCCESS;
   if (! enumerate_windows_services(including_native, &names, &error)) {
@@ -41,18 +42,18 @@ int list_nssm_services(int argc, TCHAR **argv) {
                   error_string(error));
     return 1;
   }
-  for (const auto &name : names) _tprintf(_T("%s\n"), name.c_str());
+  for (const auto &name : names) wprintf(L"%ls\n", name.c_str());
   return 0;
 }
 
-int service_process_tree(int argc, TCHAR **argv) {
+int service_process_tree(int argc, wchar_t **argv) {
   if (argc < 1) return usage(1);
   int errors = 0;
   for (int i = 0; i < argc; ++i) {
     std::vector<service_process_entry_t> entries;
     unsigned long error = ERROR_SUCCESS;
     if (! query_service_process_tree(argv[i], &entries, &error)) {
-      _ftprintf(stderr, _T("%s: %s\n"), argv[i], error_string(error));
+      fwprintf(stderr, L"%ls: %ls\n", argv[i], error_string(error));
       ++errors;
       continue;
     }
@@ -66,24 +67,24 @@ int service_process_tree(int argc, TCHAR **argv) {
   return errors;
 }
 
-int pre_remove_service(int argc, TCHAR **argv) {
+int pre_remove_service(int argc, wchar_t **argv) {
   if (argc != 2 || ! argv[0] || ! argv[0][0] ||
-      ! strings_equal_ignore_case(argv[1], _T("confirm"))) {
+      ! strings_equal_ignore_case(argv[1], L"confirm")) {
     print_message(stderr, NSSM_MESSAGE_PRE_REMOVE_SERVICE);
     return 100;
   }
-  if (_tcslen(argv[0]) >= SERVICE_NAME_LENGTH) return usage(1);
+  if (wcslen(argv[0]) >= SERVICE_NAME_LENGTH) return usage(1);
   unsigned long error = ERROR_SUCCESS;
   const service_removal_status_t status =
       remove_managed_service(argv[0], &error);
   if (status == service_removal_status_t::unmanaged) {
-    _ftprintf(stderr,
-              _T("%s: refusing to remove a service not managed by this NSSM: %s\n"),
+    fwprintf(stderr,
+              L"%ls: refusing to remove a service not managed by this NSSM: %ls\n",
               argv[0], error_string(error));
     return 4;
   }
   if (status == service_removal_status_t::system_error) {
-    _ftprintf(stderr, _T("%s: DeleteService: %s\n"), argv[0],
+    fwprintf(stderr, L"%ls: DeleteService: %ls\n", argv[0],
               error_string(error));
     return 5;
   }
@@ -91,7 +92,7 @@ int pre_remove_service(int argc, TCHAR **argv) {
   return 0;
 }
 
-int control_service(unsigned long control, int argc, TCHAR **argv,
+int control_service(unsigned long control, int argc, wchar_t **argv,
                     bool return_status) {
   if (argc != 1) return usage(1);
   service_control_result_t result;
@@ -102,22 +103,22 @@ int control_service(unsigned long control, int argc, TCHAR **argv,
                                  result.windows_error);
     }
     else {
-      _ftprintf(stderr, _T("%s: %s: %s"), result.service_name.c_str(),
+      fwprintf(stderr, L"%ls: %ls: %ls", result.service_name.c_str(),
                 service_control_text(control),
                 error_string(result.windows_error));
     }
     return return_status ? 0 : 1;
   }
   if (control == SERVICE_CONTROL_INTERROGATE) {
-    _tprintf(_T("%s\n"), service_status_text(result.status.dwCurrentState));
+    wprintf(L"%ls\n", service_status_text(result.status.dwCurrentState));
   }
   else {
-    _tprintf(_T("%s: %s: %s"), result.service_name.c_str(),
+    wprintf(L"%ls: %ls: %ls", result.service_name.c_str(),
              service_control_text(control), error_string(ERROR_SUCCESS));
   }
   return return_status ? result.status.dwCurrentState : 0;
 }
 
-int control_service(unsigned long control, int argc, TCHAR **argv) {
+int control_service(unsigned long control, int argc, wchar_t **argv) {
   return control_service(control, argc, argv, false);
 }

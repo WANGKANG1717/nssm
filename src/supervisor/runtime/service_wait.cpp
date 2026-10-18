@@ -8,13 +8,13 @@
 
 int await_single_handle(SERVICE_STATUS_HANDLE status_handle,
                         SERVICE_STATUS *status, HANDLE handle,
-                        const TCHAR *name, const TCHAR *function_name,
+                        const wchar_t *name, const wchar_t *function_name,
                         unsigned long timeout,
                         SRWLOCK *status_lock) {
-  const std::wstring function = std::wstring(function_name) + _T("()");
-  TCHAR timeout_milliseconds[16] = {};
-  _sntprintf_s(timeout_milliseconds, _countof(timeout_milliseconds), _TRUNCATE,
-               _T("%lu"), timeout);
+  const std::wstring function = std::wstring(function_name) + L"()";
+  wchar_t timeout_milliseconds[16] = {};
+  _snwprintf_s(timeout_milliseconds, _countof(timeout_milliseconds), _TRUNCATE,
+               L"%lu", timeout);
 
   unsigned long waited = 0;
   while (waited < timeout) {
@@ -34,12 +34,12 @@ int await_single_handle(SERVICE_STATUS_HANDLE status_handle,
     }
 
     if (waited) {
-      TCHAR waited_milliseconds[16] = {};
-      TCHAR interval_milliseconds[16] = {};
-      _sntprintf_s(waited_milliseconds, _countof(waited_milliseconds),
-                   _TRUNCATE, _T("%lu"), waited);
-      _sntprintf_s(interval_milliseconds, _countof(interval_milliseconds),
-                   _TRUNCATE, _T("%lu"), interval);
+      wchar_t waited_milliseconds[16] = {};
+      wchar_t interval_milliseconds[16] = {};
+      _snwprintf_s(waited_milliseconds, _countof(waited_milliseconds),
+                   _TRUNCATE, L"%lu", waited);
+      _snwprintf_s(interval_milliseconds, _countof(interval_milliseconds),
+                   _TRUNCATE, L"%lu", interval);
       log_event(EVENTLOG_INFORMATION_TYPE, NSSM_EVENT_AWAITING_SINGLE_HANDLE,
                 function.c_str(), name, waited_milliseconds,
                 interval_milliseconds, timeout_milliseconds, 0);

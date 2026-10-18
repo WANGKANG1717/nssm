@@ -101,8 +101,8 @@ unsigned long WINAPI health_monitor_thread(void *argument) {
                 service->name, detail.c_str(), 0);
     }
     if (first_failure) {
-      TCHAR count[32] = {};
-      _sntprintf_s(count, _countof(count), _TRUNCATE, _T("%lu"),
+      wchar_t count[32] = {};
+      _snwprintf_s(count, _countof(count), _TRUNCATE, L"%lu",
                    failure_count);
       log_event(EVENTLOG_WARNING_TYPE, NSSM_EVENT_HEALTH_FAILED,
                 service->name, detail.c_str(), count, 0);
