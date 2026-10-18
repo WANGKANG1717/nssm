@@ -2,6 +2,7 @@
 #include "child_process.h"
 #include "config.h"
 #include "config_registration.h"
+#include "config_runtime.h"
 #include "config_security.h"
 #include "output.h"
 #include "recovery.h"

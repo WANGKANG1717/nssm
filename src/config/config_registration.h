@@ -9,5 +9,8 @@ bool full_config_path(const wchar_t *, std::wstring *, config_validation_t *);
 bool write_config_path(const std::wstring &, const std::wstring &,
                        unsigned long *);
 bool read_config_path(const std::wstring &, std::wstring *, unsigned long *);
+bool registered_service_config_path(const wchar_t *service_name,
+                                    std::wstring *path,
+                                    unsigned long *error);
 
 #endif

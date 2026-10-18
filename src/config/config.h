@@ -5,8 +5,6 @@
 #include <utility>
 #include <vector>
 
-struct nssm_service_t;
-
 inline constexpr size_t kMaximumServiceNameCharacters = 256;
 inline constexpr size_t kMaximumPathCharacters = 32766;
 inline constexpr size_t kMaximumWorkingDirectoryCharacters = 32754;
@@ -192,10 +190,4 @@ bool parse_service_config(const char *json, size_t length,
                           config_validation_t *validation);
 bool load_service_config(const wchar_t *path, service_config_t *config,
                          config_validation_t *validation);
-bool registered_service_config_path(const wchar_t *service_name,
-                                    std::wstring *path,
-                                    unsigned long *error);
-bool load_registered_service_config(nssm_service_t *service,
-                                    config_validation_t *validation);
-
 #endif
