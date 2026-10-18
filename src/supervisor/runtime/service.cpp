@@ -406,23 +406,27 @@ int monitor_service(nssm_service_t *service) {
   log_event(EVENTLOG_INFORMATION_TYPE, NSSM_EVENT_STARTED_SERVICE, service->exe, service->flags, service->name, service->dir, 0);
 
   /* Monitor service */
-  if (! RegisterWaitForSingleObject(&service->wait_handle, service->process_handle, end_service, (void *) service, INFINITE, WT_EXECUTEONLYONCE | WT_EXECUTELONGFUNCTION)) {
-    log_event(EVENTLOG_WARNING_TYPE, NSSM_EVENT_REGISTERWAITFORSINGLEOBJECT_FAILED, service->name, service->exe, error_string(GetLastError()), 0);
+  if (! RegisterWaitForSingleObject(
+          &service->wait_handle, service->process_handle, end_service, service,
+          INFINITE, WT_EXECUTEONLYONCE | WT_EXECUTELONGFUNCTION)) {
+    const unsigned long error = GetLastError();
+    log_event(EVENTLOG_ERROR_TYPE,
+              NSSM_EVENT_REGISTERWAITFORSINGLEOBJECT_FAILED, service->name,
+              service->exe, error_string(error), 0);
+    return stop_service(service, 3);
   }
-  else {
-    if (! start_health_monitor(service)) {
-      log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_HEALTH_MONITOR_START_FAILED,
-                service->name, error_string(GetLastError()), 0);
-      if (service->job_handle) {
-        terminate_service_job(service->job_handle, ERROR_NOT_READY, nullptr);
-      }
+  if (! start_health_monitor(service)) {
+    log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_HEALTH_MONITOR_START_FAILED,
+              service->name, error_string(GetLastError()), 0);
+    if (service->job_handle) {
+      terminate_service_job(service->job_handle, ERROR_NOT_READY, nullptr);
     }
-    else if (! start_resource_monitor(service)) {
-      log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_RESOURCE_MONITOR_START_FAILED,
-                service->name, error_string(GetLastError()), 0);
-      if (service->job_handle) {
-        terminate_service_job(service->job_handle, ERROR_NOT_READY, nullptr);
-      }
+  }
+  else if (! start_resource_monitor(service)) {
+    log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_RESOURCE_MONITOR_START_FAILED,
+              service->name, error_string(GetLastError()), 0);
+    if (service->job_handle) {
+      terminate_service_job(service->job_handle, ERROR_NOT_READY, nullptr);
     }
   }
 
