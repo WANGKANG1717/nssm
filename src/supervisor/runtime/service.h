@@ -139,8 +139,6 @@ typedef struct nssm_service_t {
   status_snapshot_t *status_snapshot;
   SRWLOCK status_snapshot_lock;
   CONDITION_VARIABLE throttle_condition;
-  HANDLE throttle_timer;
-  LARGE_INTEGER throttle_duetime;
   FILETIME nssm_creation_time;
   FILETIME creation_time;
   FILETIME exit_time;

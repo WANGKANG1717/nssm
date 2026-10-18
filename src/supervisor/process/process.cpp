@@ -1,7 +1,5 @@
 #include "nssm.h"
 
-extern imports_t imports;
-
 HANDLE get_debug_token() {
   long error;
   HANDLE token;
@@ -259,11 +257,8 @@ int kill_console(nssm_service_t *service, kill_t *k) {
 
   if (! k) return 1;
 
-  /* Check we loaded AttachConsole(). */
-  if (! imports.AttachConsole) return 4;
-
   /* Try to attach to the process's console. */
-  if (! imports.AttachConsole(k->pid)) {
+  if (! AttachConsole(k->pid)) {
     ret = GetLastError();
 
     switch (ret) {
@@ -417,7 +412,7 @@ int print_process(nssm_service_t *service, kill_t *k) {
   }
 
   unsigned long size = _countof(exe);
-  if (! imports.QueryFullProcessImageName || ! imports.QueryFullProcessImageName(k->process_handle, 0, exe, &size)) {
+  if (! QueryFullProcessImageName(k->process_handle, 0, exe, &size)) {
     /*
       Fall back to GetModuleFileNameEx(), which won't work for WOW64 processes.
     */

@@ -101,7 +101,6 @@ set(NSSM_SUPERVISOR_SOURCES
 set(NSSM_PLATFORM_SOURCES
   src/platform/env.cpp
   src/platform/event.cpp
-  src/platform/imports.cpp
   src/platform/registry.cpp
   src/platform/security.cpp
   src/platform/utf8.cpp

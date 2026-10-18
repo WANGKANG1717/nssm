@@ -6,8 +6,6 @@
 #define STATUS_SUCCESS ERROR_SUCCESS
 #endif
 
-extern imports_t imports;
-
 /* Open Policy object. */
 int open_lsa_policy(LSA_HANDLE *policy) {
   LSA_OBJECT_ATTRIBUTES attributes;
@@ -221,13 +219,11 @@ int username_equiv(const TCHAR *a, const TCHAR *b) {
 /* Does the username represent the LocalSystem account? */
 int is_localsystem(const TCHAR *username) {
   if (str_equiv(username, NSSM_LOCALSYSTEM_ACCOUNT)) return 1;
-  if (! imports.IsWellKnownSid) return 0;
-
   SID *sid;
   if (username_sid(username, &sid)) return 0;
 
   int ret = 0;
-  if (imports.IsWellKnownSid(sid, WinLocalSystemSid)) ret = 1;
+  if (IsWellKnownSid(sid, WinLocalSystemSid)) ret = 1;
 
   FreeSid(sid);
 
@@ -249,7 +245,6 @@ TCHAR *virtual_account(const TCHAR *service_name) {
 
 /* Does the username represent a virtual account for the service? */
 int is_virtual_account(const TCHAR *service_name, const TCHAR *username) {
-  if (! imports.IsWellKnownSid) return 0;
   if (! service_name) return 0;
   if (! username) return 0;
 
@@ -264,10 +259,9 @@ int is_virtual_account(const TCHAR *service_name, const TCHAR *username) {
   Returns a pointer to a static string.  DO NOT try to free it.
 */
 const TCHAR *well_known_sid(SID *sid) {
-  if (! imports.IsWellKnownSid) return 0;
-  if (imports.IsWellKnownSid(sid, WinLocalSystemSid)) return NSSM_LOCALSYSTEM_ACCOUNT;
-  if (imports.IsWellKnownSid(sid, WinLocalServiceSid)) return NSSM_LOCALSERVICE_ACCOUNT;
-  if (imports.IsWellKnownSid(sid, WinNetworkServiceSid)) return NSSM_NETWORKSERVICE_ACCOUNT;
+  if (IsWellKnownSid(sid, WinLocalSystemSid)) return NSSM_LOCALSYSTEM_ACCOUNT;
+  if (IsWellKnownSid(sid, WinLocalServiceSid)) return NSSM_LOCALSERVICE_ACCOUNT;
+  if (IsWellKnownSid(sid, WinNetworkServiceSid)) return NSSM_NETWORKSERVICE_ACCOUNT;
   return 0;
 }
 

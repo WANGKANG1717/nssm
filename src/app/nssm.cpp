@@ -4,14 +4,11 @@
 #include "config.h"
 
 extern bool is_admin;
-extern imports_t imports;
-
 static TCHAR unquoted_imagepath[PATH_LENGTH];
 static TCHAR imagepath[PATH_LENGTH];
 static TCHAR imageargv0[PATH_LENGTH];
 
 void nssm_exit(int status) {
-  free_imports();
   unsetup_utf8();
   exit(status);
 }
@@ -240,9 +237,6 @@ int _tmain(int argc, TCHAR **argv) {
 
   /* Remember if we are admin */
   check_admin();
-
-  /* Set up function pointers. */
-  if (get_imports()) nssm_exit(111);
 
   /* Remember our path for later. */
   _sntprintf_s(imageargv0, _countof(imageargv0), _TRUNCATE, _T("%s"), argv[0]);

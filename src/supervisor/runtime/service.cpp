@@ -9,9 +9,6 @@
 #include "resource_monitor.h"
 
 bool is_admin;
-bool use_critical_section;
-
-extern imports_t imports;
 const TCHAR *exit_action_strings[] = { _T("Restart"), _T("Ignore"), _T("Exit"), _T("Suicide"), 0 };
 const TCHAR *startup_strings[] = { _T("SERVICE_AUTO_START"), _T("SERVICE_DELAYED_AUTO_START"), _T("SERVICE_DEMAND_START"), _T("SERVICE_DISABLED"), 0 };
 const TCHAR *priority_strings[] = { _T("REALTIME_PRIORITY_CLASS"), _T("HIGH_PRIORITY_CLASS"), _T("ABOVE_NORMAL_PRIORITY_CLASS"), _T("NORMAL_PRIORITY_CLASS"), _T("BELOW_NORMAL_PRIORITY_CLASS"), _T("IDLE_PRIORITY_CLASS"), 0 };
@@ -684,7 +681,6 @@ void cleanup_nssm_service(nssm_service_t *service) {
   if (service->job_handle) CloseHandle(service->job_handle);
   if (service->wait_handle) UnregisterWait(service->wait_handle);
   if (service->throttle_section_initialised) DeleteCriticalSection(&service->throttle_section);
-  if (service->throttle_timer) CloseHandle(service->throttle_timer);
   if (service->hook_section_initialised) DeleteCriticalSection(&service->hook_section);
   if (service->health_section_initialised) DeleteCriticalSection(&service->health_section);
   if (service->resource_section_initialised) DeleteCriticalSection(&service->resource_section);
@@ -916,10 +912,6 @@ void WINAPI service_main(unsigned long argc, TCHAR **argv) {
     return;
   }
 
-  /* We can use a condition variable in a critical section on Vista or later. */
-  if (imports.SleepConditionVariableCS && imports.WakeConditionVariable) use_critical_section = true;
-  else use_critical_section = false;
-
   /* Initialise status */
   ZeroMemory(&service->status, sizeof(service->status));
   /*
@@ -968,16 +960,9 @@ void WINAPI service_main(unsigned long argc, TCHAR **argv) {
   }
 
   /* Used for signalling a resume if the service pauses when throttled. */
-  if (use_critical_section) {
-    InitializeCriticalSection(&service->throttle_section);
-    service->throttle_section_initialised = true;
-  }
-  else {
-    service->throttle_timer = CreateWaitableTimer(0, 1, 0);
-    if (! service->throttle_timer) {
-      log_event(EVENTLOG_WARNING_TYPE, NSSM_EVENT_CREATEWAITABLETIMER_FAILED, service->name, error_string(GetLastError()), 0);
-    }
-  }
+  InitializeCriticalSection(&service->throttle_section);
+  InitializeConditionVariable(&service->throttle_condition);
+  service->throttle_section_initialised = true;
 
   /* Critical section for hooks. */
   InitializeCriticalSection(&service->hook_section);
@@ -1146,15 +1131,7 @@ unsigned long WINAPI service_control_handler(unsigned long control, unsigned lon
 
       /* Immediately block further controls. */
       service->allow_restart = false;
-      if (use_critical_section) {
-        imports.WakeConditionVariable(&service->throttle_condition);
-      }
-      else if (service->throttle_timer) {
-        ZeroMemory(&service->throttle_duetime,
-                   sizeof(service->throttle_duetime));
-        SetWaitableTimer(service->throttle_timer, &service->throttle_duetime,
-                         0, 0, 0, 0);
-      }
+      WakeConditionVariable(&service->throttle_condition);
       service->status.dwCurrentState = SERVICE_STOP_PENDING;
       service->status.dwControlsAccepted = 0;
       SetServiceStatus(service->status_handle, &service->status);
@@ -1186,12 +1163,7 @@ unsigned long WINAPI service_control_handler(unsigned long control, unsigned lon
       service->last_control = control;
       log_service_control(service->name, control, true);
       service->throttle = 0;
-      if (use_critical_section) imports.WakeConditionVariable(&service->throttle_condition);
-      else {
-        if (! service->throttle_timer) return ERROR_CALL_NOT_IMPLEMENTED;
-        ZeroMemory(&service->throttle_duetime, sizeof(service->throttle_duetime));
-        SetWaitableTimer(service->throttle_timer, &service->throttle_duetime, 0, 0, 0, 0);
-      }
+      WakeConditionVariable(&service->throttle_condition);
       /* We can't continue if the application is running! */
       if (! service->process_handle) service->status.dwCurrentState = SERVICE_CONTINUE_PENDING;
       service->status.dwWaitHint = throttle_milliseconds(service->throttle) + NSSM_WAITHINT_MARGIN;
@@ -1701,25 +1673,13 @@ void throttle_restart(nssm_service_t *service) {
     if (! ms) return;
     ++service->throttle;
 
-    if (use_critical_section) EnterCriticalSection(&service->throttle_section);
-    else if (service->throttle_timer) {
-      ZeroMemory(&service->throttle_duetime, sizeof(service->throttle_duetime));
-      service->throttle_duetime.QuadPart = 0 - (ms * 10000LL);
-      SetWaitableTimer(service->throttle_timer, &service->throttle_duetime, 0,
-                       0, 0, 0);
-    }
+    EnterCriticalSection(&service->throttle_section);
     service->status.dwCurrentState = SERVICE_PAUSED;
     service->status.dwControlsAccepted |= SERVICE_ACCEPT_PAUSE_CONTINUE;
     SetServiceStatus(service->status_handle, &service->status);
-    if (use_critical_section) {
-      imports.SleepConditionVariableCS(&service->throttle_condition,
-                                       &service->throttle_section, ms);
-      LeaveCriticalSection(&service->throttle_section);
-    }
-    else if (service->throttle_timer) {
-      WaitForSingleObject(service->throttle_timer, INFINITE);
-    }
-    else Sleep(ms);
+    SleepConditionVariableCS(&service->throttle_condition,
+                             &service->throttle_section, ms);
+    LeaveCriticalSection(&service->throttle_section);
     return;
   }
 
@@ -1741,25 +1701,15 @@ void throttle_restart(nssm_service_t *service) {
     log_event(EVENTLOG_WARNING_TYPE, NSSM_EVENT_THROTTLED, service->name, threshold, milliseconds, 0);
   }
 
-  if (use_critical_section) EnterCriticalSection(&service->throttle_section);
-  else if (service->throttle_timer) {
-    ZeroMemory(&service->throttle_duetime, sizeof(service->throttle_duetime));
-    service->throttle_duetime.QuadPart = 0 - (ms * 10000LL);
-    SetWaitableTimer(service->throttle_timer, &service->throttle_duetime, 0, 0, 0, 0);
-  }
+  EnterCriticalSection(&service->throttle_section);
 
   service->status.dwCurrentState = SERVICE_PAUSED;
   service->status.dwControlsAccepted |= SERVICE_ACCEPT_PAUSE_CONTINUE;
   SetServiceStatus(service->status_handle, &service->status);
 
-  if (use_critical_section) {
-    imports.SleepConditionVariableCS(&service->throttle_condition, &service->throttle_section, ms);
-    LeaveCriticalSection(&service->throttle_section);
-  }
-  else {
-    if (service->throttle_timer) WaitForSingleObject(service->throttle_timer, INFINITE);
-    else Sleep(ms);
-  }
+  SleepConditionVariableCS(&service->throttle_condition,
+                           &service->throttle_section, ms);
+  LeaveCriticalSection(&service->throttle_section);
 }
 
 /*
