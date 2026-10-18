@@ -87,6 +87,19 @@ static void terminate_after_monitor_start_failure(nssm_service_t *service) {
   LeaveCriticalSection(&service->health_section);
 }
 
+static bool restart_allowed(nssm_service_t *service) {
+  EnterCriticalSection(&service->health_section);
+  const bool allowed = service->allow_restart;
+  LeaveCriticalSection(&service->health_section);
+  return allowed;
+}
+
+static void set_restart_allowed(nssm_service_t *service, bool allowed) {
+  EnterCriticalSection(&service->health_section);
+  service->allow_restart = allowed;
+  LeaveCriticalSection(&service->health_section);
+}
+
 static bool prepare_child_launch(nssm_service_t *service,
                                  std::wstring *command_line,
                                  std::vector<wchar_t> *environment) {
@@ -144,7 +157,7 @@ static int finish_service_start(nssm_service_t *service,
     service->throttle = 0;
   }
 
-  if (! service->allow_restart) return 0;
+  if (! restart_allowed(service)) return 0;
 
   update_service_status(service, [](SERVICE_STATUS &status) {
     status.dwCurrentState = SERVICE_RUNNING;
@@ -511,7 +524,7 @@ unsigned long WINAPI service_control_handler(unsigned long control, unsigned lon
       log_service_control(service->name, control, true);
 
       /* Immediately block further controls. */
-      service->allow_restart = false;
+      set_restart_allowed(service, false);
       WakeConditionVariable(&service->throttle_condition);
       SetEvent(service->stop_event);
       update_service_status(service, [](SERVICE_STATUS &status) {
@@ -615,7 +628,7 @@ int start_service(nssm_service_t *service) {
   });
 
   /* Did another thread receive a stop control? */
-  if (service->allow_restart) {
+  if (restart_allowed(service)) {
     /* Set up I/O redirection. */
     if (get_output_handles(service, &si)) {
       log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_GET_OUTPUT_HANDLES_FAILED, service->name, 0);
@@ -654,7 +667,7 @@ int start_service(nssm_service_t *service) {
 
 /* Stop the service */
 int stop_service(nssm_service_t *service, unsigned long exitcode) {
-  service->allow_restart = false;
+  set_restart_allowed(service, false);
   if (service->stop_event) SetEvent(service->stop_event);
   unregister_service_wait(service, true);
 
@@ -777,7 +790,7 @@ void CALLBACK end_service(void *arg, unsigned char why) {
     this is a controlled shutdown, and don't take any restart action.
   */
   if (why) return;
-  if (! service->allow_restart) return;
+  if (! restart_allowed(service)) return;
 
   unsigned long long now_ms = GetTickCount64();
   unsigned long long run_duration_ms =
