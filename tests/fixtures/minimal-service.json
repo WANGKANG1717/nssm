@@ -52,5 +52,11 @@
       "maximumPercent": 90,
       "violationThreshold": 5
     }
+  },
+  "logging": {
+    "stdout": { "path": "C:\\Logs\\worker.log" },
+    "stderr": { "path": "C:\\Logs\\worker-error.log" },
+    "timestamp": true,
+    "rotation": { "maximumBytes": 10485760 }
   }
 }

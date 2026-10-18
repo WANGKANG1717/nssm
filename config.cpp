@@ -148,6 +148,18 @@ void read_optional_number64(yyjson_val *object, const char *name,
   *destination = yyjson_get_uint(value);
 }
 
+void read_optional_bool(yyjson_val *object, const char *name,
+                        const wchar_t *path, bool *destination,
+                        config_validation_t *validation) {
+  yyjson_val *value = yyjson_obj_get(object, name);
+  if (! value) return;
+  if (! yyjson_is_bool(value)) {
+    validation->add(std::wstring(path) + L" must be a boolean");
+    return;
+  }
+  *destination = yyjson_get_bool(value);
+}
+
 bool valid_service_name(const std::wstring &name) {
   if (name.empty() || name.size() > kMaximumServiceNameCharacters) return false;
   for (wchar_t character : name) {
@@ -689,6 +701,66 @@ void parse_resources(yyjson_val *root, resource_limit_config_t *resources,
                        &resources->cpu_violation_threshold, validation);
 }
 
+void parse_log_stream(yyjson_val *logging, const char *name,
+                      const wchar_t *path, std::wstring *destination,
+                      config_validation_t *validation) {
+  yyjson_val *stream = yyjson_obj_get(logging, name);
+  if (! stream) return;
+  if (! yyjson_is_obj(stream)) {
+    validation->add(std::wstring(path) + L" must be an object");
+    return;
+  }
+  reject_unknown_fields(stream, path, {"path"}, validation);
+  std::wstring path_field = std::wstring(path) + L".path";
+  read_required_string(stream, "path", path_field.c_str(), destination,
+                       validation);
+  if (destination->empty() || PathIsRelativeW(destination->c_str())) {
+    validation->add(path_field + L" must be an absolute path");
+  }
+  if (destination->size() > kMaximumPathCharacters) {
+    validation->add(path_field + L" is too long");
+  }
+}
+
+void parse_logging(yyjson_val *root, logging_config_t *logging,
+                   config_validation_t *validation) {
+  yyjson_val *object = yyjson_obj_get(root, "logging");
+  if (! object) return;
+  if (! yyjson_is_obj(object)) {
+    validation->add(L"logging must be an object");
+    return;
+  }
+  reject_unknown_fields(object, L"logging",
+                        {"stdout", "stderr", "timestamp", "rotation"},
+                        validation);
+  parse_log_stream(object, "stdout", L"logging.stdout",
+                   &logging->stdout_path, validation);
+  parse_log_stream(object, "stderr", L"logging.stderr",
+                   &logging->stderr_path, validation);
+  read_optional_bool(object, "timestamp", L"logging.timestamp",
+                     &logging->timestamp, validation);
+
+  yyjson_val *rotation = yyjson_obj_get(object, "rotation");
+  if (rotation) {
+    if (! yyjson_is_obj(rotation)) {
+      validation->add(L"logging.rotation must be an object");
+    }
+    else {
+      reject_unknown_fields(rotation, L"logging.rotation", {"maximumBytes"},
+                            validation);
+      constexpr unsigned long long kMaximumLogBytes =
+          16ULL * 1024ULL * 1024ULL * 1024ULL * 1024ULL;
+      read_optional_number64(rotation, "maximumBytes",
+                             L"logging.rotation.maximumBytes",
+                             kMaximumLogBytes, &logging->maximum_bytes,
+                             validation);
+    }
+  }
+  if (! logging->enabled()) {
+    validation->add(L"logging must configure stdout and/or stderr");
+  }
+}
+
 std::wstring read_error_message(unsigned long error) {
   return L"Unable to read configuration file (Windows error " +
          std::to_wstring(error) + L")";
@@ -726,7 +798,7 @@ bool parse_service_config(const char *json, size_t length,
   }
   reject_unknown_fields(root, L"root",
                         {"schema", "service", "application", "recovery",
-                         "readiness", "health", "resources"},
+                         "readiness", "health", "resources", "logging"},
                         validation);
 
   yyjson_val *schema = yyjson_obj_get(root, "schema");
@@ -741,6 +813,7 @@ bool parse_service_config(const char *json, size_t length,
   parse_readiness(root, &config->readiness, validation);
   parse_health(root, &config->health, validation);
   parse_resources(root, &config->resources, validation);
+  parse_logging(root, &config->logging, validation);
   yyjson_doc_free(document);
   return validation->ok();
 }

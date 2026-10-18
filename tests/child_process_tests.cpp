@@ -363,6 +363,24 @@ void configuration_tests() {
              config.resources.maximum_cpu_percent == 75,
          L"resource limits should parse from declarative configuration");
 
+  constexpr const char *logging_json = R"json({
+    "schema": 1,
+    "service": { "name": "worker" },
+    "application": { "path": "C:\\Apps\\worker.exe" },
+    "logging": {
+      "stdout": { "path": "C:\\Logs\\worker.log" },
+      "stderr": { "path": "C:\\Logs\\worker-error.log" },
+      "timestamp": true,
+      "rotation": { "maximumBytes": 10485760 }
+    }
+  })json";
+  expect(parse_service_config(logging_json, strlen(logging_json), &config,
+                              &validation) &&
+             config.logging.timestamp &&
+             config.logging.maximum_bytes == 10485760ULL &&
+             config.logging.stdout_path == L"C:\\Logs\\worker.log",
+         L"declarative logging paths and rotation should parse strictly");
+
   constexpr const char *invalid_json = R"json({
     "schema": 1,
     "unknown": true,

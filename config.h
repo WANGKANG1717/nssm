@@ -105,6 +105,17 @@ struct resource_limit_config_t {
   }
 };
 
+struct logging_config_t {
+  std::wstring stdout_path;
+  std::wstring stderr_path;
+  bool timestamp = false;
+  unsigned long long maximum_bytes = 0;
+
+  bool enabled() const {
+    return ! stdout_path.empty() || ! stderr_path.empty();
+  }
+};
+
 struct service_account_config_t {
   service_account_type_t type = service_account_type_t::system;
   std::wstring name;
@@ -135,6 +146,7 @@ struct service_config_t {
   readiness_config_t readiness;
   health_check_config_t health;
   resource_limit_config_t resources;
+  logging_config_t logging;
 };
 
 struct config_validation_t {

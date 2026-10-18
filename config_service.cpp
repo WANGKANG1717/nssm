@@ -500,6 +500,12 @@ bool load_registered_service_config(nssm_service_t *service,
                    validation) &&
       copy_checked(arguments, service->flags, _countof(service->flags),
                    L"application.arguments", validation) &&
+      copy_checked(config->logging.stdout_path, service->stdout_path,
+                   _countof(service->stdout_path), L"logging.stdout.path",
+                   validation) &&
+      copy_checked(config->logging.stderr_path, service->stderr_path,
+                   _countof(service->stderr_path), L"logging.stderr.path",
+                   validation) &&
       copy_config_environment(config->application, service, validation);
   if (! copied) {
     delete config;
@@ -507,6 +513,24 @@ bool load_registered_service_config(nssm_service_t *service,
   }
 
   service->config = config;
+  service->timestamp_log = config->logging.timestamp;
+  ULARGE_INTEGER maximum_log_size = {};
+  maximum_log_size.QuadPart = config->logging.maximum_bytes;
+  service->rotate_bytes_low = maximum_log_size.LowPart;
+  service->rotate_bytes_high = maximum_log_size.HighPart;
+  service->rotate_files = config->logging.maximum_bytes != 0;
+  service->rotate_stdout_online =
+      ! config->logging.stdout_path.empty() && service->rotate_files
+          ? NSSM_ROTATE_ONLINE
+          : NSSM_ROTATE_OFFLINE;
+  service->rotate_stderr_online =
+      ! config->logging.stderr_path.empty() && service->rotate_files
+          ? NSSM_ROTATE_ONLINE
+          : NSSM_ROTATE_OFFLINE;
+  service->use_stdout_pipe = ! config->logging.stdout_path.empty() &&
+      (service->rotate_files || service->timestamp_log);
+  service->use_stderr_pipe = ! config->logging.stderr_path.empty() &&
+      (service->rotate_files || service->timestamp_log);
   service->recovery_state = new (std::nothrow) recovery_state_t();
   if (! service->recovery_state) {
     validation->add(L"Out of memory while creating recovery state");
