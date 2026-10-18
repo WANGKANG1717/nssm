@@ -355,8 +355,9 @@ int set_service_dependencies(const TCHAR *service_name, SC_HANDLE service_handle
     /* At least one dependency is a group so we need to verify them. */
     if (groups) {
       HKEY key;
-      if (RegOpenKeyEx(HKEY_LOCAL_MACHINE, NSSM_REGISTRY_GROUPS, 0, KEY_READ, &key)) {
-        _ftprintf(stderr, _T("%s: %s\n"), NSSM_REGISTRY_GROUPS, error_string(GetLastError()));
+      long registry_error = RegOpenKeyEx(HKEY_LOCAL_MACHINE, NSSM_REGISTRY_GROUPS, 0, KEY_READ, &key);
+      if (registry_error != ERROR_SUCCESS) {
+        _ftprintf(stderr, _T("%s: %s\n"), NSSM_REGISTRY_GROUPS, error_string(registry_error));
         return 2;
       }
 
@@ -372,14 +373,14 @@ int set_service_dependencies(const TCHAR *service_name, SC_HANDLE service_handle
 
         ret = RegQueryValueEx(key, NSSM_REG_GROUPS, 0, &type, (unsigned char *) groups, &groupslen);
         if (ret != ERROR_SUCCESS) {
-          _ftprintf(stderr, _T("%s\\%s: %s"), NSSM_REGISTRY_GROUPS, NSSM_REG_GROUPS, error_string(GetLastError()));
+          _ftprintf(stderr, _T("%s\\%s: %s"), NSSM_REGISTRY_GROUPS, NSSM_REG_GROUPS, error_string(ret));
           HeapFree(GetProcessHeap(), 0, groups);
           RegCloseKey(key);
           return 4;
         }
       }
       else if (ret != ERROR_FILE_NOT_FOUND) {
-        _ftprintf(stderr, _T("%s\\%s: %s"), NSSM_REGISTRY_GROUPS, NSSM_REG_GROUPS, error_string(GetLastError()));
+        _ftprintf(stderr, _T("%s\\%s: %s"), NSSM_REGISTRY_GROUPS, NSSM_REG_GROUPS, error_string(ret));
         RegCloseKey(key);
         return 4;
       }
