@@ -3,7 +3,6 @@
 
 typedef struct nssm_service_t nssm_service_t;
 
-#include <psapi.h>
 #include <tlhelp32.h>
 
 typedef struct {

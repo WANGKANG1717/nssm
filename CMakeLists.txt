@@ -161,7 +161,6 @@ nssm_configure_compiler(nssm)
 
 target_link_libraries(nssm PRIVATE
   advapi32
-  psapi
   shell32
   shlwapi
   user32

@@ -172,8 +172,8 @@ int service_process_tree(int argc, TCHAR **argv) {
     context.pid = service_status.dwProcessId;
     if (! context.pid) continue;
 
-    unique_handle process(OpenProcess(
-        PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, context.pid));
+    unique_handle process(OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION,
+                                      FALSE, context.pid));
     if (! process) {
       _ftprintf(stderr, _T("%s: %lu: %s\n"), canonical_name, context.pid,
                 error_string(GetLastError()));

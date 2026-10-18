@@ -94,7 +94,8 @@ int check_parent(kill_t *k, PROCESSENTRY32 *pe, unsigned long ppid) {
     Though unlikely, it's possible that the parent exited and its process ID
     was already reused, so we'll also compare against its exit time.
   */
-  HANDLE process_handle = OpenProcess(PROCESS_QUERY_INFORMATION, false, pe->th32ProcessID);
+  HANDLE process_handle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false,
+                                      pe->th32ProcessID);
   if (! process_handle) {
     TCHAR pid_string[16];
     _sntprintf_s(pid_string, _countof(pid_string), _TRUNCATE, _T("%lu"), pe->th32ProcessID);
@@ -314,7 +315,9 @@ void walk_process_tree(nssm_service_t *service, walk_function_t fn, kill_t *k, u
   if (fn == static_cast<walk_function_t>(kill_process)) log_event(EVENTLOG_INFORMATION_TYPE, NSSM_EVENT_KILLING, k->name, pid_string, code, 0);
 
   /* We will need a process handle in order to call TerminateProcess() later. */
-  HANDLE process_handle = OpenProcess(SYNCHRONIZE | PROCESS_QUERY_INFORMATION | PROCESS_VM_READ | PROCESS_TERMINATE, false, pid);
+  HANDLE process_handle = OpenProcess(
+      SYNCHRONIZE | PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_TERMINATE,
+      false, pid);
   if (process_handle) {
     /* Kill this process first, then its descendents. */
     TCHAR ppid_string[16];
@@ -400,9 +403,7 @@ int print_process(nssm_service_t *service, kill_t *k) {
 
   unsigned long size = _countof(exe);
   if (! QueryFullProcessImageName(k->process_handle, 0, exe, &size)) {
-    if (! GetModuleFileNameEx(k->process_handle, NULL, exe, _countof(exe))) {
-      _sntprintf_s(exe, _countof(exe), _TRUNCATE, _T("???"));
-    }
+    _sntprintf_s(exe, _countof(exe), _TRUNCATE, _T("???"));
   }
 
   _tprintf(_T("% 8lu %s%s\n"), k->pid, buffer ? buffer : _T(""), exe);
