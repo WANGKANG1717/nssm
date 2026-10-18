@@ -4,6 +4,7 @@
 #include "output.h"
 #include "recovery.h"
 #include "security.h"
+#include "win32_handle.h"
 
 #include <new>
 #include <string>
@@ -126,19 +127,18 @@ bool write_config_path(const std::wstring &service_name,
                        const std::wstring &path, unsigned long *error) {
   std::wstring key_path = L"SYSTEM\\CurrentControlSet\\Services\\" +
                           service_name + L"\\Parameters";
-  HKEY key = nullptr;
+  unique_registry_key key;
   unsigned long disposition = 0;
   long result = RegCreateKeyExW(HKEY_LOCAL_MACHINE, key_path.c_str(), 0, nullptr,
-                                0, KEY_SET_VALUE, nullptr, &key, &disposition);
+                                0, KEY_SET_VALUE, nullptr, key.put(), &disposition);
   if (result != ERROR_SUCCESS) {
     if (error) *error = static_cast<unsigned long>(result);
     return false;
   }
   result = RegSetValueExW(
-      key, NSSM_REG_CONFIG_PATH, 0, REG_SZ,
+      key.get(), NSSM_REG_CONFIG_PATH, 0, REG_SZ,
       reinterpret_cast<const unsigned char *>(path.c_str()),
       static_cast<unsigned long>((path.size() + 1) * sizeof(wchar_t)));
-  RegCloseKey(key);
   if (error) *error = static_cast<unsigned long>(result);
   return result == ERROR_SUCCESS;
 }
@@ -147,9 +147,9 @@ bool read_config_path(const std::wstring &service_name, std::wstring *path,
                       unsigned long *error) {
   std::wstring key_path = L"SYSTEM\\CurrentControlSet\\Services\\" +
                           service_name + L"\\Parameters";
-  HKEY key = nullptr;
+  unique_registry_key key;
   long result = RegOpenKeyExW(HKEY_LOCAL_MACHINE, key_path.c_str(), 0,
-                              KEY_QUERY_VALUE, &key);
+                              KEY_QUERY_VALUE, key.put());
   if (result != ERROR_SUCCESS) {
     if (error) *error = static_cast<unsigned long>(result);
     return false;
@@ -157,11 +157,10 @@ bool read_config_path(const std::wstring &service_name, std::wstring *path,
 
   unsigned long type = 0;
   unsigned long bytes = 0;
-  result = RegQueryValueExW(key, NSSM_REG_CONFIG_PATH, nullptr, &type, nullptr,
+  result = RegQueryValueExW(key.get(), NSSM_REG_CONFIG_PATH, nullptr, &type, nullptr,
                             &bytes);
   if (result != ERROR_SUCCESS || type != REG_SZ || bytes < sizeof(wchar_t) ||
       bytes > PATH_LENGTH * sizeof(wchar_t)) {
-    RegCloseKey(key);
     if (error) {
       *error = result == ERROR_SUCCESS ? ERROR_INVALID_DATA
                                        : static_cast<unsigned long>(result);
@@ -170,10 +169,9 @@ bool read_config_path(const std::wstring &service_name, std::wstring *path,
   }
 
   std::vector<wchar_t> buffer(bytes / sizeof(wchar_t) + 1, L'\0');
-  result = RegQueryValueExW(key, NSSM_REG_CONFIG_PATH, nullptr, &type,
+  result = RegQueryValueExW(key.get(), NSSM_REG_CONFIG_PATH, nullptr, &type,
                             reinterpret_cast<unsigned char *>(buffer.data()),
                             &bytes);
-  RegCloseKey(key);
   if (result != ERROR_SUCCESS) {
     if (error) *error = static_cast<unsigned long>(result);
     return false;
@@ -382,17 +380,16 @@ bool atomic_copy_file(const std::wstring &source,
     if (error) *error = GetLastError();
     return false;
   }
-  HANDLE file = CreateFileW(temporary.c_str(), GENERIC_READ | GENERIC_WRITE,
-                            FILE_SHARE_READ, nullptr, OPEN_EXISTING,
-                            FILE_ATTRIBUTE_NORMAL, nullptr);
-  if (file == INVALID_HANDLE_VALUE) {
+  unique_handle file(CreateFileW(temporary.c_str(), GENERIC_READ | GENERIC_WRITE,
+                                 FILE_SHARE_READ, nullptr, OPEN_EXISTING,
+                                 FILE_ATTRIBUTE_NORMAL, nullptr));
+  if (! file) {
     if (error) *error = GetLastError();
     DeleteFileW(temporary.c_str());
     return false;
   }
-  bool flushed = FlushFileBuffers(file) != FALSE;
+  bool flushed = FlushFileBuffers(file.get()) != FALSE;
   unsigned long flush_error = flushed ? ERROR_SUCCESS : GetLastError();
-  CloseHandle(file);
   if (! flushed || ! MoveFileExW(temporary.c_str(), destination.c_str(),
                                   MOVEFILE_REPLACE_EXISTING |
                                       MOVEFILE_WRITE_THROUGH)) {
@@ -485,8 +482,8 @@ int plan_service_config_command(int argc, wchar_t **argv) {
     return static_cast<int>(cli_exit_code::security);
   }
 
-  SC_HANDLE manager = OpenSCManagerW(nullptr, SERVICES_ACTIVE_DATABASE,
-                                     SC_MANAGER_CONNECT);
+  unique_service_handle manager(OpenSCManagerW(nullptr, SERVICES_ACTIVE_DATABASE,
+                                                SC_MANAGER_CONNECT));
   if (! manager) {
     unsigned long error = GetLastError();
     print_cli_error(arguments.json,
@@ -496,10 +493,9 @@ int plan_service_config_command(int argc, wchar_t **argv) {
                                 ? cli_exit_code::permission
                                 : cli_exit_code::system);
   }
-  SC_HANDLE service = OpenServiceW(manager, desired.service.name.c_str(),
-                                   SERVICE_QUERY_CONFIG);
+  unique_service_handle service(OpenServiceW(manager.get(), desired.service.name.c_str(),
+                                              SERVICE_QUERY_CONFIG));
   if (! service && GetLastError() == ERROR_SERVICE_DOES_NOT_EXIST) {
-    CloseServiceHandle(manager);
     print_cli_plan(arguments.json, desired.service.name, L"create",
                    {L"service", L"application", L"recovery", L"readiness",
                     L"health", L"resources", L"logging", L"security"});
@@ -507,7 +503,6 @@ int plan_service_config_command(int argc, wchar_t **argv) {
   }
   if (! service) {
     unsigned long error = GetLastError();
-    CloseServiceHandle(manager);
     print_cli_error(arguments.json,
                     error == ERROR_ACCESS_DENIED ? L"permission" : L"system",
                     L"Unable to query the service", error);
@@ -518,17 +513,13 @@ int plan_service_config_command(int argc, wchar_t **argv) {
 
   existing_service_state_t state;
   unsigned long query_error = ERROR_SUCCESS;
-  if (! read_existing_service_state(service, desired.service.name, &state,
+  if (! read_existing_service_state(service.get(), desired.service.name, &state,
                                     &query_error)) {
-    CloseServiceHandle(service);
-    CloseServiceHandle(manager);
     print_cli_error(arguments.json, L"conflict",
                     L"The existing service is not managed by declarative NSSM",
                     query_error);
     return static_cast<int>(cli_exit_code::conflict);
   }
-  CloseServiceHandle(service);
-  CloseServiceHandle(manager);
 
   service_config_t current;
   validation.errors.clear();
@@ -591,8 +582,9 @@ int apply_service_config_command(int argc, wchar_t **argv) {
 
   std::vector<wchar_t> dependencies =
       make_dependencies(config.service.dependencies);
-  SC_HANDLE manager = OpenSCManagerW(nullptr, SERVICES_ACTIVE_DATABASE,
-                                     SC_MANAGER_CONNECT | SC_MANAGER_CREATE_SERVICE);
+  unique_service_handle manager(OpenSCManagerW(
+      nullptr, SERVICES_ACTIVE_DATABASE,
+      SC_MANAGER_CONNECT | SC_MANAGER_CREATE_SERVICE));
   if (! manager) {
     unsigned long error = GetLastError();
     print_cli_error(arguments.json,
@@ -605,38 +597,34 @@ int apply_service_config_command(int argc, wchar_t **argv) {
 
   bool created = false;
   existing_service_state_t previous;
-  SC_HANDLE service = OpenServiceW(manager, config.service.name.c_str(),
-                                   SERVICE_CHANGE_CONFIG | SERVICE_QUERY_CONFIG |
-                                       DELETE);
+  unique_service_handle service(OpenServiceW(
+      manager.get(), config.service.name.c_str(),
+      SERVICE_CHANGE_CONFIG | SERVICE_QUERY_CONFIG | DELETE));
   if (! service && GetLastError() == ERROR_SERVICE_DOES_NOT_EXIST) {
-    service = CreateServiceW(
-        manager, config.service.name.c_str(), config.service.display_name.c_str(),
+    service.reset(CreateServiceW(
+        manager.get(), config.service.name.c_str(), config.service.display_name.c_str(),
         SERVICE_CHANGE_CONFIG | SERVICE_QUERY_CONFIG | DELETE,
         SERVICE_WIN32_OWN_PROCESS, service_start_type(config.service.startup),
         SERVICE_ERROR_NORMAL, nssm_imagepath(), nullptr, nullptr,
-        dependencies.data(), account.empty() ? nullptr : account.c_str(), nullptr);
-    created = service != nullptr;
+        dependencies.data(), account.empty() ? nullptr : account.c_str(), nullptr));
+    created = static_cast<bool>(service);
   }
   else if (service) {
     unsigned long query_error = ERROR_SUCCESS;
-    if (! read_existing_service_state(service, config.service.name, &previous,
+    if (! read_existing_service_state(service.get(), config.service.name, &previous,
                                       &query_error)) {
       print_cli_error(arguments.json, L"conflict",
                       L"Refusing to update a service not previously managed by this declarative NSSM",
                       query_error);
-      CloseServiceHandle(service);
-      CloseServiceHandle(manager);
       return static_cast<int>(cli_exit_code::conflict);
     }
     if (! passwordless_service_account(previous.account)) {
       print_cli_error(arguments.json, L"conflict",
                       L"The existing service account cannot be restored without a password; update refused");
-      CloseServiceHandle(service);
-      CloseServiceHandle(manager);
       return static_cast<int>(cli_exit_code::conflict);
     }
     if (! ChangeServiceConfigW(
-            service, SERVICE_WIN32_OWN_PROCESS,
+            service.get(), SERVICE_WIN32_OWN_PROCESS,
             service_start_type(config.service.startup), SERVICE_ERROR_NORMAL,
             nssm_imagepath(), nullptr, nullptr, dependencies.data(),
             account.empty() ? L"LocalSystem" : account.c_str(), nullptr,
@@ -644,8 +632,6 @@ int apply_service_config_command(int argc, wchar_t **argv) {
       unsigned long error = GetLastError();
       print_cli_error(arguments.json, L"system",
                       L"ChangeServiceConfig failed", error);
-      CloseServiceHandle(service);
-      CloseServiceHandle(manager);
       return static_cast<int>(cli_exit_code::system);
     }
   }
@@ -655,34 +641,31 @@ int apply_service_config_command(int argc, wchar_t **argv) {
     print_cli_error(arguments.json,
                     error == ERROR_ACCESS_DENIED ? L"permission" : L"system",
                     L"CreateService/OpenService failed", error);
-    CloseServiceHandle(manager);
     return static_cast<int>(error == ERROR_ACCESS_DENIED
                                 ? cli_exit_code::permission
                                 : cli_exit_code::system);
   }
 
   auto rollback = [&]() {
-    if (created) return DeleteService(service) != FALSE;
-    return restore_existing_service(service, config.service.name, previous);
+    if (created) return DeleteService(service.get()) != FALSE;
+    return restore_existing_service(service.get(), config.service.name, previous);
   };
 
   SERVICE_DESCRIPTIONW description = {
       const_cast<wchar_t *>(config.service.description.c_str())};
-  if (! ChangeServiceConfig2W(service, SERVICE_CONFIG_DESCRIPTION, &description)) {
+  if (! ChangeServiceConfig2W(service.get(), SERVICE_CONFIG_DESCRIPTION, &description)) {
     unsigned long error = GetLastError();
     bool restored = rollback();
     print_cli_error(arguments.json, L"system",
                     restored ? L"Setting service description failed"
                              : L"Setting service description failed and rollback failed",
                     error);
-    CloseServiceHandle(service);
-    CloseServiceHandle(manager);
     return static_cast<int>(cli_exit_code::system);
   }
 
   SERVICE_DELAYED_AUTO_START_INFO delayed = {
       config.service.startup == service_startup_t::delayed};
-  if (! ChangeServiceConfig2W(service, SERVICE_CONFIG_DELAYED_AUTO_START_INFO,
+  if (! ChangeServiceConfig2W(service.get(), SERVICE_CONFIG_DELAYED_AUTO_START_INFO,
                               &delayed)) {
     unsigned long error = GetLastError();
     bool restored = rollback();
@@ -690,21 +673,17 @@ int apply_service_config_command(int argc, wchar_t **argv) {
                     restored ? L"Setting delayed start failed"
                              : L"Setting delayed start failed and rollback failed",
                     error);
-    CloseServiceHandle(service);
-    CloseServiceHandle(manager);
     return static_cast<int>(cli_exit_code::system);
   }
 
   unsigned long sid_error = ERROR_SUCCESS;
-  if (! set_service_sid_type(service, service_sid_type(config.security.service_sid),
+  if (! set_service_sid_type(service.get(), service_sid_type(config.security.service_sid),
                              &sid_error)) {
     bool restored = rollback();
     print_cli_error(arguments.json, L"system",
                     restored ? L"Setting service SID type failed"
                              : L"Setting service SID type failed and rollback failed",
                     sid_error);
-    CloseServiceHandle(service);
-    CloseServiceHandle(manager);
     return static_cast<int>(cli_exit_code::system);
   }
 
@@ -715,13 +694,9 @@ int apply_service_config_command(int argc, wchar_t **argv) {
                     restored ? L"Storing configuration path failed"
                              : L"Storing configuration path failed and rollback failed",
                     registry_error);
-    CloseServiceHandle(service);
-    CloseServiceHandle(manager);
     return static_cast<int>(cli_exit_code::system);
   }
 
-  CloseServiceHandle(service);
-  CloseServiceHandle(manager);
   std::wstring detail =
       std::wstring(created ? L"Installed service " : L"Updated service ") +
       config.service.name + L" from " + path;

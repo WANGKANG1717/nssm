@@ -2,6 +2,7 @@
 
 #include "output.h"
 #include "status_snapshot.h"
+#include "win32_handle.h"
 
 #include <windows.h>
 
@@ -32,8 +33,8 @@ int inspect_service_status_command(int argc, wchar_t **argv) {
     return static_cast<int>(cli_exit_code::usage);
   }
   std::wstring name = arguments.positional[0];
-  SC_HANDLE manager = OpenSCManagerW(nullptr, SERVICES_ACTIVE_DATABASE,
-                                     SC_MANAGER_CONNECT);
+  unique_service_handle manager(OpenSCManagerW(nullptr, SERVICES_ACTIVE_DATABASE,
+                                                SC_MANAGER_CONNECT));
   if (! manager) {
     unsigned long error = GetLastError();
     print_cli_error(arguments.json,
@@ -43,10 +44,10 @@ int inspect_service_status_command(int argc, wchar_t **argv) {
                                 ? cli_exit_code::permission
                                 : cli_exit_code::system);
   }
-  SC_HANDLE service = OpenServiceW(manager, name.c_str(), SERVICE_QUERY_STATUS);
+  unique_service_handle service(
+      OpenServiceW(manager.get(), name.c_str(), SERVICE_QUERY_STATUS));
   if (! service) {
     unsigned long error = GetLastError();
-    CloseServiceHandle(manager);
     print_cli_error(arguments.json,
                     error == ERROR_SERVICE_DOES_NOT_EXIST ? L"notFound"
                                                           : L"system",
@@ -57,19 +58,14 @@ int inspect_service_status_command(int argc, wchar_t **argv) {
   }
   SERVICE_STATUS_PROCESS status = {};
   unsigned long needed = 0;
-  if (! QueryServiceStatusEx(service, SC_STATUS_PROCESS_INFO,
+  if (! QueryServiceStatusEx(service.get(), SC_STATUS_PROCESS_INFO,
                              reinterpret_cast<unsigned char *>(&status),
                              sizeof(status), &needed)) {
     unsigned long error = GetLastError();
-    CloseServiceHandle(service);
-    CloseServiceHandle(manager);
     print_cli_error(arguments.json, L"system",
                     L"Unable to query service status", error);
     return static_cast<int>(cli_exit_code::system);
   }
-  CloseServiceHandle(service);
-  CloseServiceHandle(manager);
-
   status_snapshot_t snapshot = {};
   unsigned long snapshot_error = ERROR_SUCCESS;
   bool has_snapshot = read_status_snapshot(name, &snapshot, &snapshot_error);

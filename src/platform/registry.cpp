@@ -1,7 +1,8 @@
 #include "nssm.h"
+#include "win32_handle.h"
 
 int create_messages() {
-  HKEY key;
+  unique_registry_key key;
 
   TCHAR registry[KEY_LENGTH];
   if (_sntprintf_s(registry, _countof(registry), _TRUNCATE, _T("SYSTEM\\CurrentControlSet\\Services\\EventLog\\Application\\%s"), NSSM) < 0) {
@@ -9,7 +10,8 @@ int create_messages() {
     return 1;
   }
 
-  long error = RegCreateKeyEx(HKEY_LOCAL_MACHINE, registry, 0, 0, REG_OPTION_NON_VOLATILE, KEY_WRITE, 0, &key, 0);
+  long error = RegCreateKeyEx(HKEY_LOCAL_MACHINE, registry, 0, 0,
+                              REG_OPTION_NON_VOLATILE, KEY_WRITE, 0, key.put(), 0);
   if (error != ERROR_SUCCESS) {
     log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_OPENKEY_FAILED, registry, error_string(error), 0);
     return 2;
@@ -19,11 +21,10 @@ int create_messages() {
   const TCHAR *path = nssm_unquoted_imagepath();
 
   /* Try to register the module but don't worry so much on failure */
-  RegSetValueEx(key, _T("EventMessageFile"), 0, REG_SZ, (const unsigned char *) path, (unsigned long) (_tcslen(path) +  1) * sizeof(TCHAR));
+  RegSetValueEx(key.get(), _T("EventMessageFile"), 0, REG_SZ, (const unsigned char *) path, (unsigned long) (_tcslen(path) +  1) * sizeof(TCHAR));
   unsigned long types = EVENTLOG_INFORMATION_TYPE | EVENTLOG_WARNING_TYPE | EVENTLOG_ERROR_TYPE;
-  RegSetValueEx(key, _T("TypesSupported"), 0, REG_DWORD, (const unsigned char *) &types, sizeof(types));
+  RegSetValueEx(key.get(), _T("TypesSupported"), 0, REG_DWORD, (const unsigned char *) &types, sizeof(types));
 
-  RegCloseKey(key);
   return 0;
 }
 /* Copy a block. */

@@ -1,6 +1,7 @@
 #include "config.h"
 #include "child_process.h"
 #include "output.h"
+#include "win32_handle.h"
 
 #include <windows.h>
 #include <shlwapi.h>
@@ -866,25 +867,22 @@ bool load_service_config(const wchar_t *path, service_config_t *config,
     return false;
   }
 
-  HANDLE file = CreateFileW(path, GENERIC_READ, FILE_SHARE_READ, nullptr,
-                            OPEN_EXISTING,
-                            FILE_ATTRIBUTE_NORMAL | FILE_FLAG_SEQUENTIAL_SCAN,
-                            nullptr);
-  if (file == INVALID_HANDLE_VALUE) {
+  unique_handle file(CreateFileW(
+      path, GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING,
+      FILE_ATTRIBUTE_NORMAL | FILE_FLAG_SEQUENTIAL_SCAN, nullptr));
+  if (! file) {
     validation->add(read_error_message(GetLastError()));
     return false;
   }
 
   LARGE_INTEGER size = {};
-  if (! GetFileSizeEx(file, &size)) {
+  if (! GetFileSizeEx(file.get(), &size)) {
     unsigned long error = GetLastError();
-    CloseHandle(file);
     validation->add(read_error_message(error));
     return false;
   }
   if (size.QuadPart <= 0 || static_cast<unsigned long long>(size.QuadPart) >
                                 kMaximumConfigBytes) {
-    CloseHandle(file);
     validation->add(L"Configuration file must be between 1 byte and 4 MiB");
     return false;
   }
@@ -896,17 +894,14 @@ bool load_service_config(const wchar_t *path, service_config_t *config,
         (content.size() - offset) > 1024 * 1024 ? 1024 * 1024
                                                 : content.size() - offset);
     unsigned long read = 0;
-    if (! ReadFile(file, content.data() + offset, chunk, &read, nullptr) ||
+    if (! ReadFile(file.get(), content.data() + offset, chunk, &read, nullptr) ||
         ! read) {
       unsigned long error = GetLastError();
-      CloseHandle(file);
       validation->add(read_error_message(error));
       return false;
     }
     offset += read;
   }
-  CloseHandle(file);
-
   size_t start = content.size() >= 3 &&
                          static_cast<unsigned char>(content[0]) == 0xEF &&
                          static_cast<unsigned char>(content[1]) == 0xBB &&

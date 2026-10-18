@@ -4,6 +4,7 @@
 #include "health_check.h"
 #include "child_process.h"
 #include "job_object.h"
+#include "win32_handle.h"
 
 #include <winhttp.h>
 
@@ -195,7 +196,7 @@ health_probe_result_t check_command(const health_check_config_t &config,
   startup.cb = sizeof(startup);
   PROCESS_INFORMATION process = {};
   unsigned long error = ERROR_SUCCESS;
-  HANDLE job = create_service_job(&error);
+  unique_handle job(create_service_job(&error));
   if (! job) return failure(error, L"creating command probe job failed");
   bool created = CreateProcessW(
       config.command_path.c_str(), command_line.data(), nullptr, nullptr, FALSE,
@@ -203,33 +204,27 @@ health_probe_result_t check_command(const health_check_config_t &config,
       const_cast<wchar_t *>(environment), working_directory, &startup, &process);
   if (! created) {
     error = GetLastError();
-    CloseHandle(job);
     return failure(error, L"starting command probe failed");
   }
-  if (! assign_process_to_service_job(job, process.hProcess, &error)) {
-    TerminateProcess(process.hProcess, error);
-    CloseHandle(process.hThread);
-    CloseHandle(process.hProcess);
-    CloseHandle(job);
+  unique_handle process_thread(process.hThread);
+  unique_handle process_handle(process.hProcess);
+  if (! assign_process_to_service_job(job.get(), process_handle.get(), &error)) {
+    TerminateProcess(process_handle.get(), error);
     return failure(error, L"assigning command probe job failed");
   }
-  ResumeThread(process.hThread);
-  CloseHandle(process.hThread);
-  unsigned long wait = WaitForSingleObject(process.hProcess, config.timeout_ms);
+  ResumeThread(process_thread.get());
+  process_thread.reset();
+  unsigned long wait = WaitForSingleObject(process_handle.get(), config.timeout_ms);
   if (wait != WAIT_OBJECT_0) {
     error = wait == WAIT_TIMEOUT ? WAIT_TIMEOUT : GetLastError();
-    terminate_service_job(job, error, nullptr);
-    WaitForSingleObject(process.hProcess, 5000);
-    CloseHandle(process.hProcess);
-    CloseHandle(job);
+    terminate_service_job(job.get(), error, nullptr);
+    WaitForSingleObject(process_handle.get(), 5000);
     return failure(error, wait == WAIT_TIMEOUT ? L"command probe timed out"
                                                 : L"waiting for command probe failed");
   }
   unsigned long exit_code = 0;
-  bool got_exit = GetExitCodeProcess(process.hProcess, &exit_code) != FALSE;
+  bool got_exit = GetExitCodeProcess(process_handle.get(), &exit_code) != FALSE;
   error = got_exit ? ERROR_SUCCESS : GetLastError();
-  CloseHandle(process.hProcess);
-  CloseHandle(job);
   if (! got_exit) return failure(error, L"reading command probe exit code failed");
   if (exit_code) {
     return failure(ERROR_PROCESS_ABORTED,
