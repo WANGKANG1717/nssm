@@ -824,9 +824,11 @@ void CALLBACK end_service(void *arg, unsigned char why) {
           : 0;
   LARGE_INTEGER counter = {};
   QueryPerformanceCounter(&counter);
+  AcquireSRWLockExclusive(&service->status_snapshot_lock);
   recovery_decision_t decision = evaluate_recovery(
       service->config->recovery, service->recovery_state, exitcode, now_ms,
       run_duration_ms, static_cast<unsigned long>(counter.QuadPart));
+  ReleaseSRWLockExclusive(&service->status_snapshot_lock);
   publish_status_snapshot(service);
   if (! decision.should_restart()) {
     const TCHAR *reason = decision.result == recovery_result_t::clean_exit
