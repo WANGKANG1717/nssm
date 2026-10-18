@@ -213,6 +213,39 @@ void parse_account(yyjson_val *service, service_account_config_t *account,
   }
 }
 
+void parse_security(yyjson_val *root, security_config_t *security,
+                    config_validation_t *validation) {
+  yyjson_val *object = yyjson_obj_get(root, "security");
+  if (! object) return;
+  if (! yyjson_is_obj(object)) {
+    validation->add(L"security must be an object");
+    return;
+  }
+  reject_unknown_fields(object, L"security", {"serviceSid"}, validation);
+
+  yyjson_val *service_sid_value = yyjson_obj_get(object, "serviceSid");
+  if (! service_sid_value) return;
+  std::wstring service_sid;
+  if (! read_required_string(object, "serviceSid", L"security.serviceSid",
+                             &service_sid, validation)) return;
+  if (service_sid.empty()) {
+    validation->add(L"security.serviceSid must not be empty");
+    return;
+  }
+  if (service_sid == L"none") {
+    security->service_sid = service_sid_type_t::none;
+  }
+  else if (service_sid == L"unrestricted") {
+    security->service_sid = service_sid_type_t::unrestricted;
+  }
+  else if (service_sid == L"restricted") {
+    security->service_sid = service_sid_type_t::restricted;
+  }
+  else {
+    validation->add(L"security.serviceSid has an unsupported value");
+  }
+}
+
 void parse_dependencies(yyjson_val *service,
                         std::vector<std::wstring> *dependencies,
                         config_validation_t *validation) {
@@ -798,7 +831,8 @@ bool parse_service_config(const char *json, size_t length,
   }
   reject_unknown_fields(root, L"root",
                         {"schema", "service", "application", "recovery",
-                         "readiness", "health", "resources", "logging"},
+                         "readiness", "health", "resources", "logging",
+                         "security"},
                         validation);
 
   yyjson_val *schema = yyjson_obj_get(root, "schema");
@@ -814,6 +848,7 @@ bool parse_service_config(const char *json, size_t length,
   parse_health(root, &config->health, validation);
   parse_resources(root, &config->resources, validation);
   parse_logging(root, &config->logging, validation);
+  parse_security(root, &config->security, validation);
   yyjson_doc_free(document);
   return validation->ok();
 }

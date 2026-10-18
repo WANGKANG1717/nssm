@@ -27,6 +27,7 @@ struct existing_service_state_t {
   std::wstring display_name;
   std::wstring description;
   bool delayed = false;
+  unsigned long service_sid_type = SERVICE_SID_TYPE_NONE;
   std::wstring config_path;
 };
 
@@ -50,6 +51,26 @@ unsigned long service_start_type(service_startup_t startup) {
     case service_startup_t::delayed:
     default: return SERVICE_AUTO_START;
   }
+}
+
+unsigned long service_sid_type(service_sid_type_t type) {
+  switch (type) {
+    case service_sid_type_t::none: return SERVICE_SID_TYPE_NONE;
+    case service_sid_type_t::restricted: return SERVICE_SID_TYPE_RESTRICTED;
+    case service_sid_type_t::unrestricted:
+    default: return SERVICE_SID_TYPE_UNRESTRICTED;
+  }
+}
+
+bool set_service_sid_type(SC_HANDLE service, unsigned long type,
+                          unsigned long *error) {
+  SERVICE_SID_INFO info = {type};
+  if (! ChangeServiceConfig2W(service, SERVICE_CONFIG_SERVICE_SID_INFO, &info)) {
+    if (error) *error = GetLastError();
+    return false;
+  }
+  if (error) *error = ERROR_SUCCESS;
+  return true;
 }
 
 bool account_name(const service_config_t &config, std::wstring *name,
@@ -238,6 +259,15 @@ bool read_existing_service_state(SC_HANDLE service,
     return false;
   }
   state->delayed = delayed.fDelayedAutostart != FALSE;
+  SERVICE_SID_INFO sid = {};
+  needed = 0;
+  if (! QueryServiceConfig2W(
+          service, SERVICE_CONFIG_SERVICE_SID_INFO,
+          reinterpret_cast<unsigned char *>(&sid), sizeof(sid), &needed)) {
+    if (error) *error = GetLastError();
+    return false;
+  }
+  state->service_sid_type = sid.dwServiceSidType;
   return read_config_path(service_name, &state->config_path, error);
 }
 
@@ -271,6 +301,9 @@ bool restore_existing_service(SC_HANDLE service,
   restored = ChangeServiceConfig2W(service,
                                    SERVICE_CONFIG_DELAYED_AUTO_START_INFO,
                                    &delayed) != FALSE && restored;
+  unsigned long sid_error = ERROR_SUCCESS;
+  restored = set_service_sid_type(service, state.service_sid_type, &sid_error) &&
+             restored;
   unsigned long registry_error = ERROR_SUCCESS;
   restored = write_config_path(service_name, state.config_path,
                                &registry_error) && restored;
@@ -429,6 +462,20 @@ int apply_service_config_command(int argc, wchar_t **argv) {
                               &delayed)) {
     fwprintf(stderr, L"error: setting delayed start failed: %lu\n",
              GetLastError());
+    if (created) DeleteService(service);
+    else if (! restore_existing_service(service, config.service.name, previous)) {
+      fwprintf(stderr, L"error: rollback of the existing service failed\n");
+    }
+    CloseServiceHandle(service);
+    CloseServiceHandle(manager);
+    return 5;
+  }
+
+  unsigned long sid_error = ERROR_SUCCESS;
+  if (! set_service_sid_type(service, service_sid_type(config.security.service_sid),
+                             &sid_error)) {
+    fwprintf(stderr, L"error: setting service SID type failed: %lu\n",
+             sid_error);
     if (created) DeleteService(service);
     else if (! restore_existing_service(service, config.service.name, previous)) {
       fwprintf(stderr, L"error: rollback of the existing service failed\n");

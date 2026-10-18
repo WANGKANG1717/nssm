@@ -381,6 +381,30 @@ void configuration_tests() {
              config.logging.stdout_path == L"C:\\Logs\\worker.log",
          L"declarative logging paths and rotation should parse strictly");
 
+  constexpr const char *security_json = R"json({
+    "schema": 1,
+    "service": { "name": "worker" },
+    "application": { "path": "C:\\Apps\\worker.exe" },
+    "security": { "serviceSid": "restricted" }
+  })json";
+  expect(parse_service_config(security_json, strlen(security_json), &config,
+                              &validation) &&
+             config.service.account.type ==
+                 service_account_type_t::virtual_account &&
+             config.security.service_sid == service_sid_type_t::restricted,
+         L"services should default to a virtual account and parse SID hardening");
+
+  constexpr const char *invalid_security_json = R"json({
+    "schema": 1,
+    "service": { "name": "worker" },
+    "application": { "path": "C:\\Apps\\worker.exe" },
+    "security": { "serviceSid": "elevated" }
+  })json";
+  expect(! parse_service_config(invalid_security_json,
+                                strlen(invalid_security_json), &config,
+                                &validation),
+         L"unsupported service SID modes must be rejected");
+
   constexpr const char *invalid_json = R"json({
     "schema": 1,
     "unknown": true,

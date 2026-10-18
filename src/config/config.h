@@ -28,6 +28,12 @@ enum class service_account_type_t {
   user,
 };
 
+enum class service_sid_type_t {
+  none,
+  unrestricted,
+  restricted,
+};
+
 enum class recovery_mode_t {
   never,
   on_failure,
@@ -117,8 +123,12 @@ struct logging_config_t {
 };
 
 struct service_account_config_t {
-  service_account_type_t type = service_account_type_t::system;
+  service_account_type_t type = service_account_type_t::virtual_account;
   std::wstring name;
+};
+
+struct security_config_t {
+  service_sid_type_t service_sid = service_sid_type_t::unrestricted;
 };
 
 struct service_metadata_config_t {
@@ -147,6 +157,7 @@ struct service_config_t {
   health_check_config_t health;
   resource_limit_config_t resources;
   logging_config_t logging;
+  security_config_t security;
 };
 
 struct config_validation_t {

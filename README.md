@@ -25,6 +25,7 @@ NSSM 是一个将任意可执行程序作为 Windows 服务运行并进行管理
 - UTF-8 对话框资源在构建阶段转换为明确的 Unicode 转义，避免受 Windows 系统代码页影响。
 - MinGW 运行库静态链接；Windows 系统库仍使用系统提供的 DLL。
 - Release 链接不写入时间戳；相同源码和工具链可生成一致的二进制文件。
+- 声明式服务默认使用独立虚拟账户和 Service SID，避免默认以 LocalSystem 运行。
 
 核心功能与命令行参数保持与原版兼容；如需原版发布与英文文档，请参见上游站点。
 
@@ -129,6 +130,24 @@ ctest --preset mingw-release
 
 ## 使用与命令（摘要）
 参考官方命令行文档整理要点，详情见：[nssm commands](https://nssm.cc/commands)。
+
+声明式配置的安全基线默认等价于：
+
+```json
+{
+  "service": {
+    "account": { "type": "virtual" }
+  },
+  "security": {
+    "serviceSid": "unrestricted"
+  }
+}
+```
+
+`serviceSid` 可取 `unrestricted`、`restricted` 或 `none`。`restricted` 会把
+服务 SID 同时加入受限 SID 列表，适用于已为 `NT SERVICE\\<服务名>` 精确配置
+文件、注册表和其他对象 ACL 的服务；否则可能因权限不足而无法启动。配置文件不
+接受明文密码字段，需要域身份时优先使用 gMSA。
 
 - 安装
   - GUI：`nssm install <ServiceName>`
