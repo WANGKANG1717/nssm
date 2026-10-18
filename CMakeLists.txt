@@ -118,6 +118,7 @@ set(NSSM_PLATFORM_SOURCES
   src/platform/event.cpp
   src/platform/registry.cpp
   src/platform/security.cpp
+  src/platform/service_status.cpp
   src/platform/string_utils.cpp
   src/platform/utf8.cpp
 )
@@ -221,9 +222,12 @@ if(BUILD_TESTING)
     src/supervisor/process/job_object.cpp
     src/supervisor/monitoring/readiness.cpp
     src/supervisor/runtime/recovery.cpp
+    src/platform/event.cpp
     src/platform/security.cpp
+    src/platform/service_status.cpp
     src/platform/string_utils.cpp
   )
+  add_dependencies(nssm_unit_tests nssm_messages)
   target_include_directories(nssm_unit_tests PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/src/config"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/cli"
@@ -231,6 +235,7 @@ if(BUILD_TESTING)
     "${CMAKE_CURRENT_SOURCE_DIR}/src/supervisor/monitoring"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/supervisor/runtime"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/platform"
+    "${CMAKE_CURRENT_BINARY_DIR}/generated"
   )
   target_compile_definitions(nssm_unit_tests PRIVATE
     UNICODE

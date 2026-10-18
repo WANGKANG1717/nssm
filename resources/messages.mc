@@ -1703,3 +1703,15 @@ Language = Chinese
 为服务 %1 创建停止事件失败：
 %2
 .
+
+MessageId = +1
+SymbolicName = NSSM_EVENT_SETSERVICESTATUS_FAILED
+Severity = Error
+Language = English
+Failed to report service %1 status while %2:
+%3
+.
+Language = Chinese
+在%2时上报服务 %1 状态失败：
+%3
+.

@@ -2,6 +2,7 @@
 #include "messages.h"
 #include "service_wait.h"
 #include "service_constants.h"
+#include "service_status.h"
 
 #include <string>
 
@@ -25,8 +26,10 @@ int await_single_handle(SERVICE_STATUS_HANDLE status_handle,
       if (status_lock) AcquireSRWLockExclusive(status_lock);
       status->dwWaitHint += interval;
       ++status->dwCheckPoint;
-      SetServiceStatus(status_handle, status);
+      const bool reported = report_service_status(
+          status_handle, status, name, L"reporting wait progress");
       if (status_lock) ReleaseSRWLockExclusive(status_lock);
+      if (! reported) return -1;
     }
 
     if (waited) {

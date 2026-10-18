@@ -1,6 +1,7 @@
 #include "readiness.h"
 
 #include "health_check.h"
+#include "service_status.h"
 
 #include <algorithm>
 #include <utility>
@@ -17,16 +18,18 @@ readiness_result_t process_exited(HANDLE process) {
           std::move(result.detail)};
 }
 
-void report_start_pending(SERVICE_STATUS_HANDLE status_handle,
+bool report_start_pending(SERVICE_STATUS_HANDLE status_handle,
                           SERVICE_STATUS *status, unsigned long wait_hint,
                           SRWLOCK *status_lock) {
-  if (! status_handle || ! status) return;
+  if (! status_handle || ! status) return true;
   if (status_lock) AcquireSRWLockExclusive(status_lock);
   status->dwCurrentState = SERVICE_START_PENDING;
   status->dwWaitHint = std::max<unsigned long>(wait_hint, 1000);
   ++status->dwCheckPoint;
-  SetServiceStatus(status_handle, status);
+  const bool reported = report_service_status(
+      status_handle, status, L"", L"reporting readiness progress");
   if (status_lock) ReleaseSRWLockExclusive(status_lock);
+  return reported;
 }
 
 bool wait_interval(HANDLE process, HANDLE cancellation_event,
@@ -72,8 +75,11 @@ readiness_result_t wait_for_readiness(
   const unsigned long long started = GetTickCount64();
   const unsigned long long deadline = started + config.startup_timeout_ms;
   if (config.probe.initial_delay_ms) {
-    report_start_pending(status_handle, service_status,
-                         config.probe.initial_delay_ms, status_lock);
+    if (! report_start_pending(status_handle, service_status,
+                               config.probe.initial_delay_ms, status_lock)) {
+      return {readiness_state_t::error, GetLastError(),
+              L"reporting readiness progress to SCM failed"};
+    }
     readiness_result_t failure;
     if (! wait_interval(application_process, cancellation_event,
                         config.probe.initial_delay_ms, &failure)) {
@@ -97,8 +103,11 @@ readiness_result_t wait_for_readiness(
     unsigned long remaining = static_cast<unsigned long>(deadline - now);
     unsigned long wait_hint = std::min<unsigned long>(
         remaining, config.probe.timeout_ms + config.probe.interval_ms + 1000);
-    report_start_pending(status_handle, service_status, wait_hint,
-                         status_lock);
+    if (! report_start_pending(status_handle, service_status, wait_hint,
+                               status_lock)) {
+      return {readiness_state_t::error, GetLastError(),
+              L"reporting readiness progress to SCM failed"};
+    }
 
     health_check_config_t probe = config.probe;
     probe.timeout_ms = std::min(probe.timeout_ms, remaining);

@@ -12,6 +12,7 @@
 #include "service.h"
 #include "service_config.h"
 #include "service_constants.h"
+#include "service_status.h"
 #include "service_wait.h"
 #include "status_snapshot.h"
 #include "recovery.h"
@@ -61,7 +62,8 @@ template <typename Mutator>
 void update_service_status(nssm_service_t *service, Mutator mutator) {
   AcquireSRWLockExclusive(&service->status_lock);
   mutator(service->status);
-  SetServiceStatus(service->status_handle, &service->status);
+  report_service_status(service->status_handle, &service->status,
+                        service->name, L"updating service state");
   ReleaseSRWLockExclusive(&service->status_lock);
 }
 
