@@ -1,32 +1,5 @@
 #include "nssm.h"
 
-static int service_registry_path(const TCHAR *service_name, const TCHAR *sub, TCHAR *buffer, unsigned long buflen) {
-  if (sub) return _sntprintf_s(buffer, buflen, _TRUNCATE, NSSM_REGISTRY _T("\\") NSSM_REG_PARAMETERS _T("\\%s"), service_name, sub);
-  return _sntprintf_s(buffer, buflen, _TRUNCATE, NSSM_REGISTRY _T("\\") NSSM_REG_PARAMETERS, service_name);
-}
-
-static long open_registry_key(const TCHAR *registry, REGSAM sam, HKEY *key, bool must_exist) {
-  long error;
-
-  if (sam & KEY_SET_VALUE) {
-    error = RegCreateKeyEx(HKEY_LOCAL_MACHINE, registry, 0, 0, REG_OPTION_NON_VOLATILE, sam, 0, key, 0);
-    if (error != ERROR_SUCCESS) {
-      *key = 0;
-      log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_OPENKEY_FAILED, registry, error_string(error), 0);
-      return error;
-    }
-  }
-  else {
-    error = RegOpenKeyEx(HKEY_LOCAL_MACHINE, registry, 0, sam, key);
-    if (error != ERROR_SUCCESS) {
-      *key = 0;
-      if (error != ERROR_FILE_NOT_FOUND || must_exist) log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_OPENKEY_FAILED, registry, error_string(error), 0);
-    }
-  }
-
-  return error;
-}
-
 int create_messages() {
   HKEY key;
 
@@ -53,61 +26,6 @@ int create_messages() {
   RegCloseKey(key);
   return 0;
 }
-
-int get_string(HKEY key, TCHAR *value, TCHAR *data, unsigned long datalen, bool expand, bool sanitise, bool must_exist) {
-  TCHAR *buffer = (TCHAR *) HeapAlloc(GetProcessHeap(), 0, datalen);
-  if (! buffer) {
-    log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_OUT_OF_MEMORY, value, _T("get_string()"), 0);
-    return 1;
-  }
-
-  ZeroMemory(data, datalen);
-
-  unsigned long type = REG_EXPAND_SZ;
-  unsigned long buflen = datalen;
-
-  unsigned long ret = RegQueryValueEx(key, value, 0, &type, (unsigned char *) buffer, &buflen);
-  if (ret != ERROR_SUCCESS) {
-    HeapFree(GetProcessHeap(), 0, buffer);
-
-    if (ret == ERROR_FILE_NOT_FOUND) {
-      if (! must_exist) return 0;
-    }
-
-    log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_QUERYVALUE_FAILED, value, error_string(ret), 0);
-    return 2;
-  }
-
-  /* Paths aren't allowed to contain quotes. */
-  if (sanitise) PathUnquoteSpaces(buffer);
-
-  /* Do we want to expand the string? */
-  if (! expand) {
-    if (type == REG_EXPAND_SZ) type = REG_SZ;
-  }
-
-  /* Technically we shouldn't expand environment strings from REG_SZ values */
-  if (type != REG_EXPAND_SZ) {
-    memmove(data, buffer, buflen);
-    HeapFree(GetProcessHeap(), 0, buffer);
-    return 0;
-  }
-
-  ret = ExpandEnvironmentStrings((TCHAR *) buffer, data, datalen);
-  if (! ret || ret > datalen) {
-    log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_EXPANDENVIRONMENTSTRINGS_FAILED, buffer, error_string(GetLastError()), 0);
-    HeapFree(GetProcessHeap(), 0, buffer);
-    return 3;
-  }
-
-  HeapFree(GetProcessHeap(), 0, buffer);
-  return 0;
-}
-
-int expand_parameter(HKEY key, TCHAR *value, TCHAR *data, unsigned long datalen, bool sanitise, bool must_exist) {
-  return get_string(key, value, data, datalen, true, sanitise, must_exist);
-}
-
 /* Copy a block. */
 int copy_double_null(TCHAR *dn, unsigned long dnlen, TCHAR **newdn) {
   if (! newdn) return 1;
@@ -194,7 +112,6 @@ int append_to_double_null(TCHAR *dn, unsigned long dnlen, TCHAR **newdn, unsigne
   HeapFree(GetProcessHeap(), 0, key);
   return 0;
 }
-
 /*
   Create a new block with all the string of the first block minus the given
   string.
@@ -253,42 +170,4 @@ int remove_from_double_null(TCHAR *dn, unsigned long dnlen, TCHAR **newdn, unsig
 
   HeapFree(GetProcessHeap(), 0, key);
   return 0;
-}
-
-/* Open a subkey of the service Services\<service_name>\<sub>. */
-long open_registry(const TCHAR *service_name, const TCHAR *sub, REGSAM sam, HKEY *key, bool must_exist) {
-  if (key) *key = 0;
-  /* Get registry */
-  TCHAR registry[KEY_LENGTH];
-  if (service_registry_path(service_name, sub, registry, _countof(registry)) < 0) {
-    log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_OUT_OF_MEMORY, NSSM_REGISTRY, _T("open_registry()"), 0);
-    return ERROR_OUTOFMEMORY;
-  }
-
-  return open_registry_key(registry, sam, key, must_exist);
-}
-
-int get_hook(const TCHAR *service_name, const TCHAR *hook_event, const TCHAR *hook_action, TCHAR *buffer, unsigned long buflen) {
-  /* Try to open the registry */
-  TCHAR registry[KEY_LENGTH];
-  if (_sntprintf_s(registry, _countof(registry), _TRUNCATE, _T("%s\\%s"), NSSM_REG_HOOK, hook_event) < 0) {
-    log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_OUT_OF_MEMORY, _T("hook registry"), _T("get_hook()"), 0);
-    return 1;
-  }
-  HKEY key;
-  long error = open_registry(service_name, registry, KEY_READ, &key, false);
-  if (! key) {
-    if (error == ERROR_FILE_NOT_FOUND) {
-      ZeroMemory(buffer, buflen);
-      return 0;
-    }
-    return 1;
-  }
-
-  int ret = expand_parameter(key, (TCHAR *) hook_action, buffer, buflen, true, false);
-
-  /* Close registry */
-  RegCloseKey(key);
-
-  return ret;
 }

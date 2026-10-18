@@ -13,7 +13,6 @@ const TCHAR *exit_action_strings[] = { _T("Restart"), _T("Ignore"), _T("Exit"), 
 const TCHAR *startup_strings[] = { _T("SERVICE_AUTO_START"), _T("SERVICE_DELAYED_AUTO_START"), _T("SERVICE_DEMAND_START"), _T("SERVICE_DISABLED"), 0 };
 const TCHAR *priority_strings[] = { _T("REALTIME_PRIORITY_CLASS"), _T("HIGH_PRIORITY_CLASS"), _T("ABOVE_NORMAL_PRIORITY_CLASS"), _T("NORMAL_PRIORITY_CLASS"), _T("BELOW_NORMAL_PRIORITY_CLASS"), _T("IDLE_PRIORITY_CLASS"), 0 };
 
-static hook_thread_t hook_threads = { NULL, 0 };
 static constexpr int kStartHandledByRecovery = -1;
 
 /*
@@ -110,25 +109,6 @@ static inline int await_service_control_response(unsigned long control, SC_HANDL
 
 static inline int await_service_control_response(unsigned long control, SC_HANDLE service_handle, SERVICE_STATUS *service_status, unsigned long initial_status) {
   return await_service_control_response(control, service_handle, service_status, initial_status, 0);
-}
-
-static inline void wait_for_hooks(nssm_service_t *service, bool notify) {
-  SERVICE_STATUS_HANDLE status_handle;
-  SERVICE_STATUS *status;
-
-  /* On a clean shutdown we need to keep the service's status up-to-date. */
-  if (notify) {
-    status_handle = service->status_handle;
-    status = &service->status;
-  }
-  else {
-    status_handle = NULL;
-    status = NULL;
-  }
-
-  EnterCriticalSection(&service->hook_section);
-  await_hook_threads(&hook_threads, status_handle, status, NSSM_HOOK_THREAD_DEADLINE);
-  LeaveCriticalSection(&service->hook_section);
 }
 
 static inline unsigned long throttle_milliseconds(unsigned long throttle) {
@@ -681,7 +661,6 @@ void cleanup_nssm_service(nssm_service_t *service) {
   if (service->job_handle) CloseHandle(service->job_handle);
   if (service->wait_handle) UnregisterWait(service->wait_handle);
   if (service->throttle_section_initialised) DeleteCriticalSection(&service->throttle_section);
-  if (service->hook_section_initialised) DeleteCriticalSection(&service->hook_section);
   if (service->health_section_initialised) DeleteCriticalSection(&service->health_section);
   if (service->resource_section_initialised) DeleteCriticalSection(&service->resource_section);
   if (service->initial_env) HeapFree(GetProcessHeap(), 0, service->initial_env);
@@ -944,10 +923,6 @@ void WINAPI service_main(unsigned long argc, TCHAR **argv) {
   InitializeConditionVariable(&service->throttle_condition);
   service->throttle_section_initialised = true;
 
-  /* Critical section for hooks. */
-  InitializeCriticalSection(&service->hook_section);
-  service->hook_section_initialised = true;
-
   /* Serialise health monitor startup and shutdown with process exit. */
   InitializeCriticalSection(&service->health_section);
   service->health_section_initialised = true;
@@ -1094,6 +1069,7 @@ void log_service_control(TCHAR *service_name, unsigned long control, bool handle
 
 /* Service control handler */
 unsigned long WINAPI service_control_handler(unsigned long control, unsigned long event, void *data, void *context) {
+  (void) event;
   (void) data;
   nssm_service_t *service = (nssm_service_t *) context;
 
@@ -1113,9 +1089,6 @@ unsigned long WINAPI service_control_handler(unsigned long control, unsigned lon
       service->status.dwCurrentState = SERVICE_STOP_PENDING;
       service->status.dwControlsAccepted = 0;
       SetServiceStatus(service->status_handle, &service->status);
-
-      /* Pre-stop hook. */
-      nssm_hook(&hook_threads, service, NSSM_HOOK_EVENT_STOP, NSSM_HOOK_ACTION_PRE, &control, NSSM_SERVICE_STATUS_DEADLINE, false);
 
       /*
         We MUST acknowledge the stop request promptly but we're committed to
@@ -1160,29 +1133,8 @@ unsigned long WINAPI service_control_handler(unsigned long control, unsigned lon
     case NSSM_SERVICE_CONTROL_ROTATE:
       service->last_control = control;
       log_service_control(service->name, control, true);
-      (void) nssm_hook(&hook_threads, service, NSSM_HOOK_EVENT_ROTATE, NSSM_HOOK_ACTION_PRE, &control, NSSM_HOOK_DEADLINE, false);
       if (service->rotate_stdout_online == NSSM_ROTATE_ONLINE) service->rotate_stdout_online = NSSM_ROTATE_ONLINE_ASAP;
       if (service->rotate_stderr_online == NSSM_ROTATE_ONLINE) service->rotate_stderr_online = NSSM_ROTATE_ONLINE_ASAP;
-      (void) nssm_hook(&hook_threads, service, NSSM_HOOK_EVENT_ROTATE, NSSM_HOOK_ACTION_POST, &control);
-      return NO_ERROR;
-
-    case SERVICE_CONTROL_POWEREVENT:
-      /* Resume from suspend. */
-      if (event == PBT_APMRESUMEAUTOMATIC) {
-        service->last_control = control;
-        log_service_control(service->name, control, true);
-        (void) nssm_hook(&hook_threads, service, NSSM_HOOK_EVENT_POWER, NSSM_HOOK_ACTION_RESUME, &control);
-        return NO_ERROR;
-      }
-
-      /* Battery low or changed to A/C power or something. */
-      if (event == PBT_APMPOWERSTATUSCHANGE) {
-        service->last_control = control;
-        log_service_control(service->name, control, true);
-        (void) nssm_hook(&hook_threads, service, NSSM_HOOK_EVENT_POWER, NSSM_HOOK_ACTION_CHANGE, &control);
-        return NO_ERROR;
-      }
-      log_service_control(service->name, control, false);
       return NO_ERROR;
   }
 
@@ -1201,8 +1153,6 @@ int start_service(nssm_service_t *service) {
   else service->stopping = false;
 
   if (service->process_handle) return 0;
-  service->start_requested_count++;
-
   /* Allocate a STARTUPINFO structure for a new process */
   STARTUPINFO si;
   ZeroMemory(&si, sizeof(si));
@@ -1233,10 +1183,8 @@ int start_service(nssm_service_t *service) {
   throttle_restart(service);
 
   service->status.dwCurrentState = SERVICE_START_PENDING;
-  service->status.dwControlsAccepted = SERVICE_ACCEPT_POWEREVENT | SERVICE_ACCEPT_SHUTDOWN | SERVICE_ACCEPT_STOP;
+  service->status.dwControlsAccepted = SERVICE_ACCEPT_SHUTDOWN | SERVICE_ACCEPT_STOP;
   SetServiceStatus(service->status_handle, &service->status);
-
-  unsigned long control = NSSM_SERVICE_CONTROL_START;
 
   /* Did another thread receive a stop control? */
   if (service->allow_restart) {
@@ -1248,14 +1196,6 @@ int start_service(nssm_service_t *service) {
       return stop_service(service, 4, true, true);
     }
     FreeConsole();
-
-    /* Pre-start hook. May need I/O to have been redirected already. */
-    if (nssm_hook(&hook_threads, service, NSSM_HOOK_EVENT_START, NSSM_HOOK_ACTION_PRE, &control, NSSM_SERVICE_STATUS_DEADLINE, false) == NSSM_HOOK_STATUS_ABORT) {
-      TCHAR code[16];
-      _sntprintf_s(code, _countof(code), _TRUNCATE, _T("%lu"), NSSM_HOOK_STATUS_ABORT);
-      log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_PRESTART_HOOK_ABORT, NSSM_HOOK_EVENT_START, NSSM_HOOK_ACTION_PRE, service->name, code, 0);
-      return stop_service(service, 5, true, true);
-    }
 
     bool inherit_handles = false;
     if (si.dwFlags & STARTF_USESTDHANDLES) inherit_handles = true;
@@ -1295,7 +1235,6 @@ int start_service(nssm_service_t *service) {
       service->job_handle = 0;
       return stop_service(service, exitcode, true, true);
     }
-    service->start_count++;
     service->process_handle = pi.hProcess;
     service->pid = pi.dwProcessId;
     service->process_started_ms = GetTickCount64();
@@ -1407,11 +1346,6 @@ int start_service(nssm_service_t *service) {
   SetServiceStatus(service->status_handle, &service->status);
   publish_status_snapshot(service);
 
-  /* Post-start hook. */
-  if (! service->throttle) {
-    (void) nssm_hook(&hook_threads, service, NSSM_HOOK_EVENT_START, NSSM_HOOK_ACTION_POST, &control);
-  }
-
   /* Ensure the restart delay is always applied. */
   if (service->restart_delay && ! service->throttle) service->throttle++;
 
@@ -1456,7 +1390,6 @@ int stop_service(nssm_service_t *service, unsigned long exitcode, bool graceful,
   /* Signal we stopped */
   if (graceful) {
     service->status.dwCurrentState = SERVICE_STOP_PENDING;
-    wait_for_hooks(service, true);
     service->status.dwCurrentState = SERVICE_STOPPED;
     if (exitcode) {
       service->status.dwWin32ExitCode = ERROR_SERVICE_SPECIFIC_ERROR;
@@ -1537,10 +1470,6 @@ void CALLBACK end_service(void *arg, unsigned char why) {
   }
   service->pid = 0;
   publish_status_snapshot(service);
-
-  /* Exit hook. */
-  service->exit_count++;
-  (void) nssm_hook(&hook_threads, service, NSSM_HOOK_EVENT_EXIT, NSSM_HOOK_ACTION_POST, NULL, NSSM_HOOK_DEADLINE, true);
 
   /* Exit logging threads. */
   cleanup_loggers(service);

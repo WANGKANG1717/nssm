@@ -630,36 +630,6 @@ Language = Chinese
 .
 
 MessageId = +1
-SymbolicName = NSSM_MESSAGE_INVALID_HOOK_EVENT
-Severity = Informational
-Language = English
-Invalid hook event.  Valid hook events are:
-.
-Language = Chinese
-无效的钩子事件。可用事件有：
-.
-
-MessageId = +1
-SymbolicName = NSSM_MESSAGE_INVALID_HOOK_ACTION
-Severity = Informational
-Language = English
-Invalid hook action for event %s.  Valid hook actions are:
-.
-Language = Chinese
-事件 %s 的钩子动作无效。可用动作有：
-.
-
-MessageId = +1
-SymbolicName = NSSM_MESSAGE_INVALID_HOOK_NAME
-Severity = Informational
-Language = English
-Invalid hook name.  Names should be specified in the form <event>/<action>.
-.
-Language = Chinese
-无效的钩子名称。名称格式应为 <事件>/<动作>。
-.
-
-MessageId = +1
 SymbolicName = NSSM_MESSAGE_INVALID_USERNAME
 Severity = Informational
 Language = English
@@ -1788,40 +1758,4 @@ Next update in %4 milliseconds.
 Language = Chinese
 %1 已等待 %3/%5 毫秒以等待句柄 %2。
 下一次更新在 %4 毫秒后。
-.
-
-MessageId = +1
-SymbolicName = NSSM_EVENT_PRESTART_HOOK_ABORT
-Severity = Informational
-Language = English
-The %1/%2 hook for service %3 returned exit code %4.
-Service startup will be aborted.
-.
-Language = Chinese
-服务 %3 的 %1/%2 钩子返回退出码 %4。
-服务启动将被中止。
-.
-
-MessageId = +1
-SymbolicName = NSSM_EVENT_HOOK_CREATEPROCESS_FAILED
-Severity = Informational
-Language = English
-Failed to run %1/%2 hook for service %3.  Program %4 couldn't be launched.
-CreateProcess() failed:
-%5
-.
-Language = Chinese
-运行服务 %3 的 %1/%2 钩子失败。无法启动程序 %4。
-CreateProcess() 失败：
-%5
-.
-
-MessageId = +1
-SymbolicName = NSSM_EVENT_GET_HOOK_FAILED
-Severity = Informational
-Language = English
-Failed to find a command for the %1/%2 hook for service %3 in the registry.
-.
-Language = Chinese
-在注册表中未找到服务 %3 的 %1/%2 钩子命令。
 .

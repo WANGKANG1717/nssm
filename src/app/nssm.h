@@ -53,7 +53,6 @@ static_assert(sizeof(TCHAR) == sizeof(wchar_t));
 #include "console.h"
 #include "env.h"
 #include "event.h"
-#include "hook.h"
 #include "messages.h"
 #include "process.h"
 #include "process_options.h"
@@ -135,12 +134,6 @@ const TCHAR *nssm_exe();
 /* User-defined service controls can be in the range 128-255. */
 #define NSSM_SERVICE_CONTROL_START 0
 #define NSSM_SERVICE_CONTROL_ROTATE 128
-
-/* How many milliseconds to wait for a hook. */
-#define NSSM_HOOK_DEADLINE 60000
-
-/* How many milliseconds to wait for outstanding hooks. */
-#define NSSM_HOOK_THREAD_DEADLINE 80000
 
 /* How many milliseconds to wait for closing logging thread. */
 #define NSSM_CLEANUP_LOGGERS_DEADLINE 1500

@@ -92,7 +92,6 @@ set(NSSM_SUPERVISOR_SOURCES
   src/supervisor/monitoring/resource_monitor.cpp
   src/supervisor/monitoring/status_snapshot.cpp
   src/supervisor/runtime/account.cpp
-  src/supervisor/runtime/hook.cpp
   src/supervisor/runtime/nssm_io.cpp
   src/supervisor/runtime/recovery.cpp
   src/supervisor/runtime/service.cpp

@@ -86,7 +86,6 @@ typedef struct nssm_service_t {
   HANDLE stderr_pipe;
   HANDLE stderr_thread;
   unsigned long stderr_tid;
-  bool hook_share_output_handles;
   bool rotate_files;
   bool timestamp_log;
   bool stdout_copy_and_truncate;
@@ -118,8 +117,6 @@ typedef struct nssm_service_t {
   unsigned long throttle;
   CRITICAL_SECTION throttle_section;
   bool throttle_section_initialised;
-  CRITICAL_SECTION hook_section;
-  bool hook_section_initialised;
   CRITICAL_SECTION health_section;
   bool health_section_initialised;
   HANDLE health_stop_event;
@@ -144,9 +141,6 @@ typedef struct nssm_service_t {
   FILETIME exit_time;
   TCHAR *initial_env;
   unsigned long last_control;
-  unsigned long start_requested_count;
-  unsigned long start_count;
-  unsigned long exit_count;
   unsigned long next_restart_delay_ms;
   unsigned long long process_started_ms;
 } nssm_service_t;

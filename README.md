@@ -128,7 +128,7 @@ src/
   supervisor/
     process/     子进程、Job Object 和进程树终止
     monitoring/  Readiness、Health Check、资源监控与快照
-    runtime/     服务状态机、恢复、Hooks 和日志
+    runtime/     服务状态机、恢复和日志
   platform/     Windows API、注册表、安全、事件日志与编码
 resources/      版本信息、消息目录、图标和 manifest
 tests/          单元测试、样例配置和 SCM 集成测试

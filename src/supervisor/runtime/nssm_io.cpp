@@ -310,29 +310,6 @@ int get_output_handles(nssm_service_t *service, STARTUPINFO *si) {
   return 0;
 }
 
-/* Reuse output handles for a hook. */
-int use_output_handles(nssm_service_t *service, STARTUPINFO *si) {
-  si->dwFlags &= ~STARTF_USESTDHANDLES;
-
-  if (service->stdout_si) {
-    if (dup_handle(service->stdout_si, &si->hStdOutput, _T("stdout_pipe"), _T("hStdOutput"))) return 1;
-    si->dwFlags |= STARTF_USESTDHANDLES;
-  }
-
-  if (service->stderr_si) {
-    if (dup_handle(service->stderr_si, &si->hStdError, _T("stderr_pipe"), _T("hStdError"))) {
-      if (si->hStdOutput) {
-        si->dwFlags &= ~STARTF_USESTDHANDLES;
-        CloseHandle(si->hStdOutput);
-      }
-      return 2;
-    }
-    si->dwFlags |= STARTF_USESTDHANDLES;
-  }
-
-  return 0;
-}
-
 void close_output_handles(STARTUPINFO *si) {
   if (si->hStdInput) CloseHandle(si->hStdInput);
   if (si->hStdOutput) CloseHandle(si->hStdOutput);
