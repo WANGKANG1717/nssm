@@ -27,16 +27,6 @@
 */
 #include "windows_limits.h"
 
-#ifndef WINVER
-#define WINVER 0x0A00
-#endif
-#ifndef _WIN32_WINNT
-#define _WIN32_WINNT 0x0A00
-#endif
-#ifndef NTDDI_VERSION
-#define NTDDI_VERSION 0x0A000000
-#endif
-
 #include <windows.h>
 #include <tchar.h>
 #ifndef NSSM_COMPILE_RC
