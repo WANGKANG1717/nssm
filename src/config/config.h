@@ -192,10 +192,6 @@ bool parse_service_config(const char *json, size_t length,
                           config_validation_t *validation);
 bool load_service_config(const wchar_t *path, service_config_t *config,
                          config_validation_t *validation);
-int validate_service_config_command(int argc, wchar_t **argv);
-int apply_service_config_command(int argc, wchar_t **argv);
-int plan_service_config_command(int argc, wchar_t **argv);
-int export_service_config_command(int argc, wchar_t **argv);
 bool registered_service_config_path(const wchar_t *service_name,
                                     std::wstring *path,
                                     unsigned long *error);

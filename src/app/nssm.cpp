@@ -1,5 +1,6 @@
 #include "nssm.h"
 #include "child_process.h"
+#include "config_commands.h"
 #include "console.h"
 #include "event.h"
 #include "messages.h"
