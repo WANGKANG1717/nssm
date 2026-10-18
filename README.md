@@ -3,8 +3,9 @@
 NSSM 是一个将任意可执行程序作为 Windows 服务运行并进行管理的工具，提供安装/编辑/移除、启动/停止/重启、I/O 重定向、环境变量与工作目录等能力。
 
 ## 兼容性说明
-- 最低支持系统：Windows 7（`_WIN32_WINNT=0x0601`）。
-- 交互式服务（`SERVICE_INTERACTIVE_PROCESS`，“与桌面交互”）在 Win7+ 已不再作为可用能力，GUI 中已移除相关选项。
+- 最低支持系统：Windows 10（`_WIN32_WINNT=0x0A00`）。
+- 仅提供 x64 构建，不再支持 32 位 Windows。
+- 交互式服务（`SERVICE_INTERACTIVE_PROCESS`，“与桌面交互”）在现代 Windows 中已不再作为可用能力，GUI 中已移除相关选项。
 
 ![NSSM 界面](doc/界面.png)
 
@@ -12,52 +13,60 @@ NSSM 是一个将任意可执行程序作为 Windows 服务运行并进行管理
 本仓库基于 NSSM 原作（作者 Iain Patterson，上游网站：[nssm.cc](https://nssm.cc/)），遵循 Public Domain 许可。
 在原版基础上主要进行了以下维护与增强：
 - 版本信息升级到 `3.0.0`（`version.h`）。
-- 最低系统基线明确为 Windows 7（`_WIN32_WINNT=0x0601`）。
+- 最低系统基线升级为 Windows 10（`_WIN32_WINNT=0x0A00`），仅构建 x64。
 - 清理并修复多处稳定性问题（句柄泄漏、内存释放一致性、边界/指针判断、注册表类型校验等）。
 - 服务类型与现代 Windows 行为对齐：不再使用交互式服务类型，统一按 `SERVICE_WIN32_OWN_PROCESS` 处理。
-- GUI 调整：移除 Win7+ 无效的“与桌面交互”选项，避免误导。
+- GUI 调整：移除现代 Windows 中无效的“与桌面交互”选项，避免误导。
 - 中文文案持续校对与统一（GUI 与 `messages.mc`），修复中英混杂和术语不一致问题。
-- 构建链路完善：补充并验证 32/64 位 Release 构建流程与 CI 工作流。
+- 构建链路迁移到 CMake、Ninja 和 MinGW-w64 GCC 14+，统一使用 C++20。
+- Windows 消息与资源分别由 `windmc` 和 `windres` 编译，不依赖 Visual Studio。
+- MinGW 运行库静态链接；Windows 系统库仍使用系统提供的 DLL。
 
 核心功能与命令行参数保持与原版兼容；如需原版发布与英文文档，请参见上游站点。
 
 ## 构建方式
-### 1) GitHub Actions（推荐，手动触发）
-仓库已提供工作流：`.github/workflows/build.yml`。默认同时构建 32 位和 64 位 Release 版本，并收集产物到 GitHub Artifacts。
+### 1) 本地构建
 
-触发方式：
-1. Push 代码到仓库。
-2. 在 GitHub 仓库的 “Actions” 标签页，选择 “Build NSSM” 工作流。
-3. 点击 “Run workflow” 手动运行。
-4. 构建完成后，在该运行记录页面下载 `nssm-win32-Release` 和 `nssm-win64-Release` 工件（包含 `.exe` 和 `.dll` 文件）。
+不需要安装 Visual Studio。请准备以下 x64 UCRT 工具，且确保它们位于 `PATH`：
 
-主要步骤（简述）：
-- Checkout 代码
-- 定位 VS 并获取 `devenv.com`
-- `devenv nssm.sln /Upgrade` 升级旧工程（VS2008 `.vcproj`）
-- 使用 matrix 策略并行构建 win32 和 win64 平台（每个平台独立执行 `msbuild nssm.sln /p:Configuration=Release /p:Platform=win32|win64 /m`）
-- 分别收集 `out\Release\win32\*` 和 `out\Release\win64\*` 并上传 Artifacts
+- MinGW-w64 GCC/G++ 14 或更高版本
+- CMake 3.25 或更高版本
+- Ninja
+- GNU Binutils（必须包含 `windmc`、`windres` 和 `objdump`）
 
-### 2) 本地构建（手动）
-前置条件：Windows + 安装 Visual Studio（建议 2019/2022，含 C++ 桌面开发组件）。
+使用 MSYS2 时，可在 UCRT64 终端安装工具：
 
-步骤：
-1. 在 VS 开发者命令行中进入仓库根目录（构建 32 位使用 "x86 Native Tools Command Prompt"，构建 64 位使用 "x64 Native Tools Command Prompt"）。
-2. 升级解决方案（仅首次或工程更新后执行）：
-   ```cmd
-   "<VS安装路径>\Common7\IDE\devenv.com" nssm.sln /Upgrade
-   ```
-3. 使用 MSBuild 构建（32 位或 64 位 Release）：
-   ```cmd
-   REM 构建 32 位版本
-   msbuild.exe nssm.sln /p:Configuration=Release /p:Platform=win32 /m
-   
-   REM 构建 64 位版本
-   msbuild.exe nssm.sln /p:Configuration=Release /p:Platform=win64 /m
-   ```
-4. 产物位置：
-   - 32 位：`out\Release\win32\`
-   - 64 位：`out\Release\win64\`
+```sh
+pacman -S --needed mingw-w64-ucrt-x86_64-gcc \
+  mingw-w64-ucrt-x86_64-cmake \
+  mingw-w64-ucrt-x86_64-ninja \
+  mingw-w64-ucrt-x86_64-binutils
+```
+
+在 PowerShell 或 UCRT64 终端中构建并测试：
+
+```powershell
+cmake --preset mingw-debug
+cmake --build --preset mingw-debug
+ctest --preset mingw-debug
+
+cmake --preset mingw-release
+cmake --build --preset mingw-release
+ctest --preset mingw-release
+```
+
+产物分别位于 `out\Debug\win64\nssm.exe` 和 `out\Release\win64\nssm.exe`。
+
+本仓库开发环境还可将便携 MSYS2 放在被 Git 忽略的 `.tools\msys64`，然后在 PowerShell 中临时启用：
+
+```powershell
+$toolBin = (Resolve-Path '.tools\msys64\ucrt64\bin').Path
+$env:PATH = "$toolBin;$env:PATH"
+```
+
+### 2) GitHub Actions
+
+`.github/workflows/build.yml` 会在 push、pull request 或手动触发时，使用 MSYS2 UCRT64 分别构建和测试 Debug、Release。工作流还会验证产物是 x64 PE，并检查其没有动态依赖 `libgcc`、`libstdc++` 或 `libwinpthread`，最后上传 `nssm-win64-Debug` 和 `nssm-win64-Release` 工件。
 
 ## 使用与命令（摘要）
 参考官方命令行文档整理要点，详情见：[nssm commands](https://nssm.cc/commands)。
@@ -139,7 +148,7 @@ NSSM 是一个将任意可执行程序作为 Windows 服务运行并进行管理
   - 原生属性：
     - 依赖：`DependOnService` / `DependOnGroup`
     - 启动类型：`Start`（AUTO/DELAYED_AUTO/DEMAND/DISABLED）
-    - 类型：`Type`（仅 `WIN32_OWN_PROCESS`；`INTERACTIVE_PROCESS` 在 Win7+ 不作为受支持配置）
+    - 类型：`Type`（仅 `WIN32_OWN_PROCESS`；`INTERACTIVE_PROCESS` 不作为受支持配置）
 
 - 其他命令
   - 列出所有 NSSM 管理的服务：`nssm list`
@@ -177,7 +186,7 @@ NSSM 是一个将任意可执行程序作为 Windows 服务运行并进行管理
 ### 退出操作
 - 为默认或特定退出码配置操作：重启/忽略/退出（一次性模式）/假崩溃（遗留兼容）。
 - 常见项：`AppExit Default Restart|Ignore|Exit`，以及针对码值的映射。
-  - 说明：`假崩溃（遗留兼容）` 对应 `Suicide`，用于兼容历史恢复策略；在 Win7+ 仍可用，但通常不建议作为首选策略。
+  - 说明：`假崩溃（遗留兼容）` 对应 `Suicide`，用于兼容历史恢复策略；在 Windows 10+ 仍可用，但通常不建议作为首选策略。
 
 ### I/O
 - 作用：将服务进程的标准输出(stdout)与标准错误(stderr)写入到文件，便于排查问题。
