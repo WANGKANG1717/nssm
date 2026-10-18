@@ -263,7 +263,7 @@ int _tmain(int argc, TCHAR **argv) {
   if (argc > 1) {
     /*
       Valid commands are:
-      validate, plan, apply, start, stop, restart, pause, continue, remove, status,
+      validate, plan, apply, export, start, stop, restart, pause, continue, remove, status,
       statuscode, rotate, list, processes, version
     */
     if (is_version(argv[1])) {
@@ -275,6 +275,9 @@ int _tmain(int argc, TCHAR **argv) {
     }
     if (str_equiv(argv[1], _T("plan"))) {
       nssm_exit(plan_service_config_command(argc - 2, argv + 2));
+    }
+    if (str_equiv(argv[1], _T("export"))) {
+      nssm_exit(export_service_config_command(argc - 2, argv + 2));
     }
     if (str_equiv(argv[1], _T("apply"))) {
       if (! is_admin) {

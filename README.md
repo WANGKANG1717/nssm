@@ -137,6 +137,7 @@ ctest --preset mingw-release
 nssm validate --json .\service.json
 nssm plan --json .\service.json
 nssm apply --json .\service.json
+nssm export --json MyService .\backup\MyService.json
 ```
 
 `plan` 只读取 JSON、ACL 和 SCM，不修改系统；结果为 `create`、`update` 或
@@ -146,6 +147,11 @@ nssm apply --json .\service.json
 `6` 路径安全审计失败。
 JSON 模式不会弹出 UAC 提权窗口；权限不足时直接返回退出码 `3` 和结构化错误，
 便于 CI/CD 做出确定性判断。
+
+`export` 从 SCM 中登记的 `ConfigPath` 读取并重新校验配置，再通过同目录临时文件、
+`FlushFileBuffers` 和原子替换写入目标，目标路径已有文件时不会出现“只写了一半”的
+状态。配置 schema 目前严格固定为 `1`；项目尚未投入生产，因此不保留或猜测旧
+schema 的兼容迁移。
 
 声明式配置的安全基线默认等价于：
 

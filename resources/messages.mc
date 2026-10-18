@@ -20,6 +20,8 @@ To validate or apply a declarative JSON configuration:
 
         nssm apply [--json] <config.json>
 
+        nssm export [--json] <servicename> <destination.json>
+
 To show service removal GUI:
 
         nssm remove [<servicename>]
@@ -53,6 +55,7 @@ NSSM：稳定可靠的服务管理器
   验证配置：nssm validate <配置文件.json>
   预览变更：nssm plan [--json] <配置文件.json>
   安装或更新：nssm apply [--json] <配置文件.json>
+  原子导出：nssm export [--json] <服务名> <目标文件.json>
 
   移除（GUI）: nssm remove [<服务名>]
   移除（直接）: nssm remove <服务名> confirm

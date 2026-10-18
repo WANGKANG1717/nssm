@@ -372,7 +372,81 @@ std::vector<std::wstring> config_changes(const service_config_t &current,
   return changes;
 }
 
+bool atomic_copy_file(const std::wstring &source,
+                      const std::wstring &destination,
+                      unsigned long *error) {
+  std::wstring temporary = destination + L".tmp." +
+                           std::to_wstring(GetCurrentProcessId());
+  DeleteFileW(temporary.c_str());
+  if (! CopyFileW(source.c_str(), temporary.c_str(), TRUE)) {
+    if (error) *error = GetLastError();
+    return false;
+  }
+  HANDLE file = CreateFileW(temporary.c_str(), GENERIC_READ | GENERIC_WRITE,
+                            FILE_SHARE_READ, nullptr, OPEN_EXISTING,
+                            FILE_ATTRIBUTE_NORMAL, nullptr);
+  if (file == INVALID_HANDLE_VALUE) {
+    if (error) *error = GetLastError();
+    DeleteFileW(temporary.c_str());
+    return false;
+  }
+  bool flushed = FlushFileBuffers(file) != FALSE;
+  unsigned long flush_error = flushed ? ERROR_SUCCESS : GetLastError();
+  CloseHandle(file);
+  if (! flushed || ! MoveFileExW(temporary.c_str(), destination.c_str(),
+                                  MOVEFILE_REPLACE_EXISTING |
+                                      MOVEFILE_WRITE_THROUGH)) {
+    if (error) *error = flushed ? GetLastError() : flush_error;
+    DeleteFileW(temporary.c_str());
+    return false;
+  }
+  if (error) *error = ERROR_SUCCESS;
+  return true;
+}
+
 }  // namespace
+
+int export_service_config_command(int argc, wchar_t **argv) {
+  cli_arguments_t arguments = parse_cli_arguments(argc, argv);
+  if (arguments.verbose || arguments.positional.size() != 2 ||
+      ! arguments.positional[0] || ! arguments.positional[1]) {
+    print_cli_error(arguments.json, L"usage",
+                    L"Usage: nssm export [--json] <service> <destination.json>");
+    return static_cast<int>(cli_exit_code::usage);
+  }
+  std::wstring service_name = arguments.positional[0];
+  std::wstring source;
+  unsigned long error = ERROR_SUCCESS;
+  if (! read_config_path(service_name, &source, &error)) {
+    print_cli_error(arguments.json,
+                    error == ERROR_ACCESS_DENIED ? L"permission" : L"notFound",
+                    L"Unable to read the registered configuration path", error);
+    return static_cast<int>(error == ERROR_ACCESS_DENIED
+                                ? cli_exit_code::permission
+                                : cli_exit_code::conflict);
+  }
+  service_config_t config;
+  config_validation_t validation;
+  if (! load_service_config(source.c_str(), &config, &validation) ||
+      _wcsicmp(config.service.name.c_str(), service_name.c_str())) {
+    print_cli_error(arguments.json, L"conflict",
+                    L"The registered configuration is invalid or belongs to another service");
+    return static_cast<int>(cli_exit_code::conflict);
+  }
+  std::wstring destination;
+  if (! full_config_path(arguments.positional[1], &destination, &validation)) {
+    print_cli_validation_errors(arguments.json, validation.errors);
+    return static_cast<int>(cli_exit_code::validation);
+  }
+  if (! atomic_copy_file(source, destination, &error)) {
+    print_cli_error(arguments.json, L"system",
+                    L"Unable to export the configuration atomically", error);
+    return static_cast<int>(cli_exit_code::system);
+  }
+  print_cli_success(arguments.json, L"export", service_name,
+                    L"Exported configuration to " + destination);
+  return static_cast<int>(cli_exit_code::success);
+}
 
 int plan_service_config_command(int argc, wchar_t **argv) {
   cli_arguments_t arguments = parse_cli_arguments(argc, argv);
