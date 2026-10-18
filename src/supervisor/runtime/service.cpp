@@ -272,8 +272,7 @@ void WINAPI service_main(unsigned long argc, TCHAR **argv) {
   if (! service) return;
   set_nssm_service_defaults(service);
 
-  static volatile bool await_debugger = (argc > 1 && str_equiv(argv[1], _T("debug")));
-  while (await_debugger) Sleep(1000);
+  (void) argc;
 
   if (_sntprintf_s(service->name, _countof(service->name), _TRUNCATE, _T("%s"), argv[0]) < 0) {
     log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_OUT_OF_MEMORY, _T("service->name"), _T("service_main()"), 0);
