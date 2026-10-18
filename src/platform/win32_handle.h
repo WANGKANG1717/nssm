@@ -127,6 +127,11 @@ class unique_local_memory {
     if (old != nullptr) LocalFree(old);
   }
 
+  T **put() noexcept {
+    reset();
+    return &memory_;
+  }
+
  private:
   T *memory_ = nullptr;
 };

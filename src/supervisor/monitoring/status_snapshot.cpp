@@ -67,19 +67,20 @@ void publish_status_snapshot_unlocked(nssm_service_t *service) {
 
 bool create_status_snapshot(nssm_service_t *service) {
   if (! service || ! service->name[0]) return false;
-  PSECURITY_DESCRIPTOR descriptor = nullptr;
+  unique_local_memory<void> descriptor;
   if (! ConvertStringSecurityDescriptorToSecurityDescriptorW(
           L"D:P(A;;GR;;;AU)(A;;GA;;;SY)(A;;GA;;;BA)(A;;GA;;;OW)",
-          SDDL_REVISION_1, &descriptor, nullptr)) {
+          SDDL_REVISION_1, descriptor.put(), nullptr)) {
     return false;
   }
-  SECURITY_ATTRIBUTES attributes = {sizeof(attributes), descriptor, FALSE};
+  SECURITY_ATTRIBUTES attributes = {sizeof(attributes), descriptor.get(),
+                                    FALSE};
   std::wstring name = mapping_name(service->name);
   unique_handle mapping(CreateFileMappingW(
       INVALID_HANDLE_VALUE, &attributes, PAGE_READWRITE, 0,
       sizeof(status_snapshot_t), name.c_str()));
   unsigned long mapping_error = mapping ? ERROR_SUCCESS : GetLastError();
-  LocalFree(descriptor);
+  descriptor.reset();
   if (! mapping) {
     SetLastError(mapping_error);
     return false;

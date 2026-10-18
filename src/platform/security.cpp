@@ -1,4 +1,5 @@
 #include "security.h"
+#include "win32_handle.h"
 
 #include <aclapi.h>
 #include <windows.h>
@@ -105,11 +106,11 @@ bool secure_descriptor(const std::wstring &path, ACCESS_MASK unsafe_rights,
                        std::wstring *reason) {
   PSID owner = nullptr;
   PACL dacl = nullptr;
-  PSECURITY_DESCRIPTOR descriptor = nullptr;
+  unique_local_memory<void> descriptor;
   unsigned long result = GetNamedSecurityInfoW(
       const_cast<wchar_t *>(path.c_str()), SE_FILE_OBJECT,
       OWNER_SECURITY_INFORMATION | DACL_SECURITY_INFORMATION, &owner, nullptr,
-      &dacl, nullptr, &descriptor);
+      &dacl, nullptr, descriptor.put());
   if (result != ERROR_SUCCESS) {
     *reason = L"cannot read its security descriptor (Windows error " +
               std::to_wstring(result) + L")";
@@ -149,7 +150,6 @@ bool secure_descriptor(const std::wstring &path, ACCESS_MASK unsafe_rights,
       }
     }
   }
-  if (descriptor) LocalFree(descriptor);
   return secure;
 }
 bool audit_existing_object(const std::wstring &path, ACCESS_MASK unsafe_rights,
