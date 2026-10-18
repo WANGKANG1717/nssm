@@ -12,13 +12,27 @@ namespace {
 
 constexpr ACCESS_MASK kModificationRights =
     FILE_WRITE_DATA | FILE_APPEND_DATA | FILE_WRITE_EA |
-    FILE_WRITE_ATTRIBUTES | DELETE | WRITE_DAC | WRITE_OWNER;
+    FILE_WRITE_ATTRIBUTES | FILE_DELETE_CHILD | DELETE | WRITE_DAC |
+    WRITE_OWNER;
+constexpr ACCESS_MASK kAncestorReplacementRights =
+    FILE_DELETE_CHILD | DELETE | WRITE_DAC | WRITE_OWNER;
 
 std::wstring parent_path(const std::wstring &path) {
+  const auto separator_at = [&path](size_t index) {
+    return index < path.size() &&
+           (path[index] == L'\\' || path[index] == L'/');
+  };
   size_t separator = path.find_last_of(L"\\/");
   if (separator == std::wstring::npos) return L"";
   if (separator == 2 && path.size() >= 3 && path[1] == L':') {
     return path.substr(0, 3);
+  }
+  if (separator_at(0) && separator_at(1)) {
+    const size_t server_end = path.find_first_of(L"\\/", 2);
+    if (server_end == std::wstring::npos) return path;
+    const size_t share_end = path.find_first_of(L"\\/", server_end + 1);
+    if (share_end == std::wstring::npos) return path;
+    if (separator == share_end) return path.substr(0, share_end);
   }
   if (! separator) return path.substr(0, 1);
   return path.substr(0, separator);
@@ -81,7 +95,8 @@ ACCESS_MASK allowed_ace_mask(void *ace, unsigned char type) {
   return 0;
 }
 
-bool secure_descriptor(const std::wstring &path, std::wstring *reason) {
+bool secure_descriptor(const std::wstring &path, ACCESS_MASK unsafe_rights,
+                       std::wstring *reason) {
   PSID owner = nullptr;
   PACL dacl = nullptr;
   PSECURITY_DESCRIPTOR descriptor = nullptr;
@@ -121,7 +136,7 @@ bool secure_descriptor(const std::wstring &path, std::wstring *reason) {
       if (! sid || trusted_principal(sid)) continue;
       ACCESS_MASK mask = allowed_ace_mask(ace, header->AceType);
       MapGenericMask(&mask, &mapping);
-      if (mask & kModificationRights) {
+      if (mask & unsafe_rights) {
         *reason = L"grants modification rights to a non-administrative principal";
         secure = false;
         break;
@@ -131,11 +146,28 @@ bool secure_descriptor(const std::wstring &path, std::wstring *reason) {
   if (descriptor) LocalFree(descriptor);
   return secure;
 }
-bool audit_existing_object(const std::wstring &path, std::wstring *reason) {
+bool audit_existing_object(const std::wstring &path, ACCESS_MASK unsafe_rights,
+                           std::wstring *reason) {
   std::wstring detail;
-  if (secure_descriptor(path, &detail)) return true;
+  if (secure_descriptor(path, unsafe_rights, &detail)) return true;
   *reason = L"is insecure: " + path + L" " + detail;
   return false;
+}
+
+bool audit_existing_path_chain(const std::wstring &path,
+                               std::wstring *reason) {
+  std::wstring current = path;
+  bool target = true;
+  while (! current.empty()) {
+    const ACCESS_MASK unsafe_rights =
+        target ? kModificationRights : kAncestorReplacementRights;
+    if (! audit_existing_object(current, unsafe_rights, reason)) return false;
+    std::wstring parent = parent_path(current);
+    if (parent.empty() || parent == current) break;
+    current = std::move(parent);
+    target = false;
+  }
+  return true;
 }
 
 }  // namespace
@@ -170,16 +202,8 @@ bool check_secure_path(const std::wstring &path, bool must_exist,
       *reason = L"has no accessible parent directory: " + path;
       return false;
     }
-    return audit_existing_object(target, reason);
+    return audit_existing_path_chain(target, reason);
   }
 
-  bool secure = audit_existing_object(target, reason);
-  std::wstring parent = parent_path(target);
-  if (! parent.empty() && parent != target) {
-    std::wstring parent_reason;
-    const bool parent_secure = audit_existing_object(parent, &parent_reason);
-    if (secure && ! parent_secure) *reason = std::move(parent_reason);
-    secure = parent_secure && secure;
-  }
-  return secure;
+  return audit_existing_path_chain(target, reason);
 }
