@@ -266,7 +266,12 @@ service_removal_status_t remove_managed_service(
   if (! registered_service_config_path(service_name.c_str(), &config_path,
                                         &registration_error)) {
     if (error) *error = registration_error;
-    return service_removal_status_t::unmanaged;
+    if (registration_error == ERROR_FILE_NOT_FOUND ||
+        registration_error == ERROR_PATH_NOT_FOUND ||
+        registration_error == ERROR_INVALID_DATA) {
+      return service_removal_status_t::unmanaged;
+    }
+    return service_removal_status_t::system_error;
   }
   if (! DeleteService(service.get())) {
     if (error) *error = GetLastError();
