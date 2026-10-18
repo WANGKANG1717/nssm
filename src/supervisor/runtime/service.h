@@ -85,6 +85,8 @@ typedef struct nssm_service_t {
   unsigned long exitcode;
   bool stopping;
   bool allow_restart;
+  CRITICAL_SECTION lifecycle_section;
+  bool lifecycle_section_initialised;
   unsigned long throttle;
   CRITICAL_SECTION throttle_section;
   bool throttle_section_initialised;

@@ -28,6 +28,20 @@ static constexpr int kStartAwaitingProcessExit = -2;
 
 static void set_service_recovery(nssm_service_t *, SC_HANDLE);
 
+class critical_section_guard {
+ public:
+  explicit critical_section_guard(CRITICAL_SECTION *section)
+      : section_(section) {
+    EnterCriticalSection(section_);
+  }
+  ~critical_section_guard() { LeaveCriticalSection(section_); }
+  critical_section_guard(const critical_section_guard &) = delete;
+  critical_section_guard &operator=(const critical_section_guard &) = delete;
+
+ private:
+  CRITICAL_SECTION *section_;
+};
+
 static void unregister_service_wait(nssm_service_t *service,
                                     bool wait_for_callbacks) {
   AcquireSRWLockExclusive(&service->wait_lock);
@@ -327,6 +341,9 @@ void cleanup_nssm_service(nssm_service_t *service) {
   if (service->process_handle) CloseHandle(service->process_handle);
   if (service->job_handle) CloseHandle(service->job_handle);
   if (service->stop_event) CloseHandle(service->stop_event);
+  if (service->lifecycle_section_initialised) {
+    DeleteCriticalSection(&service->lifecycle_section);
+  }
   if (service->throttle_section_initialised) DeleteCriticalSection(&service->throttle_section);
   if (service->health_section_initialised) DeleteCriticalSection(&service->health_section);
   if (service->resource_section_initialised) DeleteCriticalSection(&service->resource_section);
@@ -372,6 +389,8 @@ void WINAPI service_main(unsigned long argc, TCHAR **argv) {
   InitializeCriticalSection(&service->throttle_section);
   InitializeConditionVariable(&service->throttle_condition);
   service->throttle_section_initialised = true;
+  InitializeCriticalSection(&service->lifecycle_section);
+  service->lifecycle_section_initialised = true;
   InitializeCriticalSection(&service->health_section);
   service->health_section_initialised = true;
   InitializeCriticalSection(&service->resource_section);
@@ -596,6 +615,7 @@ unsigned long WINAPI service_control_handler(unsigned long control, unsigned lon
 
 /* Start the service */
 int start_service(nssm_service_t *service) {
+  critical_section_guard lifecycle(&service->lifecycle_section);
   if (service->health_section_initialised) {
     EnterCriticalSection(&service->health_section);
     service->stopping = false;
@@ -673,6 +693,7 @@ int stop_service(nssm_service_t *service, unsigned long exitcode) {
   set_restart_allowed(service, false);
   if (service->stop_event) SetEvent(service->stop_event);
   unregister_service_wait(service, true);
+  critical_section_guard lifecycle(&service->lifecycle_section);
 
   service->rotate_stdout_online = service->rotate_stderr_online = NSSM_ROTATE_OFFLINE;
 
@@ -714,6 +735,7 @@ int stop_service(nssm_service_t *service, unsigned long exitcode) {
 /* Callback function triggered when the server exits */
 void CALLBACK end_service(void *arg, unsigned char why) {
   nssm_service_t *service = (nssm_service_t *) arg;
+  critical_section_guard lifecycle(&service->lifecycle_section);
 
   if (service->health_section_initialised) {
     EnterCriticalSection(&service->health_section);
