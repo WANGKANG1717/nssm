@@ -262,7 +262,11 @@ int get_output_handles(nssm_service_t *service, STARTUPINFO *si) {
       service->rotate_stdout_online = NSSM_ROTATE_OFFLINE;
     }
 
-    if (dup_handle(service->stdout_si, &si->hStdOutput, _T("stdout_si"), _T("stdout"))) close_handle(&service->stdout_thread);
+    if (dup_handle(service->stdout_si, &si->hStdOutput, _T("stdout_si"),
+                   _T("stdout"))) {
+      cleanup_loggers(service);
+      return 5;
+    }
 
     inherit_handles = true;
   }
@@ -306,7 +310,11 @@ int get_output_handles(nssm_service_t *service, STARTUPINFO *si) {
       }
     }
 
-    if (dup_handle(service->stderr_si, &si->hStdError, _T("stderr_si"), _T("stderr"))) close_handle(&service->stderr_thread);
+    if (dup_handle(service->stderr_si, &si->hStdError, _T("stderr_si"),
+                   _T("stderr"))) {
+      cleanup_loggers(service);
+      return 8;
+    }
 
     inherit_handles = true;
   }
