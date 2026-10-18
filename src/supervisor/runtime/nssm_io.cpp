@@ -35,7 +35,8 @@ static HANDLE create_logging_thread(TCHAR *service_name, TCHAR *path, unsigned l
         SetHandleInformation(*pipe_handle_ptr, HANDLE_FLAG_INHERIT, HANDLE_FLAG_INHERIT);
       }
       else {
-        log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_CREATEPIPE_FAILED, service_name, path, error_string(GetLastError()));
+        log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_CREATEPIPE_FAILED,
+                  service_name, path, error_string(GetLastError()), 0);
         return (HANDLE) 0;
       }
     }

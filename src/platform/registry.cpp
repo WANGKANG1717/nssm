@@ -788,7 +788,8 @@ int get_parameters(nssm_service_t *service, STARTUPINFO *si) {
   TCHAR buffer[512];
   if (get_string(key, NSSM_REG_AFFINITY, buffer, sizeof(buffer), false, false, false) || ! buffer[0]) service->affinity = 0LL;
   else if (affinity_string_to_mask(buffer, &service->affinity)) {
-    log_event(EVENTLOG_WARNING_TYPE, NSSM_EVENT_BOGUS_AFFINITY_MASK, service->name, buffer);
+    log_event(EVENTLOG_WARNING_TYPE, NSSM_EVENT_BOGUS_AFFINITY_MASK,
+              service->name, buffer, 0);
     service->affinity = 0LL;
   }
   else {

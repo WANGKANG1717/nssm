@@ -1532,7 +1532,8 @@ int monitor_service(nssm_service_t *service) {
   if (ret) {
     TCHAR code[16];
     _sntprintf_s(code, _countof(code), _TRUNCATE, _T("%d"), ret);
-    log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_START_SERVICE_FAILED, service->exe, service->name, ret, 0);
+    log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_START_SERVICE_FAILED,
+              service->exe, service->name, code, 0);
     return ret;
   }
   log_event(EVENTLOG_INFORMATION_TYPE, NSSM_EVENT_STARTED_SERVICE, service->exe, service->flags, service->name, service->dir, 0);
