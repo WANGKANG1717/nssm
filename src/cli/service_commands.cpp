@@ -45,28 +45,50 @@ int service_control_response(unsigned long control, unsigned long status) {
 int await_service_control_response(unsigned long control, SC_HANDLE service,
                                    SERVICE_STATUS *status,
                                    unsigned long initial_status,
-                                   unsigned long cutoff = 0) {
-  int tries = 0;
+                                   unsigned long *query_error) {
+  if (query_error) *query_error = ERROR_SUCCESS;
+  unsigned long long last_progress = GetTickCount64();
   unsigned long checkpoint = 0;
-  unsigned long wait_hint = 0;
-  unsigned long waited = 0;
-  while (QueryServiceStatus(service, status)) {
+  while (true) {
+    if (! QueryServiceStatus(service, status)) {
+      if (query_error) *query_error = GetLastError();
+      return -2;
+    }
     int response = service_control_response(control, status->dwCurrentState);
     if (! response) return 0;
     if (response < 0 && status->dwCurrentState != initial_status) return response;
 
-    if (status->dwCheckPoint != checkpoint || status->dwWaitHint != wait_hint) {
-      tries = 0;
+    const unsigned long long now = GetTickCount64();
+    if (status->dwCheckPoint != checkpoint) {
+      checkpoint = status->dwCheckPoint;
+      last_progress = now;
     }
-    checkpoint = status->dwCheckPoint;
-    wait_hint = status->dwWaitHint;
-    if (++tries > 10) tries = 10;
-    unsigned long wait = 50 * tries;
-    if (cutoff && waited > cutoff) return response;
-    waited += wait;
-    Sleep(wait);
+    const unsigned long wait_hint =
+        status->dwWaitHint ? status->dwWaitHint : NSSM_SERVICE_STATUS_DEADLINE;
+    if (now - last_progress >
+        static_cast<unsigned long long>(wait_hint) + NSSM_WAITHINT_MARGIN) {
+      return response;
+    }
+    unsigned long interval = wait_hint / 10;
+    if (interval < 100) interval = 100;
+    if (interval > 1000) interval = 1000;
+    Sleep(interval);
   }
-  return -1;
+}
+
+void print_control_wait_failure(const TCHAR *service_name,
+                                unsigned long control,
+                                const SERVICE_STATUS &status,
+                                int response,
+                                unsigned long query_error) {
+  if (response == -2) {
+    _ftprintf(stderr, _T("%s: QueryServiceStatus: %s\n"), service_name,
+              error_string(query_error));
+    return;
+  }
+  print_message(stderr, NSSM_MESSAGE_BAD_CONTROL_RESPONSE, service_name,
+                service_status_text(status.dwCurrentState),
+                service_control_text(control));
 }
 
 }  // namespace
@@ -263,14 +285,12 @@ int control_service(unsigned long control, int argc, TCHAR **argv,
     result = StartService(service.get(), 0, nullptr);
     error = result ? ERROR_SUCCESS : GetLastError();
     if (result) {
+      unsigned long query_error = ERROR_SUCCESS;
       int response = await_service_control_response(
-          control, service.get(), &status, SERVICE_STOPPED,
-          NSSM_RESET_THROTTLE_RESTART);
+          control, service.get(), &status, SERVICE_STOPPED, &query_error);
       if (response) {
-        print_message(stderr, NSSM_MESSAGE_BAD_CONTROL_RESPONSE,
-                      canonical_name,
-                      service_status_text(status.dwCurrentState),
-                      service_control_text(control));
+        print_control_wait_failure(canonical_name, control, status, response,
+                                   query_error);
         return return_status ? 0 : 1;
       }
       _tprintf(_T("%s: %s: %s"), canonical_name,
@@ -295,13 +315,12 @@ int control_service(unsigned long control, int argc, TCHAR **argv,
       error = ERROR_SUCCESS;
     }
     if (result) {
+      unsigned long query_error = ERROR_SUCCESS;
       int response = await_service_control_response(
-          control, service.get(), &status, initial_status);
+          control, service.get(), &status, initial_status, &query_error);
       if (response) {
-        print_message(stderr, NSSM_MESSAGE_BAD_CONTROL_RESPONSE,
-                      canonical_name,
-                      service_status_text(status.dwCurrentState),
-                      service_control_text(control));
+        print_control_wait_failure(canonical_name, control, status, response,
+                                   query_error);
         return return_status ? 0 : 1;
       }
       _tprintf(_T("%s: %s: %s"), canonical_name,
