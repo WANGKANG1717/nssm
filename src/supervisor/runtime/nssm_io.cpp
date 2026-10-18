@@ -520,14 +520,18 @@ static int write_with_timestamp(logger_t *logger, void *address, unsigned long b
     void *line = address;
     unsigned long offset = 0;
     int ret = 0;
-    for (i = 0; i < bufsize; i++) {
-      if (((char *) address)[i] == '\n') {
-        ret = try_write(logger, line, i - offset + 1, &log_out, &log_complained);
-        line = (void *) ((char *) line + i - offset + 1);
+    const unsigned long unit = charsize == sizeof(wchar_t)
+                                   ? sizeof(wchar_t)
+                                   : sizeof(char);
+    for (i = 0; i + unit <= bufsize; i += unit) {
+      if (encoded_newline_at(address, i, bufsize, unit)) {
+        const unsigned long line_bytes = i - offset + unit;
+        ret = try_write(logger, line, line_bytes, &log_out, &log_complained);
+        line = static_cast<void *>(static_cast<char *>(line) + line_bytes);
         logger->line_length = 0LL;
         *out += log_out;
         *complained |= log_complained;
-        offset = i + 1;
+        offset = i + unit;
         if (offset < bufsize) {
           write_timestamp(logger, charsize, &timestamp_out, &timestamp_complained);
           logger->line_length += (__int64) timestamp_out;
@@ -590,10 +594,13 @@ unsigned long WINAPI log_and_rotate(void *arg) {
     if (*logger->rotate_online == NSSM_ROTATE_ONLINE_ASAP || (logger->size && size + (__int64) in >= logger->size)) {
       /* Look for newline. */
       unsigned long i;
-      for (i = 0; i < in; i++) {
-        if (buffer[i] == '\n') {
-          if (! charsize) charsize = guess_charsize(address, in);
-          i += charsize;
+      if (! charsize) charsize = guess_charsize(address, in);
+      const unsigned long unit = charsize == sizeof(wchar_t)
+                                     ? sizeof(wchar_t)
+                                     : sizeof(char);
+      for (i = 0; i + unit <= in; i += unit) {
+        if (encoded_newline_at(address, i, in, unit)) {
+          i += unit;
 
           /* Write up to the newline. */
           ret = try_write(logger, address, i, &out, &complained);

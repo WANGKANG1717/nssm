@@ -9,6 +9,7 @@
 #include "readiness.h"
 #include "recovery.h"
 #include "string_utils.h"
+#include "utf8.h"
 #include "win32_handle.h"
 
 #include <aclapi.h>
@@ -73,6 +74,19 @@ void command_line_tests() {
   expect(command ==
              LR"("C:\Apps\app.exe" plain "two words" "" "quoted\"value" "C:\path with space\\")",
          L"argument array should follow Windows backslash and quote rules");
+}
+
+void log_encoding_tests() {
+  const unsigned char utf8[] = {'x', '\n'};
+  expect(! encoded_newline_at(utf8, 0, sizeof(utf8), sizeof(char)) &&
+             encoded_newline_at(utf8, 1, sizeof(utf8), sizeof(char)),
+         L"UTF-8 newlines should be found on byte boundaries");
+
+  const unsigned char utf16[] = {'x', 0, '\n', 0};
+  expect(encoded_newline_at(utf16, 2, sizeof(utf16), sizeof(wchar_t)) &&
+             ! encoded_newline_at(utf16, 3, sizeof(utf16), sizeof(wchar_t)) &&
+             ! encoded_newline_at(utf16, 2, 3, sizeof(wchar_t)),
+         L"UTF-16 newlines should include the complete code unit");
 }
 
 void string_utils_tests() {
@@ -728,6 +742,7 @@ void path_security_tests() {
 
 int wmain() {
   command_line_tests();
+  log_encoding_tests();
   string_utils_tests();
   environment_merge_tests();
   environment_replacement_tests();

@@ -227,6 +227,7 @@ if(BUILD_TESTING)
     src/platform/security.cpp
     src/platform/service_status.cpp
     src/platform/string_utils.cpp
+    src/platform/utf8.cpp
   )
   add_dependencies(nssm_unit_tests nssm_messages)
   target_include_directories(nssm_unit_tests PRIVATE

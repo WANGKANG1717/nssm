@@ -33,3 +33,15 @@ int to_utf16(const char *source, wchar_t **destination,
   if (length) *length = static_cast<unsigned long>(characters - 1);
   return 0;
 }
+
+bool encoded_newline_at(const void *address, unsigned long offset,
+                        unsigned long length, unsigned long character_size) {
+  if (! address) return false;
+  const auto *bytes = static_cast<const unsigned char *>(address);
+  if (character_size == sizeof(wchar_t)) {
+    return offset + sizeof(wchar_t) <= length && bytes[offset] == '\n' &&
+           bytes[offset + 1] == 0;
+  }
+  return character_size == sizeof(char) && offset < length &&
+         bytes[offset] == '\n';
+}
