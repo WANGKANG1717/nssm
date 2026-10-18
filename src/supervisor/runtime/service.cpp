@@ -277,6 +277,7 @@ void WINAPI service_main(unsigned long argc, TCHAR **argv) {
 
   if (_sntprintf_s(service->name, _countof(service->name), _TRUNCATE, _T("%s"), argv[0]) < 0) {
     log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_OUT_OF_MEMORY, _T("service->name"), _T("service_main()"), 0);
+    cleanup_nssm_service(service);
     return;
   }
 
@@ -301,6 +302,7 @@ void WINAPI service_main(unsigned long argc, TCHAR **argv) {
   service->status_handle = RegisterServiceCtrlHandlerEx(NSSM, service_control_handler, (void *) service);
   if (! service->status_handle) {
     log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_REGISTERSERVICECTRLHANDER_FAILED, error_string(GetLastError()), 0);
+    cleanup_nssm_service(service);
     return;
   }
 
@@ -337,6 +339,14 @@ void WINAPI service_main(unsigned long argc, TCHAR **argv) {
 
   /* Remember our initial environment. */
   service->initial_env = copy_environment();
+  if (! service->initial_env) {
+    const unsigned long error = GetLastError();
+    log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_CONFIG_LOAD_FAILED,
+              service->name, error_string(error), 0);
+    stop_service(service, 2);
+    cleanup_nssm_service(service);
+    return;
+  }
 
   config_validation_t config_validation;
   if (! load_registered_service_config(service, &config_validation)) {
@@ -348,6 +358,7 @@ void WINAPI service_main(unsigned long argc, TCHAR **argv) {
     log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_CONFIG_LOAD_FAILED, service->name,
               details.c_str(), 0);
     stop_service(service, 2);
+    cleanup_nssm_service(service);
     return;
   }
   if (! create_status_snapshot(service)) {
@@ -362,6 +373,7 @@ void WINAPI service_main(unsigned long argc, TCHAR **argv) {
   if (! start_detached_thread(launch_service, service)) {
     log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_CREATETHREAD_FAILED, error_string(GetLastError()), 0);
     stop_service(service, 0);
+    cleanup_nssm_service(service);
   }
 }
 

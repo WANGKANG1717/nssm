@@ -18,6 +18,7 @@ TCHAR *copy_environment_block(const TCHAR *environment) {
   auto *copy = static_cast<TCHAR *>(
       HeapAlloc(GetProcessHeap(), 0, length * sizeof(TCHAR)));
   if (! copy) {
+    SetLastError(ERROR_NOT_ENOUGH_MEMORY);
     log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_OUT_OF_MEMORY,
               _T("environment"), _T("copy_environment_block()"), 0);
     return nullptr;
@@ -32,6 +33,8 @@ TCHAR *copy_environment() {
   TCHAR *environment = GetEnvironmentStrings();
   if (! environment) return nullptr;
   TCHAR *copy = copy_environment_block(environment);
+  const unsigned long error = copy ? ERROR_SUCCESS : GetLastError();
   FreeEnvironmentStrings(environment);
+  SetLastError(error);
   return copy;
 }
