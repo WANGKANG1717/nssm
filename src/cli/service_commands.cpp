@@ -6,6 +6,7 @@
 #include "service.h"
 #include "service_constants.h"
 #include "service_commands.h"
+#include "service_enumeration.h"
 #include "string_utils.h"
 #include "usage.h"
 #include "win32_handle.h"
@@ -98,64 +99,15 @@ void print_control_wait_failure(const TCHAR *service_name,
 int list_nssm_services(int argc, TCHAR **argv) {
   const bool including_native =
       argc > 0 && strings_equal_ignore_case(argv[0], _T("all"));
-  unique_service_handle manager(open_service_manager(
-      SC_MANAGER_CONNECT | SC_MANAGER_ENUMERATE_SERVICE));
-  if (! manager) {
-    print_message(stderr, NSSM_MESSAGE_OPEN_SERVICE_MANAGER_FAILED);
-    return 1;
-  }
-
-  unsigned long required = 0;
-  unsigned long count = 0;
-  unsigned long resume = 0;
-  EnumServicesStatusEx(manager.get(), SC_ENUM_PROCESS_INFO, SERVICE_WIN32,
-                       SERVICE_STATE_ALL, nullptr, 0, &required, &count,
-                       &resume, nullptr);
-  unsigned long error = GetLastError();
-  if (error != ERROR_MORE_DATA) {
+  std::vector<std::wstring> names;
+  unsigned long error = ERROR_SUCCESS;
+  if (! enumerate_windows_services(including_native, &names, &error)) {
     print_message(stderr, NSSM_MESSAGE_ENUMSERVICESSTATUS_FAILED,
                   error_string(error));
-    return 2;
+    return 1;
   }
-
-  std::vector<unsigned char> buffer;
-  try {
-    buffer.resize(required);
-  }
-  catch (const std::bad_alloc &) {
-    print_message(stderr, NSSM_MESSAGE_OUT_OF_MEMORY,
-                  _T("ENUM_SERVICE_STATUS_PROCESS"),
-                  _T("list_nssm_services()"));
-    return 3;
-  }
-  while (true) {
-    const BOOL complete = EnumServicesStatusEx(
-        manager.get(), SC_ENUM_PROCESS_INFO, SERVICE_WIN32, SERVICE_STATE_ALL,
-        buffer.data(), static_cast<unsigned long>(buffer.size()), &required,
-        &count, &resume, nullptr);
-    if (! complete) {
-      error = GetLastError();
-      if (error != ERROR_MORE_DATA) {
-        print_message(stderr, NSSM_MESSAGE_ENUMSERVICESSTATUS_FAILED,
-                      error_string(error));
-        return 4;
-      }
-    }
-
-    auto *statuses = reinterpret_cast<ENUM_SERVICE_STATUS_PROCESS *>(
-        buffer.data());
-    for (unsigned long i = 0; i < count; ++i) {
-      std::wstring config_path;
-      unsigned long config_error = ERROR_SUCCESS;
-      const bool managed = registered_service_config_path(
-          statuses[i].lpServiceName, &config_path, &config_error);
-      if (including_native || managed) {
-        _tprintf(_T("%s\n"), statuses[i].lpServiceName);
-      }
-    }
-
-    if (complete) return 0;
-  }
+  for (const auto &name : names) _tprintf(_T("%s\n"), name.c_str());
+  return 0;
 }
 
 int service_process_tree(int argc, TCHAR **argv) {
