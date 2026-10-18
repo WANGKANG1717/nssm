@@ -87,17 +87,8 @@ const TCHAR *nssm_imagepath();
 */
 #define NSSM_KILL_THREADS_GRACE_PERIOD 1500
 
-/* How many milliseconds to pause after rotating logs. */
-#define NSSM_ROTATE_DELAY 0
-
 /* Margin of error for service status wait hints in milliseconds. */
 #define NSSM_WAITHINT_MARGIN 2000
-
-/* Startup types. */
-#define NSSM_STARTUP_AUTOMATIC 0
-#define NSSM_STARTUP_DELAYED 1
-#define NSSM_STARTUP_MANUAL 2
-#define NSSM_STARTUP_DISABLED 3
 
 /* How many milliseconds to wait before updating service status. */
 #define NSSM_SERVICE_STATUS_DEADLINE 20000

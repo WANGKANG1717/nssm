@@ -107,7 +107,6 @@ typedef struct nssm_service_t {
   FILETIME creation_time;
   FILETIME exit_time;
   TCHAR *initial_env;
-  unsigned long last_control;
   unsigned long next_restart_delay_ms;
   unsigned long long process_started_ms;
 } nssm_service_t;

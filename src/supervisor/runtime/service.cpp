@@ -433,7 +433,6 @@ unsigned long WINAPI service_control_handler(unsigned long control, unsigned lon
 
     case SERVICE_CONTROL_SHUTDOWN:
     case SERVICE_CONTROL_STOP:
-      service->last_control = control;
       log_service_control(service->name, control, true);
 
       /* Immediately block further controls. */
@@ -465,7 +464,6 @@ unsigned long WINAPI service_control_handler(unsigned long control, unsigned lon
       return NO_ERROR;
 
     case SERVICE_CONTROL_CONTINUE:
-      service->last_control = control;
       log_service_control(service->name, control, true);
       service->throttle = 0;
       WakeConditionVariable(&service->throttle_condition);
@@ -485,7 +483,6 @@ unsigned long WINAPI service_control_handler(unsigned long control, unsigned lon
       return ERROR_CALL_NOT_IMPLEMENTED;
 
     case NSSM_SERVICE_CONTROL_ROTATE:
-      service->last_control = control;
       log_service_control(service->name, control, true);
       if (service->rotate_stdout_online == NSSM_ROTATE_ONLINE) service->rotate_stdout_online = NSSM_ROTATE_ONLINE_ASAP;
       if (service->rotate_stderr_online == NSSM_ROTATE_ONLINE) service->rotate_stderr_online = NSSM_ROTATE_ONLINE_ASAP;
