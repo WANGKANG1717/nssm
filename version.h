@@ -2,7 +2,10 @@
 
 #define NSSM_VERSION _T("3.0.0")
 #define NSSM_VERSIONINFO 3,0,0,0
-#define NSSM_DATE _T(__DATE__)  /* 编译日期，例如 "Nov 11 2025" */
+#ifndef NSSM_BUILD_LABEL
+#define NSSM_BUILD_LABEL "release"
+#endif
+#define NSSM_DATE _T(NSSM_BUILD_LABEL)
 #define NSSM_FILEFLAGS 0L
 #define NSSM_COPYRIGHT _T("Public Domain; Author fightroad")
 

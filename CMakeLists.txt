@@ -2,6 +2,9 @@ cmake_minimum_required(VERSION 3.25)
 
 project(nssm VERSION 3.0.0 LANGUAGES CXX RC)
 
+set(NSSM_BUILD_LABEL "release" CACHE STRING
+    "Stable label shown by 'nssm version' (avoid timestamps for reproducible builds)")
+
 if(NOT WIN32)
   message(FATAL_ERROR "NSSM can only be built for Windows")
 endif()
@@ -69,6 +72,7 @@ target_include_directories(nssm PRIVATE
 target_compile_definitions(nssm PRIVATE
   UNICODE
   _UNICODE
+  NSSM_BUILD_LABEL="${NSSM_BUILD_LABEL}"
   WINVER=0x0A00
   _WIN32_WINNT=0x0A00
   NTDDI_VERSION=0x0A000000

@@ -57,6 +57,8 @@ ctest --preset mingw-release
 
 产物分别位于 `out\Debug\win64\nssm.exe` 和 `out\Release\win64\nssm.exe`。
 
+版本输出默认使用稳定的 `release` 构建标签，不嵌入编译时间，以保证相同输入可生成可复现的二进制。需要区分内部构建时可在配置阶段传入 `-DNSSM_BUILD_LABEL=<标签>`。
+
 本仓库开发环境还可将便携 MSYS2 放在被 Git 忽略的 `.tools\msys64`，然后在 PowerShell 中临时启用：
 
 ```powershell

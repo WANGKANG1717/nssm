@@ -13,6 +13,7 @@ function(nssm_configure_compiler target)
     -static
     -static-libgcc
     -static-libstdc++
+    -Wl,--no-insert-timestamp
     -Wl,--dynamicbase
     -Wl,--nxcompat
     -Wl,--high-entropy-va
