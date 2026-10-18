@@ -1,5 +1,6 @@
 #include "nssm.h"
 #include "event.h"
+#include "win32_handle.h"
 
 #include <vector>
 
@@ -49,7 +50,7 @@ void log_event(unsigned short type, unsigned long id, ...) {
   TCHAR *strings[NSSM_NUM_EVENT_STRINGS];
 
   /* Open event log */
-  HANDLE handle = RegisterEventSource(0, NSSM_SOURCE);
+  unique_event_source handle(RegisterEventSource(0, NSSM_SOURCE));
   if (! handle) return;
 
   /* Log it */
@@ -58,10 +59,8 @@ void log_event(unsigned short type, unsigned long id, ...) {
   while ((s = va_arg(arg, TCHAR *)) && count < NSSM_NUM_EVENT_STRINGS - 1) strings[count++] = s;
   strings[count] = 0;
   va_end(arg);
-  ReportEvent(handle, type, 0, id, 0, count, 0, (const TCHAR **) strings, 0);
-
-  /* Close event log */
-  DeregisterEventSource(handle);
+  ReportEvent(handle.get(), type, 0, id, 0, count, 0,
+              (const TCHAR **) strings, 0);
 }
 
 /* Log a message to the console */

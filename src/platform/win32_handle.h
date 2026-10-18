@@ -51,6 +51,10 @@ using unique_service_handle =
     unique_win32_resource<SC_HANDLE, CloseServiceHandle>;
 using unique_registry_key = unique_win32_resource<HKEY, RegCloseKey>;
 using unique_module = unique_win32_resource<HMODULE, FreeLibrary>;
+using unique_event_source =
+    unique_win32_resource<HANDLE, DeregisterEventSource>;
+using unique_mapped_view =
+    unique_win32_resource<void *, UnmapViewOfFile>;
 
 class unique_handle {
  public:

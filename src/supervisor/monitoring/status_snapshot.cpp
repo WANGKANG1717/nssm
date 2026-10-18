@@ -4,6 +4,7 @@
 #include "nssm.h"
 #include "recovery.h"
 #include "service.h"
+#include "win32_handle.h"
 
 #include <sddl.h>
 
@@ -74,26 +75,26 @@ bool create_status_snapshot(nssm_service_t *service) {
   }
   SECURITY_ATTRIBUTES attributes = {sizeof(attributes), descriptor, FALSE};
   std::wstring name = mapping_name(service->name);
-  service->status_mapping = CreateFileMappingW(
+  unique_handle mapping(CreateFileMappingW(
       INVALID_HANDLE_VALUE, &attributes, PAGE_READWRITE, 0,
-      sizeof(status_snapshot_t), name.c_str());
-  unsigned long mapping_error = service->status_mapping ? ERROR_SUCCESS
-                                                        : GetLastError();
+      sizeof(status_snapshot_t), name.c_str()));
+  unsigned long mapping_error = mapping ? ERROR_SUCCESS : GetLastError();
   LocalFree(descriptor);
-  if (! service->status_mapping) {
+  if (! mapping) {
     SetLastError(mapping_error);
     return false;
   }
-  service->status_snapshot = static_cast<status_snapshot_t *>(
-      MapViewOfFile(service->status_mapping, FILE_MAP_WRITE, 0, 0,
-                    sizeof(status_snapshot_t)));
-  if (! service->status_snapshot) {
-    unsigned long error = GetLastError();
-    CloseHandle(service->status_mapping);
-    service->status_mapping = nullptr;
+  unique_mapped_view view(MapViewOfFile(mapping.get(), FILE_MAP_WRITE, 0, 0,
+                                        sizeof(status_snapshot_t)));
+  if (! view) {
+    const unsigned long error = GetLastError();
+    mapping.reset();
     SetLastError(error);
     return false;
   }
+  service->status_mapping = mapping.release();
+  service->status_snapshot =
+      static_cast<status_snapshot_t *>(view.release());
   ZeroMemory(service->status_snapshot, sizeof(status_snapshot_t));
   service->status_snapshot->magic = kStatusMagic;
   service->status_snapshot->version = kStatusVersion;
@@ -130,19 +131,19 @@ bool read_status_snapshot(const std::wstring &service_name,
     if (error) *error = ERROR_INVALID_PARAMETER;
     return false;
   }
-  HANDLE mapping = OpenFileMappingW(FILE_MAP_READ, FALSE,
-                                    mapping_name(service_name).c_str());
+  unique_handle mapping(OpenFileMappingW(FILE_MAP_READ, FALSE,
+                                         mapping_name(service_name).c_str()));
   if (! mapping) {
     if (error) *error = GetLastError();
     return false;
   }
-  auto *shared = static_cast<const status_snapshot_t *>(
-      MapViewOfFile(mapping, FILE_MAP_READ, 0, 0, sizeof(status_snapshot_t)));
-  if (! shared) {
+  unique_mapped_view view(MapViewOfFile(mapping.get(), FILE_MAP_READ, 0, 0,
+                                        sizeof(status_snapshot_t)));
+  if (! view) {
     if (error) *error = GetLastError();
-    CloseHandle(mapping);
     return false;
   }
+  auto *shared = static_cast<const status_snapshot_t *>(view.get());
   bool copied = false;
   for (unsigned int attempt = 0; attempt < 8; ++attempt) {
     long before = shared->sequence;
@@ -160,8 +161,6 @@ bool read_status_snapshot(const std::wstring &service_name,
       break;
     }
   }
-  UnmapViewOfFile(shared);
-  CloseHandle(mapping);
   if (error) *error = copied ? ERROR_SUCCESS : ERROR_RETRY;
   return copied;
 }
