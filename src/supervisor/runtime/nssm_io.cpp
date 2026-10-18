@@ -641,6 +641,7 @@ unsigned long WINAPI log_and_rotate(void *arg) {
           /* Resume writing after the newline. */
           address = (void *) ((char *) address + i);
           in -= i;
+          break;
         }
       }
     }
