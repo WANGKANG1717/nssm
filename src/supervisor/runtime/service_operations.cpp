@@ -39,6 +39,8 @@ int await_service_control_response(unsigned long control, SC_HANDLE service,
                                    unsigned long *error) {
   unsigned long long last_progress = GetTickCount64();
   unsigned long checkpoint = 0;
+  bool initial_state_observed = false;
+  bool transition_observed = false;
   while (true) {
     if (! QueryServiceStatus(service, status)) {
       if (error) *error = GetLastError();
@@ -47,8 +49,23 @@ int await_service_control_response(unsigned long control, SC_HANDLE service,
     const int response =
         service_control_response(control, status->dwCurrentState);
     if (! response) return 0;
-    if (response < 0 && status->dwCurrentState != initial_status) {
-      return response;
+    if (response < 0) {
+      const bool reported_failure = status->dwWin32ExitCode != NO_ERROR;
+      if (reported_failure || status->dwCurrentState != initial_status ||
+          transition_observed || initial_state_observed) {
+        if (error) {
+          *error = reported_failure
+                       ? status->dwWin32ExitCode
+                       : control == kServiceControlStart
+                             ? ERROR_SERVICE_NOT_ACTIVE
+                             : ERROR_SERVICE_CANNOT_ACCEPT_CTRL;
+        }
+        return response;
+      }
+      initial_state_observed = true;
+    }
+    else if (status->dwCurrentState != initial_status) {
+      transition_observed = true;
     }
 
     const unsigned long long now = GetTickCount64();
