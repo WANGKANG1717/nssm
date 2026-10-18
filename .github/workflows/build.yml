@@ -1,63 +1,76 @@
 name: Build NSSM
 
 on:
+  push:
+  pull_request:
   workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   build:
+    name: MinGW-w64 UCRT64 (${{ matrix.preset }})
     runs-on: windows-latest
     strategy:
       fail-fast: false
       matrix:
-        platform: [win32, win64]
-        configuration: [Release]
+        preset: [debug, release]
+        include:
+          - preset: debug
+            configuration: Debug
+          - preset: release
+            configuration: Release
+
+    defaults:
+      run:
+        shell: msys2 {0}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Set up MSYS2 UCRT64
+        uses: msys2/setup-msys2@v2
         with:
-          fetch-depth: 0
+          msystem: UCRT64
+          update: true
+          install: >-
+            mingw-w64-ucrt-x86_64-gcc
+            mingw-w64-ucrt-x86_64-cmake
+            mingw-w64-ucrt-x86_64-ninja
+            mingw-w64-ucrt-x86_64-binutils
 
-      - name: Set up MSBuild
-        uses: microsoft/setup-msbuild@v2
-
-      - name: Locate Visual Studio (devenv)
-        id: vs
-        shell: pwsh
+      - name: Verify toolchain
         run: |
-          $vsPath = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -property installationPath
-          if (-not $vsPath) { throw "Visual Studio not found" }
-          $devenv = Join-Path $vsPath "Common7\IDE\devenv.com"
-          if (-not (Test-Path $devenv)) { throw "devenv not found at $devenv" }
-          "devenv=$devenv" >> $env:GITHUB_OUTPUT
+          g++ --version
+          cmake --version
+          ninja --version
+          windmc --version
+          windres --version
+          test "$(g++ -dumpfullversion -dumpversion | cut -d. -f1)" -ge 14
 
-      - name: Upgrade solution to current toolset
-        shell: cmd
-        run: "\"${{ steps.vs.outputs.devenv }}\" nssm.sln /Upgrade"
+      - name: Configure
+        run: cmake --preset mingw-${{ matrix.preset }}
 
-      - name: Build solution (MSBuild)
-        shell: cmd
-        run: msbuild.exe nssm.sln /p:Configuration=${{ matrix.configuration }} /p:Platform=${{ matrix.platform }} /m
+      - name: Build
+        run: cmake --build --preset mingw-${{ matrix.preset }}
 
-      - name: Collect artifacts
-        if: always()
-        shell: pwsh
+      - name: Test
+        run: ctest --preset mingw-${{ matrix.preset }}
+
+      - name: Verify x64 static runtime
         run: |
-          $outDir = Join-Path (Resolve-Path .) "artifacts\${{ matrix.platform }}\${{ matrix.configuration }}"
-          New-Item -ItemType Directory -Force -Path $outDir | Out-Null
-          $platformDir = "out\Release\${{ matrix.platform }}"
-          $patterns = @(
-            "$platformDir\*.exe",
-            "$platformDir\*.dll"
-          )
-          foreach ($p in $patterns) {
-            Get-ChildItem -Path $p -ErrorAction SilentlyContinue | Copy-Item -Destination $outDir -Force -ErrorAction SilentlyContinue
-          }
+          executable="out/${{ matrix.configuration }}/win64/nssm.exe"
+          objdump -f "$executable" | grep -q 'file format pei-x86-64'
+          if objdump -p "$executable" | grep -Eqi 'DLL Name: (libgcc_s|libstdc\+\+|libwinpthread)'; then
+            echo 'Unexpected dynamic MinGW runtime dependency' >&2
+            exit 1
+          fi
 
-      - name: Upload artifacts
+      - name: Upload executable
         uses: actions/upload-artifact@v4
         with:
-          name: nssm-${{ matrix.platform }}-${{ matrix.configuration }}
-          path: artifacts/${{ matrix.platform }}/${{ matrix.configuration }}
-
-
+          name: nssm-win64-${{ matrix.configuration }}
+          path: out/${{ matrix.configuration }}/win64/nssm.exe
+          if-no-files-found: error
