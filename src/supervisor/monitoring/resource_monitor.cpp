@@ -52,11 +52,14 @@ unsigned long WINAPI resource_monitor_thread(void *argument) {
     if (wait == WAIT_OBJECT_0) return 0;
     if (wait != WAIT_TIMEOUT) {
       const unsigned long wait_error = GetLastError();
-      terminate_for_resource(
-          service, L"monitor failure",
-          L"waiting for the monitor stop event failed with error " +
-              std::to_wstring(wait_error));
-      return kResourceWatchdogExitCode;
+      if (config.enabled()) {
+        terminate_for_resource(
+            service, L"monitor failure",
+            L"waiting for the monitor stop event failed with error " +
+                std::to_wstring(wait_error));
+        return kResourceWatchdogExitCode;
+      }
+      return 0;
     }
     job_accounting_t current = {};
     unsigned long long now = GetTickCount64();
