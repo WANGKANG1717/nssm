@@ -26,7 +26,7 @@ $sbom = [ordered]@{
   dataLicense = 'CC0-1.0'
   SPDXID = 'SPDXRef-DOCUMENT'
   name = "nssm-$Version-win64"
-  documentNamespace = "https://github.com/fightroad/nssm/releases/download/v$Version/nssm-$Version-win64.spdx.json"
+  documentNamespace = "https://github.com/WANGKANG1717/nssm/releases/download/v$Version/nssm-$Version-win64.spdx.json"
   creationInfo = [ordered]@{ creators = @('Tool: NSSM-PackageRelease'); created = '1970-01-01T00:00:00Z' }
   packages = @(
     [ordered]@{
