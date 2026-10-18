@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.25)
 
-project(nssm VERSION 3.1.1 LANGUAGES C CXX RC)
+project(nssm VERSION 3.1.2 LANGUAGES C CXX RC)
 
 set(NSSM_BUILD_LABEL "release" CACHE STRING
     "Stable label shown by 'nssm version' (avoid timestamps for reproducible builds)")
