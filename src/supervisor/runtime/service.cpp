@@ -9,7 +9,6 @@
 #include "messages.h"
 #include "nssm_io.h"
 #include "process.h"
-#include "process_options.h"
 #include "readiness.h"
 #include "security.h"
 #include "service.h"
@@ -125,8 +124,7 @@ static bool create_suspended_service_process(
     PROCESS_INFORMATION *process_info) {
   const bool inherit_handles =
       (startup_info->dwFlags & STARTF_USESTDHANDLES) != 0;
-  unsigned long flags = service->priority & priority_mask();
-  flags |= CREATE_SUSPENDED | CREATE_UNICODE_ENVIRONMENT;
+  unsigned long flags = CREATE_SUSPENDED | CREATE_UNICODE_ENVIRONMENT;
   if (! service->no_console) flags |= CREATE_NEW_CONSOLE;
 
   if (! CreateProcess(service->exe, command_line->data(), nullptr, nullptr,
@@ -157,28 +155,6 @@ static bool assign_service_process_to_job(nssm_service_t *service,
   WaitForSingleObject(service->process_handle, NSSM_SERVICE_STATUS_DEADLINE);
   close_failed_child_launch(service, thread_handle);
   return false;
-}
-
-static void apply_service_process_affinity(nssm_service_t *service) {
-  if (! service->affinity) return;
-
-  DWORD_PTR affinity = static_cast<DWORD_PTR>(service->affinity);
-  DWORD_PTR current_affinity = 0;
-  DWORD_PTR system_affinity = 0;
-  if (GetProcessAffinityMask(service->process_handle, &current_affinity,
-                             &system_affinity)) {
-    affinity &= system_affinity;
-  }
-  else {
-    log_event(EVENTLOG_ERROR_TYPE,
-              NSSM_EVENT_GETPROCESSAFFINITYMASK_FAILED, service->name,
-              error_string(GetLastError()), 0);
-  }
-  if (! SetProcessAffinityMask(service->process_handle, affinity)) {
-    log_event(EVENTLOG_WARNING_TYPE,
-              NSSM_EVENT_SETPROCESSAFFINITYMASK_FAILED, service->name,
-              error_string(GetLastError()), 0);
-  }
 }
 
 static bool resume_service_process(nssm_service_t *service,
@@ -225,7 +201,6 @@ void set_nssm_service_defaults(nssm_service_t *service) {
   if (! service) return;
 
   InitializeSRWLock(&service->status_snapshot_lock);
-  service->priority = NORMAL_PRIORITY_CLASS;
   service->stdin_sharing = NSSM_STDIN_SHARING;
   service->stdin_disposition = NSSM_STDIN_DISPOSITION;
   service->stdin_flags = NSSM_STDIN_FLAGS;
@@ -584,7 +559,6 @@ int start_service(nssm_service_t *service) {
 
     close_output_handles(&si);
 
-    apply_service_process_affinity(service);
     if (! resume_service_process(service, pi.hThread)) {
       return stop_service(service, 3);
     }

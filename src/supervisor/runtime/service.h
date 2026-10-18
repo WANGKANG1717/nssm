@@ -30,11 +30,9 @@ typedef struct nssm_service_t {
   TCHAR flags[VALUE_LENGTH];
   TCHAR dir[DIR_LENGTH];
   TCHAR *env;
-  __int64 affinity;
   unsigned long envlen;
   TCHAR *env_extra;
   unsigned long env_extralen;
-  unsigned long priority;
   unsigned long no_console;
   TCHAR stdin_path[PATH_LENGTH];
   unsigned long stdin_sharing;

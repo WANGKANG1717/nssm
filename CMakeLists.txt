@@ -90,7 +90,6 @@ set(NSSM_SUPERVISOR_SOURCES
   src/supervisor/process/child_process.cpp
   src/supervisor/process/job_object.cpp
   src/supervisor/process/process.cpp
-  src/supervisor/process/process_options.cpp
   src/supervisor/monitoring/health_check.cpp
   src/supervisor/monitoring/health_monitor.cpp
   src/supervisor/monitoring/readiness.cpp
@@ -209,7 +208,6 @@ if(BUILD_TESTING)
     src/config/config_security.cpp
     src/supervisor/monitoring/health_check.cpp
     src/supervisor/process/job_object.cpp
-    src/supervisor/process/process_options.cpp
     src/supervisor/monitoring/readiness.cpp
     src/supervisor/runtime/recovery.cpp
     src/platform/security.cpp
