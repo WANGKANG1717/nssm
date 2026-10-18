@@ -129,6 +129,28 @@ try {
   }
   & $executablePath stop $serviceName | Out-Null
   if ($LASTEXITCODE -ne 0) { throw 'service stop failed' }
+
+  $configuration.application.path = Join-Path $systemDirectory 'cmd.exe'
+  $configuration.application.arguments = @('/d', '/c', 'exit 7')
+  $configuration.recovery = @{ mode = 'never' }
+  [void]$configuration.Remove('health')
+  $configuration | ConvertTo-Json -Depth 10 |
+    Set-Content -LiteralPath $configPath -Encoding utf8
+  Set-SecureTestAcl $configPath $false
+  $updated = Invoke-NssmJson @('apply', '--json', $configPath)
+  if (-not $updated.ok) { throw 'fast-failure configuration update failed' }
+
+  $failureStarted = [DateTime]::UtcNow
+  & $executablePath start $serviceName 2>$null | Out-Null
+  $startExitCode = $LASTEXITCODE
+  $failureElapsed = ([DateTime]::UtcNow - $failureStarted).TotalSeconds
+  if ($startExitCode -eq 0) {
+    throw 'a service which exited during startup was reported as running'
+  }
+  if ($failureElapsed -gt 5) {
+    throw "fast startup failure took $failureElapsed seconds to report"
+  }
+
   & $executablePath remove $serviceName confirm | Out-Null
   if ($LASTEXITCODE -ne 0) { throw 'service removal failed' }
 }
