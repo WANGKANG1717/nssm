@@ -8,6 +8,7 @@
 #include "registry.h"
 #include "security.h"
 #include "service.h"
+#include "service_constants.h"
 #include "service_commands.h"
 #include "status.h"
 #include "config.h"
@@ -127,7 +128,8 @@ int _tmain(int argc, TCHAR **argv) {
       statuscode, rotate, list, processes, version
     */
     if (is_version(argv[1])) {
-      _tprintf(_T("%s %s %s %s\n"), NSSM, NSSM_VERSION, NSSM_CONFIGURATION, NSSM_DATE);
+      _tprintf(_T("%s %s %s %s\n"), kNssmServiceName, NSSM_VERSION,
+               NSSM_CONFIGURATION, NSSM_DATE);
       nssm_exit(0);
     }
     if (str_equiv(argv[1], _T("validate"))) {
@@ -154,12 +156,12 @@ int _tmain(int argc, TCHAR **argv) {
       nssm_exit(apply_service_config_command(argc - 2, argv + 2,
                                              nssm_imagepath()));
     }
-    if (str_equiv(argv[1], _T("start"))) nssm_exit(control_service(NSSM_SERVICE_CONTROL_START, argc - 2, argv + 2));
+    if (str_equiv(argv[1], _T("start"))) nssm_exit(control_service(kServiceControlStart, argc - 2, argv + 2));
     if (str_equiv(argv[1], _T("stop"))) nssm_exit(control_service(SERVICE_CONTROL_STOP, argc - 2, argv + 2));
     if (str_equiv(argv[1], _T("restart"))) {
       int ret = control_service(SERVICE_CONTROL_STOP, argc - 2, argv + 2);
       if (ret) nssm_exit(ret);
-      nssm_exit(control_service(NSSM_SERVICE_CONTROL_START, argc - 2, argv + 2));
+      nssm_exit(control_service(kServiceControlStart, argc - 2, argv + 2));
     }
     if (str_equiv(argv[1], _T("pause"))) nssm_exit(control_service(SERVICE_CONTROL_PAUSE, argc - 2, argv + 2));
     if (str_equiv(argv[1], _T("continue"))) nssm_exit(control_service(SERVICE_CONTROL_CONTINUE, argc - 2, argv + 2));
@@ -171,7 +173,7 @@ int _tmain(int argc, TCHAR **argv) {
       nssm_exit(control_service(SERVICE_CONTROL_INTERROGATE, argc - 2, argv + 2));
     }
     if (str_equiv(argv[1], _T("statuscode"))) nssm_exit(control_service(SERVICE_CONTROL_INTERROGATE, argc - 2, argv + 2, true));
-    if (str_equiv(argv[1], _T("rotate"))) nssm_exit(control_service(NSSM_SERVICE_CONTROL_ROTATE, argc - 2, argv + 2));
+    if (str_equiv(argv[1], _T("rotate"))) nssm_exit(control_service(kServiceControlRotate, argc - 2, argv + 2));
     if (str_equiv(argv[1], _T("list"))) nssm_exit(list_nssm_services(argc - 2, argv + 2));
     if (str_equiv(argv[1], _T("processes"))) nssm_exit(service_process_tree(argc - 2, argv + 2));
     if (str_equiv(argv[1], _T("remove"))) {
@@ -183,7 +185,8 @@ int _tmain(int argc, TCHAR **argv) {
   /* Register messages */
   if (is_admin) create_messages(nssm_unquoted_imagepath());
 
-  SERVICE_TABLE_ENTRY table[] = { { NSSM, service_main }, { 0, 0 } };
+  SERVICE_TABLE_ENTRY table[] = {
+      {const_cast<wchar_t *>(kNssmServiceName), service_main}, {nullptr, nullptr}};
   if (! StartServiceCtrlDispatcher(table)) {
     unsigned long error = GetLastError();
     if (error == ERROR_FAILED_SERVICE_CONTROLLER_CONNECT) nssm_exit(usage(1));

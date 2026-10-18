@@ -44,7 +44,6 @@ int usage(int);
 const TCHAR *nssm_unquoted_imagepath();
 const TCHAR *nssm_imagepath();
 
-#define NSSM _T("NSSM")
 #define NSSM_ARCHITECTURE _T("64-bit")
 #ifdef _DEBUG
 #define NSSM_DEBUG _T(" debug")
@@ -53,40 +52,5 @@ const TCHAR *nssm_imagepath();
 #endif
 #define NSSM_CONFIGURATION NSSM_ARCHITECTURE NSSM_DEBUG
 #include "version.h"
-
-/*
-  Throttle the restart of the service if it stops before this many
-  milliseconds have elapsed since startup.  Override in registry.
-*/
-#define NSSM_RESET_THROTTLE_RESTART 1500
-
-/*
-  How many milliseconds to wait for the application to die after sending
-  a Control-C event to its console.  Override in registry.
-*/
-#define NSSM_KILL_CONSOLE_GRACE_PERIOD 1500
-/*
-  How many milliseconds to wait for the application to die after posting to
-  its windows' message queues.  Override in registry.
-*/
-#define NSSM_KILL_WINDOW_GRACE_PERIOD 1500
-/*
-  How many milliseconds to wait for the application to die after posting to
-  its threads' message queues.  Override in registry.
-*/
-#define NSSM_KILL_THREADS_GRACE_PERIOD 1500
-
-/* Margin of error for service status wait hints in milliseconds. */
-#define NSSM_WAITHINT_MARGIN 2000
-
-/* How many milliseconds to wait before updating service status. */
-#define NSSM_SERVICE_STATUS_DEADLINE 20000
-
-/* User-defined service controls can be in the range 128-255. */
-#define NSSM_SERVICE_CONTROL_START 0
-#define NSSM_SERVICE_CONTROL_ROTATE 128
-
-/* How many milliseconds to wait for closing logging thread. */
-#define NSSM_CLEANUP_LOGGERS_DEADLINE 1500
 
 #endif

@@ -2,6 +2,7 @@
 #include "event.h"
 #include "messages.h"
 #include "service_wait.h"
+#include "service_constants.h"
 
 #include <string>
 
@@ -17,8 +18,8 @@ int await_single_handle(SERVICE_STATUS_HANDLE status_handle,
   unsigned long waited = 0;
   while (waited < timeout) {
     unsigned long interval = timeout - waited;
-    if (interval > NSSM_SERVICE_STATUS_DEADLINE) {
-      interval = NSSM_SERVICE_STATUS_DEADLINE;
+    if (interval > kServiceStatusDeadlineMs) {
+      interval = kServiceStatusDeadlineMs;
     }
 
     if (status) {

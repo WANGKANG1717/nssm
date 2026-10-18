@@ -2,17 +2,18 @@
 #include "event.h"
 #include "messages.h"
 #include "service.h"
+#include "service_constants.h"
 
 const TCHAR *service_control_text(unsigned long control) {
   switch (control) {
     /* There is no native SERVICE_CONTROL_START constant. */
-    case NSSM_SERVICE_CONTROL_START: return _T("START");
+    case kServiceControlStart: return _T("START");
     case SERVICE_CONTROL_STOP: return _T("STOP");
     case SERVICE_CONTROL_SHUTDOWN: return _T("SHUTDOWN");
     case SERVICE_CONTROL_PAUSE: return _T("PAUSE");
     case SERVICE_CONTROL_CONTINUE: return _T("CONTINUE");
     case SERVICE_CONTROL_INTERROGATE: return _T("INTERROGATE");
-    case NSSM_SERVICE_CONTROL_ROTATE: return _T("ROTATE");
+    case kServiceControlRotate: return _T("ROTATE");
     case SERVICE_CONTROL_POWEREVENT: return _T("POWEREVENT");
     default: return nullptr;
   }

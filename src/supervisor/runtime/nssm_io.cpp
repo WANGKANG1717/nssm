@@ -3,6 +3,7 @@
 #include "event.h"
 #include "messages.h"
 #include "service.h"
+#include "service_constants.h"
 #include "nssm_io.h"
 #include "utf8.h"
 #include "win32_handle.h"
@@ -351,7 +352,7 @@ void close_output_handles(STARTUPINFO *si) {
 }
 
 void cleanup_loggers(nssm_service_t *service) {
-  unsigned long interval = NSSM_CLEANUP_LOGGERS_DEADLINE;
+  unsigned long interval = kLoggerCleanupDeadlineMs;
   HANDLE thread_handle = service->stdout_thread;
   service->stdout_thread = nullptr;
   /* Close write end of the data pipe so logging thread can finalise read. */

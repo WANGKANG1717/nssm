@@ -12,6 +12,7 @@
 #include "security.h"
 #include "service.h"
 #include "service_config.h"
+#include "service_constants.h"
 #include "service_wait.h"
 #include "status_snapshot.h"
 #include "recovery.h"
@@ -68,7 +69,7 @@ static int finish_service_start(nssm_service_t *service,
           service->job_handle) {
         terminate_service_job(service->job_handle, ERROR_NOT_READY, nullptr);
         WaitForSingleObject(service->process_handle,
-                            NSSM_SERVICE_STATUS_DEADLINE);
+                            kServiceStatusDeadlineMs);
       }
       return kStartAwaitingProcessExit;
     }
@@ -79,7 +80,7 @@ static int finish_service_start(nssm_service_t *service,
   else {
     const int stability = await_single_handle(
         service->status_handle, &service->status, service->process_handle,
-        service->name, _T("start_service"), NSSM_RESET_THROTTLE_RESTART,
+        service->name, _T("start_service"), kResetThrottleRestartMs,
         &service->status_lock);
     if (stability == 0) {
       return kStartAwaitingProcessExit;
@@ -171,7 +172,7 @@ static bool assign_service_process_to_job(nssm_service_t *service,
   log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_ASSIGN_JOB_FAILED, service->name,
             error_string(error), 0);
   TerminateProcess(service->process_handle, error);
-  WaitForSingleObject(service->process_handle, NSSM_SERVICE_STATUS_DEADLINE);
+  WaitForSingleObject(service->process_handle, kServiceStatusDeadlineMs);
   close_failed_child_launch(service, thread_handle);
   return false;
 }
@@ -187,7 +188,7 @@ static bool resume_service_process(nssm_service_t *service,
   log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_RESUME_PROCESS_FAILED,
             service->name, error_string(error), 0);
   terminate_service_job(service->job_handle, error, nullptr);
-  WaitForSingleObject(service->process_handle, NSSM_SERVICE_STATUS_DEADLINE);
+  WaitForSingleObject(service->process_handle, kServiceStatusDeadlineMs);
   close_failed_child_launch(service, thread_handle);
   return false;
 }
@@ -230,9 +231,9 @@ void set_nssm_service_defaults(nssm_service_t *service) {
   service->stderr_sharing = NSSM_STDERR_SHARING;
   service->stderr_disposition = NSSM_STDERR_DISPOSITION;
   service->stderr_flags = NSSM_STDERR_FLAGS;
-  service->kill_console_delay = NSSM_KILL_CONSOLE_GRACE_PERIOD;
-  service->kill_window_delay = NSSM_KILL_WINDOW_GRACE_PERIOD;
-  service->kill_threads_delay = NSSM_KILL_THREADS_GRACE_PERIOD;
+  service->kill_console_delay = kKillConsoleGracePeriodMs;
+  service->kill_window_delay = kKillWindowGracePeriodMs;
+  service->kill_threads_delay = kKillThreadsGracePeriodMs;
   service->kill_process_tree = 1;
 }
 
@@ -291,7 +292,7 @@ void WINAPI service_main(unsigned long argc, TCHAR **argv) {
   service->status.dwWin32ExitCode = NO_ERROR;
   service->status.dwServiceSpecificExitCode = 0;
   service->status.dwCheckPoint = 0;
-  service->status.dwWaitHint = NSSM_WAITHINT_MARGIN;
+  service->status.dwWaitHint = kServiceWaitHintMarginMs;
 
   /* Signal we AREN'T running the server */
   service->process_handle = 0;
@@ -315,7 +316,8 @@ void WINAPI service_main(unsigned long argc, TCHAR **argv) {
   service->allow_restart = true;
 
   /* Register control handler */
-  service->status_handle = RegisterServiceCtrlHandlerEx(NSSM, service_control_handler, (void *) service);
+  service->status_handle = RegisterServiceCtrlHandlerEx(
+      kNssmServiceName, service_control_handler, service);
   if (! service->status_handle) {
     log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_REGISTERSERVICECTRLHANDER_FAILED, error_string(GetLastError()), 0);
     cleanup_nssm_service(service);
@@ -327,7 +329,7 @@ void WINAPI service_main(unsigned long argc, TCHAR **argv) {
   update_service_status(service, [](SERVICE_STATUS &status) {
     status.dwCurrentState = SERVICE_START_PENDING;
     status.dwWaitHint =
-        NSSM_RESET_THROTTLE_RESTART + NSSM_WAITHINT_MARGIN;
+        kResetThrottleRestartMs + kServiceWaitHintMarginMs;
   });
 
   if (is_process_administrator()) {
@@ -482,9 +484,9 @@ unsigned long WINAPI service_control_handler(unsigned long control, unsigned lon
           We couldn't create a thread to tidy up so we'll have to force the tidyup
           to complete in time in this thread.
         */
-        service->kill_console_delay = NSSM_KILL_CONSOLE_GRACE_PERIOD;
-        service->kill_window_delay = NSSM_KILL_WINDOW_GRACE_PERIOD;
-        service->kill_threads_delay = NSSM_KILL_THREADS_GRACE_PERIOD;
+        service->kill_console_delay = kKillConsoleGracePeriodMs;
+        service->kill_window_delay = kKillWindowGracePeriodMs;
+        service->kill_threads_delay = kKillThreadsGracePeriodMs;
 
         stop_service(service, 0);
       }
@@ -497,7 +499,7 @@ unsigned long WINAPI service_control_handler(unsigned long control, unsigned lon
       /* We can't continue if the application is running! */
       const bool application_running = service->process_handle != nullptr;
       const unsigned long wait_hint =
-          throttle_milliseconds(service->throttle) + NSSM_WAITHINT_MARGIN;
+          throttle_milliseconds(service->throttle) + kServiceWaitHintMarginMs;
       log_event(EVENTLOG_INFORMATION_TYPE, NSSM_EVENT_RESET_THROTTLE, service->name, 0);
       update_service_status(service, [application_running, wait_hint](
                                          SERVICE_STATUS &status) {
@@ -517,7 +519,7 @@ unsigned long WINAPI service_control_handler(unsigned long control, unsigned lon
       log_service_control(service->name, control, false);
       return ERROR_CALL_NOT_IMPLEMENTED;
 
-    case NSSM_SERVICE_CONTROL_ROTATE:
+    case kServiceControlRotate:
       log_service_control(service->name, control, true);
       if (service->rotate_stdout_online == NSSM_ROTATE_ONLINE) service->rotate_stdout_online = NSSM_ROTATE_ONLINE_ASAP;
       if (service->rotate_stderr_online == NSSM_ROTATE_ONLINE) service->rotate_stderr_online = NSSM_ROTATE_ONLINE_ASAP;
@@ -617,7 +619,7 @@ int stop_service(nssm_service_t *service, unsigned long exitcode) {
   /* Signal we are stopping */
   update_service_status(service, [](SERVICE_STATUS &status) {
     status.dwCurrentState = SERVICE_STOP_PENDING;
-    status.dwWaitHint = NSSM_WAITHINT_MARGIN;
+    status.dwWaitHint = kServiceWaitHintMarginMs;
   });
 
   /* Nothing to do if service isn't running */

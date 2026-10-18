@@ -5,6 +5,7 @@
 #include "messages.h"
 #include "process.h"
 #include "service.h"
+#include "service_constants.h"
 #include "service_commands.h"
 #include "win32_handle.h"
 
@@ -18,7 +19,7 @@ int remove_service(nssm_service_t *service);
 
 int service_control_response(unsigned long control, unsigned long status) {
   switch (control) {
-    case NSSM_SERVICE_CONTROL_START:
+    case kServiceControlStart:
       if (status == SERVICE_START_PENDING) return 1;
       return status == SERVICE_RUNNING ? 0 : -1;
 
@@ -36,7 +37,7 @@ int service_control_response(unsigned long control, unsigned long status) {
       return status == SERVICE_RUNNING ? 0 : -1;
 
     case SERVICE_CONTROL_INTERROGATE:
-    case NSSM_SERVICE_CONTROL_ROTATE:
+    case kServiceControlRotate:
     default:
       return 0;
   }
@@ -64,9 +65,9 @@ int await_service_control_response(unsigned long control, SC_HANDLE service,
       last_progress = now;
     }
     const unsigned long wait_hint =
-        status->dwWaitHint ? status->dwWaitHint : NSSM_SERVICE_STATUS_DEADLINE;
+        status->dwWaitHint ? status->dwWaitHint : kServiceStatusDeadlineMs;
     if (now - last_progress >
-        static_cast<unsigned long long>(wait_hint) + NSSM_WAITHINT_MARGIN) {
+        static_cast<unsigned long long>(wait_hint) + kServiceWaitHintMarginMs) {
       return response;
     }
     unsigned long interval = wait_hint / 10;
@@ -258,7 +259,7 @@ int control_service(unsigned long control, int argc, TCHAR **argv,
 
   unsigned long access = SERVICE_QUERY_STATUS;
   switch (control) {
-    case NSSM_SERVICE_CONTROL_START:
+    case kServiceControlStart:
       access |= SERVICE_START;
       break;
     case SERVICE_CONTROL_CONTINUE:
@@ -268,7 +269,7 @@ int control_service(unsigned long control, int argc, TCHAR **argv,
     case SERVICE_CONTROL_STOP:
       access |= SERVICE_STOP;
       break;
-    case NSSM_SERVICE_CONTROL_ROTATE:
+    case kServiceControlRotate:
       access |= SERVICE_USER_DEFINED_CONTROL;
       break;
   }
@@ -281,7 +282,7 @@ int control_service(unsigned long control, int argc, TCHAR **argv,
   SERVICE_STATUS status = {};
   int result = 0;
   unsigned long error = ERROR_SUCCESS;
-  if (control == NSSM_SERVICE_CONTROL_START) {
+  if (control == kServiceControlStart) {
     result = StartService(service.get(), 0, nullptr);
     error = result ? ERROR_SUCCESS : GetLastError();
     if (result) {
