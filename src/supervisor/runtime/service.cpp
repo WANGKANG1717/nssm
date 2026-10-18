@@ -25,8 +25,10 @@ static constexpr int kStartAwaitingProcessExit = -2;
 
 static void unregister_service_wait(nssm_service_t *service,
                                     bool wait_for_callbacks) {
+  AcquireSRWLockExclusive(&service->wait_lock);
   HANDLE wait_handle = static_cast<HANDLE>(InterlockedExchangePointer(
       reinterpret_cast<void *volatile *>(&service->wait_handle), nullptr));
+  ReleaseSRWLockExclusive(&service->wait_lock);
   if (! wait_handle) return;
 
   HANDLE completion_event = wait_for_callbacks ? INVALID_HANDLE_VALUE : nullptr;
@@ -35,6 +37,24 @@ static void unregister_service_wait(nssm_service_t *service,
   if (! wait_for_callbacks && error == ERROR_IO_PENDING) return;
   log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_UNREGISTERWAIT_FAILED,
             service->name, error_string(error), 0);
+}
+
+static bool register_service_wait(nssm_service_t *service) {
+  AcquireSRWLockExclusive(&service->wait_lock);
+  if (! service->process_handle ||
+      WaitForSingleObject(service->stop_event, 0) == WAIT_OBJECT_0) {
+    ReleaseSRWLockExclusive(&service->wait_lock);
+    SetLastError(ERROR_OPERATION_ABORTED);
+    return false;
+  }
+
+  const bool registered = RegisterWaitForSingleObject(
+      &service->wait_handle, service->process_handle, end_service, service,
+      INFINITE, WT_EXECUTEONLYONCE | WT_EXECUTELONGFUNCTION);
+  const unsigned long error = registered ? ERROR_SUCCESS : GetLastError();
+  ReleaseSRWLockExclusive(&service->wait_lock);
+  SetLastError(error);
+  return registered;
 }
 
 template <typename Mutator>
@@ -238,6 +258,7 @@ void set_nssm_service_defaults(nssm_service_t *service) {
 
   InitializeSRWLock(&service->status_snapshot_lock);
   InitializeSRWLock(&service->status_lock);
+  InitializeSRWLock(&service->wait_lock);
   service->stdin_sharing = NSSM_STDIN_SHARING;
   service->stdin_disposition = NSSM_STDIN_DISPOSITION;
   service->stdin_flags = NSSM_STDIN_FLAGS;
@@ -433,10 +454,9 @@ int monitor_service(nssm_service_t *service) {
     return 0;
   }
   /* Monitor service */
-  if (! RegisterWaitForSingleObject(
-          &service->wait_handle, service->process_handle, end_service, service,
-          INFINITE, WT_EXECUTEONLYONCE | WT_EXECUTELONGFUNCTION)) {
+  if (! register_service_wait(service)) {
     const unsigned long error = GetLastError();
+    if (error == ERROR_OPERATION_ABORTED) return 0;
     log_event(EVENTLOG_ERROR_TYPE,
               NSSM_EVENT_REGISTERWAITFORSINGLEOBJECT_FAILED, service->name,
               service->exe, error_string(error), 0);
