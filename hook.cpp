@@ -177,7 +177,7 @@ void await_hook_threads(hook_thread_t *hook_threads, SERVICE_STATUS_HANDLE statu
   int i;
   for (i = 0; i < hook_threads->num_threads; i++) {
     if (deadline) {
-      if (await_single_handle(status_handle, status, hook_threads->data[i].thread_handle, hook_threads->data[i].name, _T(__FUNCTION__), deadline) != 1) {
+      if (await_single_handle(status_handle, status, hook_threads->data[i].thread_handle, hook_threads->data[i].name, _T("await_hook_threads"), deadline) != 1) {
         CloseHandle(hook_threads->data[i].thread_handle);
         continue;
       }
@@ -375,7 +375,7 @@ int nssm_hook(hook_thread_t *hook_threads, nssm_service_t *service, TCHAR *hook_
         add_thread_handle(hook_threads, thread_handle, hook->name);
       }
       else {
-        await_single_handle(service->status_handle, &service->status, thread_handle, hook->name, _T(__FUNCTION__), deadline + NSSM_SERVICE_STATUS_DEADLINE);
+        await_single_handle(service->status_handle, &service->status, thread_handle, hook->name, _T("nssm_hook"), deadline + NSSM_SERVICE_STATUS_DEADLINE);
         unsigned long exitcode;
         GetExitCodeThread(thread_handle, &exitcode);
         ret = (int) exitcode;

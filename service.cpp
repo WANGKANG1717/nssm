@@ -244,7 +244,7 @@ int affinity_string_to_mask(TCHAR *string, __int64 *mask) {
   }
 
   for (i = 0; i <= n; i++) {
-    for (int j = set[i].first; j <= set[i].last; j++) (__int64) *mask |= (1LL << (__int64) j);
+    for (int j = set[i].first; j <= set[i].last; j++) *mask |= (1LL << (__int64) j);
   }
 
   return 0;

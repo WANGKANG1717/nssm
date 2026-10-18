@@ -32,7 +32,15 @@
 #endif
 #define DIR_LENGTH PATH_LENGTH - 12
 
-#define _WIN32_WINNT 0x0601
+#ifndef WINVER
+#define WINVER 0x0A00
+#endif
+#ifndef _WIN32_WINNT
+#define _WIN32_WINNT 0x0A00
+#endif
+#ifndef NTDDI_VERSION
+#define NTDDI_VERSION 0x0A000000
+#endif
 
 #define APSTUDIO_HIDDEN_SYMBOLS
 #include <windows.h>
@@ -58,7 +66,7 @@
 #include "process.h"
 #include "registry.h"
 #include "settings.h"
-#include "io.h"
+#include "nssm_io.h"
 #include "gui.h"
 #endif
 
