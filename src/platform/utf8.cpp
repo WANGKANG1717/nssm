@@ -53,8 +53,3 @@ int to_utf16(const char *source, wchar_t **destination,
   if (length) *length = static_cast<unsigned long>(characters - 1);
   return 0;
 }
-
-int from_utf16(const wchar_t *source, TCHAR **destination,
-               unsigned long *length) {
-  return to_utf16(source, destination, length);
-}
