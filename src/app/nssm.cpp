@@ -5,6 +5,7 @@
 #include "output.h"
 #include "registry.h"
 #include "service.h"
+#include "service_commands.h"
 #include "status.h"
 #include "config.h"
 #include "utf8.h"

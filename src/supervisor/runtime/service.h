@@ -161,10 +161,6 @@ int set_service_description(const TCHAR *, SC_HANDLE, TCHAR *);
 int get_service_description(const TCHAR *, SC_HANDLE, unsigned long, TCHAR *);
 int get_service_startup(const TCHAR *, SC_HANDLE, const QUERY_SERVICE_CONFIG *, unsigned long *);
 int get_service_username(const TCHAR *, const QUERY_SERVICE_CONFIG *, TCHAR **, size_t *);
-int pre_remove_service(int, TCHAR **);
-int remove_service(nssm_service_t *);
-int control_service(unsigned long, int, TCHAR **, bool);
-int control_service(unsigned long, int, TCHAR **);
 void set_service_recovery(nssm_service_t *);
 int monitor_service(nssm_service_t *);
 int start_service(nssm_service_t *);
@@ -172,7 +168,5 @@ int stop_service(nssm_service_t *, unsigned long);
 void CALLBACK end_service(void *, unsigned char);
 void throttle_restart(nssm_service_t *);
 int await_single_handle(SERVICE_STATUS_HANDLE, SERVICE_STATUS *, HANDLE, TCHAR *, TCHAR *, unsigned long);
-int list_nssm_services(int, TCHAR **);
-int service_process_tree(int, TCHAR **);
 
 #endif
