@@ -1,78 +1,75 @@
-#include "nssm.h"
 #include "event.h"
 #include "win32_handle.h"
 
+#include <cstdarg>
 #include <vector>
 
-#define NSSM_SOURCE _T("nssm")
-#define NSSM_ERROR_BUFSIZE 65535
-#define NSSM_NUM_EVENT_STRINGS 16
-/* Convert an error code using storage owned by the current thread. */
-TCHAR *error_string(unsigned long error) {
-  thread_local std::vector<TCHAR> error_buffer(NSSM_ERROR_BUFSIZE);
-  TCHAR *error_message = error_buffer.data();
+namespace {
 
-  if (! FormatMessage(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, 0, error, GetUserDefaultLangID(), (TCHAR *) error_message, NSSM_ERROR_BUFSIZE, 0)) {
-    if (! FormatMessage(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, 0, error, 0, (TCHAR *) error_message, NSSM_ERROR_BUFSIZE, 0)) {
-      if (_sntprintf_s(error_message, NSSM_ERROR_BUFSIZE, _TRUNCATE, _T("system error %lu"), error) < 0) return 0;
-    }
+constexpr wchar_t kEventSource[] = L"nssm";
+constexpr size_t kErrorBufferSize = 65535;
+
+}  // namespace
+
+wchar_t *error_string(unsigned long error) {
+  thread_local std::vector<wchar_t> error_buffer(kErrorBufferSize);
+  wchar_t *error_message = error_buffer.data();
+
+  if (! FormatMessageW(FORMAT_MESSAGE_FROM_SYSTEM |
+                           FORMAT_MESSAGE_IGNORE_INSERTS,
+                       nullptr, error, GetUserDefaultLangID(), error_message,
+                       kErrorBufferSize, nullptr) &&
+      ! FormatMessageW(FORMAT_MESSAGE_FROM_SYSTEM |
+                           FORMAT_MESSAGE_IGNORE_INSERTS,
+                       nullptr, error, 0, error_message, kErrorBufferSize,
+                       nullptr) &&
+      _snwprintf_s(error_message, kErrorBufferSize, _TRUNCATE,
+                   L"system error %lu", error) < 0) {
+    return nullptr;
   }
   return error_message;
 }
 
-/* Convert message code to format string */
-TCHAR *message_string(unsigned long error) {
-  /* The returned pointer MUST be freed by the caller with LocalFree(). */
-  TCHAR *ret;
-  HMODULE module = GetModuleHandle(0);
-  if (! FormatMessage(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_HMODULE | FORMAT_MESSAGE_IGNORE_INSERTS, module, error, GetUserDefaultLangID(), (LPTSTR) &ret, NSSM_ERROR_BUFSIZE, 0)) {
-    if (! FormatMessage(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_HMODULE | FORMAT_MESSAGE_IGNORE_INSERTS, module, error, 0, (LPTSTR) &ret, NSSM_ERROR_BUFSIZE, 0)) {
-      /*
-        Callers expect to free the returned pointer with LocalFree(), so the
-        fallback allocation must also be compatible with LocalFree().
-      */
-      ret = (TCHAR *) LocalAlloc(LPTR, NSSM_ERROR_BUFSIZE * sizeof(TCHAR));
-      if (! ret) return 0;
-      if (_sntprintf_s(ret, NSSM_ERROR_BUFSIZE, _TRUNCATE, _T("system error %lu"), error) < 0) {
-        LocalFree(ret);
-        return 0;
-      }
+wchar_t *message_string(unsigned long error) {
+  wchar_t *message = nullptr;
+  HMODULE module = GetModuleHandleW(nullptr);
+  const unsigned long flags = FORMAT_MESSAGE_ALLOCATE_BUFFER |
+                              FORMAT_MESSAGE_FROM_HMODULE |
+                              FORMAT_MESSAGE_IGNORE_INSERTS;
+  if (! FormatMessageW(flags, module, error, GetUserDefaultLangID(),
+                       reinterpret_cast<wchar_t *>(&message),
+                       kErrorBufferSize, nullptr) &&
+      ! FormatMessageW(flags, module, error, 0,
+                       reinterpret_cast<wchar_t *>(&message),
+                       kErrorBufferSize, nullptr)) {
+    message = static_cast<wchar_t *>(
+        LocalAlloc(LPTR, kErrorBufferSize * sizeof(wchar_t)));
+    if (! message) return nullptr;
+    if (_snwprintf_s(message, kErrorBufferSize, _TRUNCATE,
+                     L"system error %lu", error) < 0) {
+      LocalFree(message);
+      return nullptr;
     }
   }
-  return ret;
+  return message;
 }
 
-/* Log a message to the Event Log */
-void log_event(unsigned short type, unsigned long id, ...) {
-  va_list arg;
-  int count;
-  TCHAR *s;
-  TCHAR *strings[NSSM_NUM_EVENT_STRINGS];
-
-  /* Open event log */
-  unique_event_source handle(RegisterEventSource(0, NSSM_SOURCE));
+void log_event_strings(unsigned short type, unsigned long id,
+                       const wchar_t *const *strings, size_t count) {
+  unique_event_source handle(RegisterEventSourceW(nullptr, kEventSource));
   if (! handle) return;
-
-  /* Log it */
-  count = 0;
-  va_start(arg, id);
-  while ((s = va_arg(arg, TCHAR *)) && count < NSSM_NUM_EVENT_STRINGS - 1) strings[count++] = s;
-  strings[count] = 0;
-  va_end(arg);
-  ReportEvent(handle.get(), type, 0, id, 0, count, 0,
-              (const TCHAR **) strings, 0);
+  ReportEventW(handle.get(), type, 0, id, nullptr,
+               static_cast<unsigned short>(count), 0,
+               const_cast<const wchar_t **>(strings), nullptr);
 }
 
-/* Log a message to the console */
 void print_message(FILE *file, unsigned long id, ...) {
-  va_list arg;
-
-  TCHAR *format = message_string(id);
+  wchar_t *format = message_string(id);
   if (! format) return;
 
-  va_start(arg, id);
-  _vftprintf(file, format, arg);
-  va_end(arg);
-
+  va_list arguments;
+  va_start(arguments, id);
+  vfwprintf(file, format, arguments);
+  va_end(arguments);
   free_message_string(format);
 }

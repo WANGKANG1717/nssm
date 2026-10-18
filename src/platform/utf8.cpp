@@ -1,4 +1,13 @@
-#include "nssm.h"
+#include "utf8.h"
+
+#include <windows.h>
+
+#include <fcntl.h>
+#include <io.h>
+
+#include <cstdio>
+#include <cstring>
+#include <cwchar>
 
 static unsigned long original_console_code_page;
 

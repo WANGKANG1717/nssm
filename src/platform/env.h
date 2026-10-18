@@ -1,6 +1,6 @@
 #ifndef ENV_H
 #define ENV_H
 
-TCHAR *copy_environment();
+wchar_t *copy_environment();
 
 #endif

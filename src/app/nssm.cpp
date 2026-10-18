@@ -128,7 +128,7 @@ int _tmain(int argc, TCHAR **argv) {
         }
         nssm_exit(elevate(argc, argv, NSSM_MESSAGE_NOT_ADMINISTRATOR_CANNOT_INSTALL));
       }
-      create_messages();
+      create_messages(nssm_unquoted_imagepath());
       nssm_exit(apply_service_config_command(argc - 2, argv + 2));
     }
     if (str_equiv(argv[1], _T("start"))) nssm_exit(control_service(NSSM_SERVICE_CONTROL_START, argc - 2, argv + 2));
@@ -158,7 +158,7 @@ int _tmain(int argc, TCHAR **argv) {
   }
 
   /* Register messages */
-  if (is_admin) create_messages();
+  if (is_admin) create_messages(nssm_unquoted_imagepath());
 
   SERVICE_TABLE_ENTRY table[] = { { NSSM, service_main }, { 0, 0 } };
   if (! StartServiceCtrlDispatcher(table)) {

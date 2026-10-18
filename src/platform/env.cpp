@@ -1,40 +1,43 @@
-#include "nssm.h"
 #include "env.h"
 #include "event.h"
 #include "messages.h"
 
+#include <windows.h>
+
+#include <cstring>
+
 namespace {
 
-size_t environment_length(const TCHAR *environment) {
+size_t environment_length(const wchar_t *environment) {
   if (! environment) return 0;
-  const TCHAR *cursor = environment;
+  const wchar_t *cursor = environment;
   while (*cursor || *(cursor + 1)) ++cursor;
   return static_cast<size_t>(cursor - environment) + 2;
 }
 
-TCHAR *copy_environment_block(const TCHAR *environment) {
+wchar_t *copy_environment_block(const wchar_t *environment) {
   const size_t length = environment_length(environment);
   if (! length) return nullptr;
-  auto *copy = static_cast<TCHAR *>(
-      HeapAlloc(GetProcessHeap(), 0, length * sizeof(TCHAR)));
+  auto *copy = static_cast<wchar_t *>(
+      HeapAlloc(GetProcessHeap(), 0, length * sizeof(wchar_t)));
   if (! copy) {
     SetLastError(ERROR_NOT_ENOUGH_MEMORY);
     log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_OUT_OF_MEMORY,
-              _T("environment"), _T("copy_environment_block()"), 0);
+              L"environment", L"copy_environment_block()", 0);
     return nullptr;
   }
-  memcpy(copy, environment, length * sizeof(TCHAR));
+  memcpy(copy, environment, length * sizeof(wchar_t));
   return copy;
 }
 
 }  // namespace
 
-TCHAR *copy_environment() {
-  TCHAR *environment = GetEnvironmentStrings();
+wchar_t *copy_environment() {
+  wchar_t *environment = GetEnvironmentStringsW();
   if (! environment) return nullptr;
-  TCHAR *copy = copy_environment_block(environment);
+  wchar_t *copy = copy_environment_block(environment);
   const unsigned long error = copy ? ERROR_SUCCESS : GetLastError();
-  FreeEnvironmentStrings(environment);
+  FreeEnvironmentStringsW(environment);
   SetLastError(error);
   return copy;
 }
