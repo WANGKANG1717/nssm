@@ -160,8 +160,8 @@ int service_process_tree(int argc, TCHAR **argv) {
         service_handle.get(), SC_STATUS_PROCESS_INFO,
         reinterpret_cast<LPBYTE>(&service_status), sizeof(service_status),
         &size);
-    const unsigned long error = GetLastError();
     if (! queried) {
+      const unsigned long error = GetLastError();
       _ftprintf(stderr, _T("%s: %s\n"), canonical_name,
                 error_string(error));
       ++errors;
@@ -177,11 +177,13 @@ int service_process_tree(int argc, TCHAR **argv) {
     if (! process) {
       _ftprintf(stderr, _T("%s: %lu: %s\n"), canonical_name, context.pid,
                 error_string(GetLastError()));
+      ++errors;
       continue;
     }
     context.process_handle = process.get();
     if (get_process_creation_time(context.process_handle,
                                   &context.creation_time)) {
+      ++errors;
       continue;
     }
     GetSystemTimeAsFileTime(&context.exit_time);
