@@ -7,7 +7,7 @@
 
 namespace {
 constexpr wchar_t kEventLogRegistryPath[] =
-    L"SYSTEM\\CurrentControlSet\\Services\\EventLog\\Application\\nssm";
+    L"SYSTEM\\CurrentControlSet\\Services\\EventLog\\Application\\SvcPilot";
 }
 
 int create_messages(const wchar_t *executable_path) {

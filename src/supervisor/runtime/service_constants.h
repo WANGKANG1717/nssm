@@ -1,7 +1,7 @@
 #ifndef NSSM_SERVICE_CONSTANTS_H
 #define NSSM_SERVICE_CONSTANTS_H
 
-inline constexpr wchar_t kNssmServiceName[] = L"NSSM";
+inline constexpr wchar_t kProductName[] = L"SvcPilot";
 
 inline constexpr unsigned long kResetThrottleRestartMs = 1500;
 inline constexpr unsigned long kKillConsoleGracePeriodMs = 1500;

@@ -320,7 +320,7 @@ void WINAPI service_main(unsigned long argc, wchar_t **argv) {
 
   /* Register control handler */
   service->status_handle = RegisterServiceCtrlHandlerExW(
-      kNssmServiceName, service_control_handler, service);
+      kProductName, service_control_handler, service);
   if (! service->status_handle) {
     log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_REGISTERSERVICECTRLHANDER_FAILED, error_string(GetLastError()), 0);
     cleanup_nssm_service(service);

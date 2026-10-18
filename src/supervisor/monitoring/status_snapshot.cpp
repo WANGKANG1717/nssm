@@ -18,7 +18,7 @@ constexpr unsigned long kStatusVersion = 1;
 static_assert(std::is_trivially_copyable_v<status_snapshot_t>);
 
 std::wstring mapping_name(const std::wstring &service_name) {
-  return L"Global\\NSSM.Status." + service_name;
+  return L"Global\\SvcPilot.Status." + service_name;
 }
 
 runtime_health_t current_health(const nssm_service_t *service,

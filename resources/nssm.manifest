@@ -1,12 +1,12 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0">
   <assemblyIdentity
-      name="NSSM.ServiceManager"
+      name="SvcPilot.ServiceSupervisor"
       processorArchitecture="amd64"
       version="3.0.0.0"
       type="win32" />
 
-  <description>Non-Sucking Service Manager</description>
+  <description>SvcPilot Windows service supervisor</description>
 
   <trustInfo xmlns="urn:schemas-microsoft-com:asm.v3">
     <security>

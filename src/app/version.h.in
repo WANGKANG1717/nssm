@@ -21,7 +21,7 @@
 
 /* Configurable metadata consumed by the VERSIONINFO resource. */
 #define NSSM_COMPANY L"WANGKANG1717"
-#define NSSM_FILE_DESCRIPTION L"稳定可靠的服务管理器"
+#define NSSM_FILE_DESCRIPTION L"SvcPilot Windows service supervisor"
 #define NSSM_COMMENTS L"https://github.com/WANGKANG1717/nssm"
-#define NSSM_ORIGINAL_FILENAME L"nssm.exe"
-#define NSSM_PRODUCT_NAME L"NSSM"
+#define NSSM_ORIGINAL_FILENAME L"svp.exe"
+#define NSSM_PRODUCT_NAME L"SvcPilot"

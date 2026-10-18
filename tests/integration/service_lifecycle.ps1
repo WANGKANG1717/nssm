@@ -11,7 +11,7 @@ if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administra
 }
 
 $executablePath = (Resolve-Path -LiteralPath $Executable).Path
-$serviceName = "nssm-integration-$PID"
+$serviceName = "svcpilot-integration-$PID"
 $unmanagedServiceName = "$serviceName-unmanaged"
 $testRoot = Join-Path $env:ProgramData $serviceName
 $configPath = Join-Path $testRoot 'service.json'
@@ -47,7 +47,7 @@ function Set-SecureTestAcl([string]$Path, [bool]$Directory) {
 function Invoke-NssmJson([string[]]$Arguments) {
   $text = & $executablePath @Arguments
   if ($LASTEXITCODE -ne 0) {
-    throw "nssm failed with exit code $LASTEXITCODE`: $text"
+    throw "svp failed with exit code $LASTEXITCODE`: $text"
   }
   return $text | ConvertFrom-Json
 }
@@ -61,7 +61,7 @@ try {
     'start=' 'demand' | Out-Null
   if ($LASTEXITCODE -ne 0) { throw 'unmanaged test service creation failed' }
   & $executablePath remove $unmanagedServiceName confirm 2>$null | Out-Null
-  if ($LASTEXITCODE -eq 0) { throw 'nssm removed an unmanaged service' }
+  if ($LASTEXITCODE -eq 0) { throw 'svp removed an unmanaged service' }
   & sc.exe query $unmanagedServiceName 2>$null | Out-Null
   if ($LASTEXITCODE -ne 0) { throw 'unmanaged service no longer exists' }
 
@@ -69,7 +69,7 @@ try {
     schema = 1
     service = @{
       name = $serviceName
-      displayName = 'NSSM integration test'
+      displayName = 'SvcPilot integration test'
       startup = 'manual'
       account = @{ type = 'virtual' }
     }
@@ -108,7 +108,7 @@ try {
   if (-not $applied.ok) { throw 'apply did not report success' }
   $managedServices = @(& $executablePath list)
   if ($LASTEXITCODE -ne 0 -or $managedServices -notcontains $serviceName) {
-    throw 'declaratively managed service was missing from nssm list'
+    throw 'declaratively managed service was missing from svp list'
   }
   & $executablePath start $serviceName | Out-Null
   if ($LASTEXITCODE -ne 0) { throw 'service start failed' }

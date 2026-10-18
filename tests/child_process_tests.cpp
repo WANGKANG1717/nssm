@@ -161,9 +161,9 @@ void environment_validation_tests() {
 }
 
 void environment_isolation_tests() {
-  constexpr const wchar_t *name = L"NSSM_UNIT_ENVIRONMENT_ISOLATION";
+  constexpr const wchar_t *name = L"SVCPILOT_UNIT_ENVIRONMENT_ISOLATION";
   SetEnvironmentVariableW(name, L"wrapper-value");
-  auto extra = make_block({L"NSSM_UNIT_ENVIRONMENT_ISOLATION=child-value"});
+  auto extra = make_block({L"SVCPILOT_UNIT_ENVIRONMENT_ISOLATION=child-value"});
   std::vector<wchar_t> result;
   std::wstring error;
   expect(build_child_environment(nullptr, nullptr, extra.data(), &result, &error),
@@ -570,7 +570,7 @@ void health_probe_tests() {
   expect(current_length > 0 && current_length < std::size(current_directory),
          L"test working directory should be available");
   std::wstring heartbeat = std::wstring(current_directory) +
-      L"\\nssm-health-" + std::to_wstring(GetCurrentProcessId()) + L".tmp";
+      L"\\svcpilot-health-" + std::to_wstring(GetCurrentProcessId()) + L".tmp";
   HANDLE file = CreateFileW(heartbeat.c_str(), GENERIC_WRITE, 0, nullptr,
                             CREATE_NEW, FILE_ATTRIBUTE_TEMPORARY, nullptr);
   expect(file != INVALID_HANDLE_VALUE,
@@ -680,7 +680,7 @@ void readiness_tests() {
 
   config = {};
   config.probe.type = health_check_type_t::file;
-  config.probe.file_path = L"nssm-readiness-missing-" +
+  config.probe.file_path = L"svcpilot-readiness-missing-" +
       std::to_wstring(GetCurrentProcessId());
   config.probe.interval_ms = 100;
   config.startup_timeout_ms = 250;

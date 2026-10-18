@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.25)
 
-project(nssm VERSION 3.1.4 LANGUAGES C CXX RC)
+project(svcpilot VERSION 3.1.4 LANGUAGES C CXX RC)
 
 file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/generated")
 configure_file(
@@ -10,18 +10,18 @@ configure_file(
 )
 
 set(NSSM_BUILD_LABEL "release" CACHE STRING
-    "Stable label shown by 'nssm version' (avoid timestamps for reproducible builds)")
+    "Stable label shown by 'svp version' (avoid timestamps for reproducible builds)")
 
 if(NOT WIN32)
-  message(FATAL_ERROR "NSSM can only be built for Windows")
+  message(FATAL_ERROR "SvcPilot can only be built for Windows")
 endif()
 if(NOT MINGW OR NOT CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR
    NOT CMAKE_C_COMPILER_ID STREQUAL "GNU")
-  message(FATAL_ERROR "NSSM supports only MinGW-w64 GCC")
+  message(FATAL_ERROR "SvcPilot supports only MinGW-w64 GCC")
 endif()
 
 if(CMAKE_SIZEOF_VOID_P LESS 8)
-  message(FATAL_ERROR "NSSM supports only 64-bit builds")
+  message(FATAL_ERROR "SvcPilot supports only 64-bit builds")
 endif()
 
 if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS 14)
@@ -137,8 +137,8 @@ set(NSSM_SOURCES
   "${NSSM_RESOURCE_SOURCE}"
 )
 
-add_executable(nssm ${NSSM_SOURCES})
-add_dependencies(nssm nssm_messages)
+add_executable(svp ${NSSM_SOURCES})
+add_dependencies(svp nssm_messages)
 
 set_property(
   SOURCE "${NSSM_RESOURCE_SOURCE}"
@@ -152,7 +152,7 @@ set_source_files_properties("${NSSM_RESOURCE_SOURCE}" PROPERTIES GENERATED TRUE)
 set_property(SOURCE "${NSSM_RESOURCE_SOURCE}" APPEND PROPERTY
              COMPILE_OPTIONS "--codepage=65001")
 
-target_include_directories(nssm PRIVATE
+target_include_directories(svp PRIVATE
   "${CMAKE_CURRENT_SOURCE_DIR}/src/app"
   "${CMAKE_CURRENT_SOURCE_DIR}/src/cli"
   "${CMAKE_CURRENT_SOURCE_DIR}/src/config"
@@ -164,7 +164,7 @@ target_include_directories(nssm PRIVATE
   "${CMAKE_CURRENT_BINARY_DIR}/generated"
 )
 
-target_compile_definitions(nssm PRIVATE
+target_compile_definitions(svp PRIVATE
   UNICODE
   _UNICODE
   NSSM_BUILD_LABEL="${NSSM_BUILD_LABEL}"
@@ -173,9 +173,9 @@ target_compile_definitions(nssm PRIVATE
   NTDDI_VERSION=0x0A000000
 )
 
-nssm_configure_compiler(nssm)
+nssm_configure_compiler(svp)
 
-target_link_libraries(nssm PRIVATE
+target_link_libraries(svp PRIVATE
   advapi32
   shell32
   shlwapi
@@ -185,37 +185,46 @@ target_link_libraries(nssm PRIVATE
   yyjson
 )
 
-set_target_properties(nssm PROPERTIES
+set_target_properties(svp PROPERTIES
   RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/out/${CMAKE_BUILD_TYPE}/win64"
 )
 
 include(CTest)
 
 if(BUILD_TESTING)
-  add_test(NAME nssm.version COMMAND $<TARGET_FILE:nssm> version)
-  set_tests_properties(nssm.version PROPERTIES
-    PASS_REGULAR_EXPRESSION "NSSM ${PROJECT_VERSION} 64-bit"
+  add_test(NAME svp.version COMMAND $<TARGET_FILE:svp> version)
+  set_tests_properties(svp.version PROPERTIES
+    PASS_REGULAR_EXPRESSION "SvcPilot ${PROJECT_VERSION} 64-bit"
   )
 
   add_test(
-    NAME nssm.validate
-    COMMAND $<TARGET_FILE:nssm> validate
-            "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/minimal-service.json"
-  )
-  set_tests_properties(nssm.validate PROPERTIES
-    PASS_REGULAR_EXPRESSION "Configuration is valid: nssm-config-test"
-  )
-
-  add_test(
-    NAME nssm.resources
+    NAME svp.usage
     COMMAND "${NSSM_RESOURCE_POWERSHELL_EXECUTABLE}"
             -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass
-            -File "${CMAKE_CURRENT_SOURCE_DIR}/cmake/VerifyResources.ps1"
-            -Executable $<TARGET_FILE:nssm>
+            -File "${CMAKE_CURRENT_SOURCE_DIR}/cmake/VerifyUsage.ps1"
+            -Executable $<TARGET_FILE:svp>
             -ExpectedVersion "${PROJECT_VERSION}"
   )
 
-  add_executable(nssm_unit_tests
+  add_test(
+    NAME svp.validate
+    COMMAND $<TARGET_FILE:svp> validate
+            "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/minimal-service.json"
+  )
+  set_tests_properties(svp.validate PROPERTIES
+    PASS_REGULAR_EXPRESSION "Configuration is valid: svcpilot-config-test"
+  )
+
+  add_test(
+    NAME svp.resources
+    COMMAND "${NSSM_RESOURCE_POWERSHELL_EXECUTABLE}"
+            -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass
+            -File "${CMAKE_CURRENT_SOURCE_DIR}/cmake/VerifyResources.ps1"
+            -Executable $<TARGET_FILE:svp>
+            -ExpectedVersion "${PROJECT_VERSION}"
+  )
+
+  add_executable(svp_unit_tests
     tests/child_process_tests.cpp
     src/cli/output.cpp
     src/platform/child_process.cpp
@@ -232,8 +241,8 @@ if(BUILD_TESTING)
     src/platform/string_utils.cpp
     src/platform/utf8.cpp
   )
-  add_dependencies(nssm_unit_tests nssm_messages)
-  target_include_directories(nssm_unit_tests PRIVATE
+  add_dependencies(svp_unit_tests nssm_messages)
+  target_include_directories(svp_unit_tests PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/src/config"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/cli"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/supervisor/process"
@@ -242,21 +251,21 @@ if(BUILD_TESTING)
     "${CMAKE_CURRENT_SOURCE_DIR}/src/platform"
     "${CMAKE_CURRENT_BINARY_DIR}/generated"
   )
-  target_compile_definitions(nssm_unit_tests PRIVATE
+  target_compile_definitions(svp_unit_tests PRIVATE
     UNICODE
     _UNICODE
     WINVER=0x0A00
     _WIN32_WINNT=0x0A00
   )
-  nssm_configure_compiler(nssm_unit_tests)
-  target_link_libraries(nssm_unit_tests PRIVATE advapi32 shlwapi winhttp ws2_32 yyjson)
-  add_test(NAME nssm.unit COMMAND $<TARGET_FILE:nssm_unit_tests>)
+  nssm_configure_compiler(svp_unit_tests)
+  target_link_libraries(svp_unit_tests PRIVATE advapi32 shlwapi winhttp ws2_32 yyjson)
+  add_test(NAME svp.unit COMMAND $<TARGET_FILE:svp_unit_tests>)
   add_test(
-    NAME nssm.validate-json
-    COMMAND $<TARGET_FILE:nssm> validate --json
+    NAME svp.validate-json
+    COMMAND $<TARGET_FILE:svp> validate --json
             "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/minimal-service.json"
   )
-  set_tests_properties(nssm.validate-json PROPERTIES
+  set_tests_properties(svp.validate-json PROPERTIES
     PASS_REGULAR_EXPRESSION "\"ok\":true.*\"operation\":\"validate\""
   )
 endif()

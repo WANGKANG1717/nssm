@@ -409,7 +409,7 @@ config_operation_result_t plan_service_config(
     return operation_failure(
         status,
         status == config_operation_status_t::conflict
-            ? L"The existing service is not managed by declarative NSSM"
+            ? L"The existing service is not managed by SvcPilot"
             : L"Unable to read the existing service configuration",
         query_error);
   }
@@ -508,7 +508,7 @@ config_operation_result_t apply_service_config(
       return operation_failure(
           status,
           status == config_operation_status_t::conflict
-              ? L"Refusing to update a service not previously managed by this declarative NSSM"
+              ? L"Refusing to update a service not previously managed by SvcPilot"
               : L"Unable to read the existing service configuration",
           query_error);
     }

@@ -1,4 +1,4 @@
-name: Build NSSM
+name: Build SvcPilot
 
 on:
   push:
@@ -61,7 +61,7 @@ jobs:
 
       - name: Verify x64 static runtime
         run: |
-          executable="out/${{ matrix.configuration }}/win64/nssm.exe"
+          executable="out/${{ matrix.configuration }}/win64/svp.exe"
           objdump -f "$executable" | grep -q 'file format pei-x86-64'
           if objdump -p "$executable" | grep -Eqi 'DLL Name: (libgcc_s|libstdc\+\+|libwinpthread)'; then
             echo 'Unexpected dynamic MinGW runtime dependency' >&2
@@ -73,7 +73,7 @@ jobs:
         shell: powershell
         run: >-
           .\tests\integration\service_lifecycle.ps1
-          -Executable .\out\Release\win64\nssm.exe
+          -Executable .\out\Release\win64\svp.exe
 
       - name: Sign release executable
         if: matrix.preset == 'release'
@@ -87,7 +87,7 @@ jobs:
             exit 0
           }
           .\cmake\SignWindowsBinary.ps1 `
-            -Executable .\out\Release\win64\nssm.exe `
+            -Executable .\out\Release\win64\svp.exe `
             -CertificateBase64 $env:SIGNING_CERTIFICATE `
             -CertificatePassword $env:SIGNING_PASSWORD
 
@@ -96,7 +96,7 @@ jobs:
         shell: powershell
         run: >-
           .\cmake\PackageRelease.ps1
-          -Executable .\out\Release\win64\nssm.exe
+          -Executable .\out\Release\win64\svp.exe
           -OutputDirectory .\out\package
           -Version 3.1.4
           -SourceDirectory .
@@ -104,16 +104,16 @@ jobs:
       - name: Upload executable
         uses: actions/upload-artifact@v4
         with:
-          name: nssm-win64-${{ matrix.configuration }}
-          path: out/${{ matrix.configuration }}/win64/nssm.exe
+          name: svcpilot-win64-${{ matrix.configuration }}
+          path: out/${{ matrix.configuration }}/win64/svp.exe
           if-no-files-found: error
 
       - name: Upload release bundle
         if: matrix.preset == 'release'
         uses: actions/upload-artifact@v4
         with:
-          name: nssm-win64-release-bundle
+          name: svcpilot-win64-release-bundle
           path: |
-            out/package/nssm-3.1.4-win64.zip
-            out/package/nssm-3.1.4-win64.zip.sha256
+            out/package/svcpilot-3.1.4-win64.zip
+            out/package/svcpilot-3.1.4-win64.zip.sha256
           if-no-files-found: error

@@ -26,7 +26,7 @@ int inspect_service_status_command(int argc, wchar_t **argv) {
   cli_arguments_t arguments = parse_cli_arguments(argc, argv);
   if (arguments.positional.size() != 1 || ! arguments.positional[0]) {
     print_cli_error(arguments.json, L"usage",
-                    L"Usage: nssm status [--verbose] [--json] <service>");
+                    L"Usage: svp status [--verbose] [--json] <service>");
     return static_cast<int>(cli_exit_code::usage);
   }
   std::wstring name = arguments.positional[0];

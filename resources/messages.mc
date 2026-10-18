@@ -8,63 +8,63 @@ MessageId = 501
 SymbolicName = NSSM_MESSAGE_USAGE
 Severity = Informational
 Language = English
-NSSM: The non-sucking service manager
-Version %s %s, %s
-Usage: nssm <option> [<args> ...]
+SvcPilot: Windows service supervisor
+Version %ls %ls, %ls
+Usage: svp <option> [<args> ...]
 
 To validate or apply a declarative JSON configuration:
 
-        nssm validate <config.json>
+        svp validate <config.json>
 
-        nssm plan [--json] <config.json>
+        svp plan [--json] <config.json>
 
-        nssm apply [--json] <config.json>
+        svp apply [--json] <config.json>
 
-        nssm export [--json] <servicename> <destination.json>
+        svp export [--json] <servicename> <destination.json>
 
 To remove a service with explicit confirmation:
 
-        nssm remove <servicename> confirm
+        svp remove <servicename> confirm
 
 To manage a service:
 
-        nssm start <servicename>
+        svp start <servicename>
 
-        nssm stop <servicename>
+        svp stop <servicename>
 
-        nssm restart <servicename>
+        svp restart <servicename>
 
-        nssm continue <servicename>
+        svp continue <servicename>
 
-        nssm status [--verbose] [--json] <servicename>
+        svp status [--verbose] [--json] <servicename>
 
-        nssm statuscode <servicename>
+        svp statuscode <servicename>
 
-        nssm rotate <servicename>
+        svp rotate <servicename>
 
-        nssm processes <servicename>
+        svp processes <servicename>
 
-        nssm list [all]
+        svp list [all]
 .
 Language = Chinese
-NSSM：稳定可靠的服务管理器
-版本 %s %s, %s
-用法：nssm <选项> [<参数> ...]
+SvcPilot：Windows 服务监督器
+版本 %ls %ls, %ls
+用法：svp <选项> [<参数> ...]
 
 常用命令：
-  验证配置：nssm validate <配置文件.json>
-  预览变更：nssm plan [--json] <配置文件.json>
-  安装或更新：nssm apply [--json] <配置文件.json>
-  原子导出：nssm export [--json] <服务名> <目标文件.json>
+  验证配置：svp validate <配置文件.json>
+  预览变更：svp plan [--json] <配置文件.json>
+  安装或更新：svp apply [--json] <配置文件.json>
+  原子导出：svp export [--json] <服务名> <目标文件.json>
 
-  移除（显式确认）: nssm remove <服务名> confirm
+  移除（显式确认）: svp remove <服务名> confirm
 
   管理：
-    nssm start|stop|restart|continue <服务名>
-    nssm status [--verbose] [--json] <服务名>
-    nssm statuscode <服务名>
-    nssm rotate|processes <服务名>
-    nssm list [all]
+    svp start|stop|restart|continue <服务名>
+    svp status [--verbose] [--json] <服务名>
+    svp statuscode <服务名>
+    svp rotate|processes <服务名>
+    svp list [all]
 .
 
 MessageId = +1
@@ -91,10 +91,10 @@ MessageId = +1
 SymbolicName = NSSM_MESSAGE_PRE_REMOVE_SERVICE
 Severity = Informational
 Language = English
-To remove a service without confirmation: nssm remove <servicename> confirm
+To remove a service, confirm explicitly: svp remove <servicename> confirm
 .
 Language = Chinese
-无需确认直接移除：nssm remove <服务名> confirm
+移除服务需要显式确认：svp remove <服务名> confirm
 .
 
 MessageId = +1
@@ -102,31 +102,31 @@ SymbolicName = NSSM_MESSAGE_ENUMSERVICESSTATUS_FAILED
 Severity = Informational
 Language = English
 Can't open service!
-EnumServicesStatus(): %s
+EnumServicesStatus(): %ls
 .
 Language = Chinese
 无法打开服务！
-EnumServicesStatus()：%s
+EnumServicesStatus()：%ls
 .
 
 MessageId = +1
 SymbolicName = NSSM_MESSAGE_SERVICE_REMOVED
 Severity = Informational
 Language = English
-Service "%s" removed successfully!
+Service "%ls" removed successfully!
 .
 Language = Chinese
-服务"%s"移除成功！
+服务"%ls"移除成功！
 .
 
 MessageId = +1
 SymbolicName = NSSM_MESSAGE_BAD_CONTROL_RESPONSE
 Severity = Informational
 Language = English
-%s: Unexpected status %s in response to %s control.
+%ls: Unexpected status %ls in response to %ls control.
 .
 Language = Chinese
-%s：收到对 %s 控制的异常状态 %s。
+%ls：收到对 %ls 控制的异常状态 %ls。
 .
 
 MessageId = 1001

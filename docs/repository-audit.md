@@ -68,7 +68,7 @@ SCM, registry, process query, mapping and configuration code use the wrappers in
 
 ## Release gate
 
-Debug and Release builds each pass the five current tests, and GCC `-fanalyzer`
+Debug and Release builds each pass the six current tests, and GCC `-fanalyzer`
 builds without diagnostics. Local SCM integration requires elevation and remains
 a GitHub Actions gate. A release tag must not be created while either the online
 rotation race or the non-interruptible logger retry delay above is open.

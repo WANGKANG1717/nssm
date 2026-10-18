@@ -79,7 +79,7 @@ int pre_remove_service(int argc, wchar_t **argv) {
       remove_managed_service(argv[0], &error);
   if (status == service_removal_status_t::unmanaged) {
     fwprintf(stderr,
-              L"%ls: refusing to remove a service not managed by this NSSM: %ls\n",
+              L"%ls: refusing to remove a service not managed by SvcPilot: %ls\n",
               argv[0], error_string(error));
     return 4;
   }

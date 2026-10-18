@@ -6,7 +6,7 @@
 
 namespace {
 
-constexpr wchar_t kEventSource[] = L"nssm";
+constexpr wchar_t kEventSource[] = L"SvcPilot";
 constexpr size_t kErrorBufferSize = 65535;
 
 }  // namespace

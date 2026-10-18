@@ -1,4 +1,4 @@
-// NSSM executable resources.
+// SvcPilot executable resources.
 #define NSSM_COMPILE_RC
 #include <windows.h>
 #include "version.h"
@@ -38,7 +38,7 @@ BEGIN
     END
 END
 
-// Retain the executable icon for Explorer and file properties.  NSSM itself
+// Retain the executable icon for Explorer and file properties.  SvcPilot
 // has no graphical user interface.
 IDI_NSSM ICON "nssm.ico"
 

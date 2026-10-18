@@ -131,7 +131,7 @@ health_probe_result_t check_http(const health_check_config_t &config) {
   if (target.empty()) target = L"/";
 
   unique_winhttp_handle session(WinHttpOpen(
-      L"NSSM/3 health-check", WINHTTP_ACCESS_TYPE_NO_PROXY,
+      L"SvcPilot/3 health-check", WINHTTP_ACCESS_TYPE_NO_PROXY,
       WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0));
   if (! session) return failure(GetLastError(), L"WinHttpOpen failed");
   if (! WinHttpSetTimeouts(session.get(), config.timeout_ms,

@@ -108,7 +108,7 @@ int wmain(int argc, wchar_t **argv) {
   /* Remember our path for later. */
   const application_paths_t &paths = application_paths();
   if (paths.error != ERROR_SUCCESS) {
-    fwprintf(stderr, L"Unable to resolve the NSSM executable path: %ls\n",
+    fwprintf(stderr, L"Unable to resolve the SvcPilot executable path: %ls\n",
              error_string(paths.error));
     return 100;
   }
@@ -123,7 +123,7 @@ int wmain(int argc, wchar_t **argv) {
       statuscode, rotate, list, processes, version
     */
     if (is_version(argv[1])) {
-      wprintf(L"%ls %ls %ls %ls\n", kNssmServiceName, NSSM_VERSION,
+      wprintf(L"%ls %ls %ls %ls\n", kProductName, NSSM_VERSION,
                NSSM_CONFIGURATION, NSSM_DATE);
       return 0;
     }
@@ -184,7 +184,7 @@ int wmain(int argc, wchar_t **argv) {
   if (is_admin) create_messages(nssm_unquoted_imagepath());
 
   SERVICE_TABLE_ENTRYW table[] = {
-      {const_cast<wchar_t *>(kNssmServiceName), service_main}, {nullptr, nullptr}};
+      {const_cast<wchar_t *>(kProductName), service_main}, {nullptr, nullptr}};
   if (! StartServiceCtrlDispatcherW(table)) {
     unsigned long error = GetLastError();
     if (error == ERROR_FAILED_SERVICE_CONTROLLER_CONNECT) return usage(1);

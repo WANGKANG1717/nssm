@@ -22,7 +22,7 @@ SvcPilot 当前处于积极开发、尚未投入生产的阶段，适合继续�
 - 配置与运行路径 ACL 审计、Service SID、虚拟账户和安全默认值。
 - 稳定的 JSON 输出和退出码，供脚本、CI/CD 及未来 Web 管理端调用。
 
-当前 Debug 和 Release 构建各有 5 项 CTest 测试通过，GCC `-fanalyzer` 无诊断；
+当前 Debug 和 Release 构建各有 6 项 CTest 测试通过，GCC `-fanalyzer` 无诊断；
 管理员权限下的 SCM 生命周期测试由 GitHub Actions 承担。当前仍有两个发布阻塞项：
 
 1. 在线日志轮转状态在控制、日志和关闭线程之间尚未完全同步。
@@ -51,21 +51,11 @@ SvcPilot 当前处于积极开发、尚未投入生产的阶段，适合继续�
 不支持 Visual Studio/MSVC 工程、32 位构建、ANSI/MBCS、交互式服务、原版 NSSM
 GUI，以及旧 `install/edit/get/set/reset/unset/dump` 命令。
 
-## 名称迁移
+## 命令名称
 
-**SvcPilot** 是新的项目和产品名称。当前源码目标、可执行文件、部分资源和内部 Windows
-标识仍使用 `nssm`，因此下文命令暂时写作 `nssm.exe`。这是开发阶段的临时状态，
-不代表兼容性承诺。
-
-完整改名应作为独立变更完成，并同时迁移：
-
-- CMake 项目、目标、测试和产物名称。
-- CLI 帮助、版本资源、事件源和包名称。
-- 注册表路径、共享内存命名空间及测试夹具。
-- GitHub Actions、发布脚本、仓库地址和文档示例。
-
-项目尚无生产用户，因此迁移时可以直接采用 `svcpilot.exe` 和新的内部标识，无需保留
-旧名称别名或数据迁移层。
+产品名称是 **SvcPilot**，可执行文件和命令名称是较短的 **`svp.exe`**。将其所在目录
+加入 `PATH` 后，本文统一使用 `svp` 调用。项目没有生产用户，因此不提供 `nssm.exe`
+别名或旧标识兼容层。
 
 ## 构建
 
@@ -90,7 +80,7 @@ cmake --build --preset mingw-release
 ctest --preset mingw-release
 ```
 
-当前产物位于 `out\Debug\win64\nssm.exe` 和 `out\Release\win64\nssm.exe`。
+产物位于 `out\Debug\win64\svp.exe` 和 `out\Release\win64\svp.exe`。
 MinGW 运行库静态链接，Windows 系统库仍由操作系统提供。Release 构建不嵌入时间戳，
 便于可复现构建。
 
@@ -110,19 +100,19 @@ GitHub Actions 同时构建和测试 Debug/Release，验证 x64 PE 与静态 Min
 先验证并预览配置，再在管理员终端中应用：
 
 ```powershell
-nssm validate --json .\service.json
-nssm plan --json .\service.json
-nssm apply --json .\service.json
+svp validate --json .\service.json
+svp plan --json .\service.json
+svp apply --json .\service.json
 ```
 
 查询和控制服务：
 
 ```powershell
-nssm start MyService
-nssm status --json MyService
-nssm stop MyService
-nssm export --json MyService .\backup\MyService.json
-nssm remove MyService confirm
+svp start MyService
+svp status --json MyService
+svp stop MyService
+svp export --json MyService .\backup\MyService.json
+svp remove MyService confirm
 ```
 
 主要命令：
@@ -188,7 +178,7 @@ Windows ACL。受信对象必须由 SYSTEM、Administrators 或 TrustedInstaller
 
 ## 运行时状态
 
-`nssm status --json <service>` 返回 SCM 状态、包装进程 PID、子进程 PID、运行时长、
+`svp status --json <service>` 返回 SCM 状态、包装进程 PID、子进程 PID、运行时长、
 Readiness、Health Check、恢复重启次数，以及 Job Object 的 CPU、内存和进程数。
 运行时数据通过只读 ACL 的共享内存快照发布；服务停止或快照不可用时，
 `runtimeAvailable` 为 `false`。

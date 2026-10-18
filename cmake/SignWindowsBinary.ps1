@@ -6,7 +6,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $signtool = (Get-Command signtool.exe -ErrorAction Stop).Source
-$certificate = Join-Path $env:RUNNER_TEMP 'nssm-signing.pfx'
+$certificate = Join-Path $env:RUNNER_TEMP 'svcpilot-signing.pfx'
 try {
   [IO.File]::WriteAllBytes($certificate, [Convert]::FromBase64String($CertificateBase64))
   & $signtool sign /fd SHA256 /td SHA256 /tr http://timestamp.digicert.com `

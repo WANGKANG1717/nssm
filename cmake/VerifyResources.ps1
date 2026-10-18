@@ -13,6 +13,15 @@ if ($versionInfo.FileMajorPart -ne $ExpectedVersion.Major -or
     $versionInfo.FilePrivatePart -ne 0) {
   throw "Compiled file version $($versionInfo.FileMajorPart).$($versionInfo.FileMinorPart).$($versionInfo.FileBuildPart).$($versionInfo.FilePrivatePart) does not match $ExpectedVersion.0"
 }
+if ($versionInfo.ProductName -ne 'SvcPilot') {
+  throw "Unexpected product name: $($versionInfo.ProductName)"
+}
+if ($versionInfo.OriginalFilename -ne 'svp.exe') {
+  throw "Unexpected original filename: $($versionInfo.OriginalFilename)"
+}
+if ($versionInfo.FileDescription -ne 'SvcPilot Windows service supervisor') {
+  throw "Unexpected file description: $($versionInfo.FileDescription)"
+}
 
 $bytes = [System.IO.File]::ReadAllBytes($Executable)
 $utf16 = [System.Text.Encoding]::Unicode.GetString($bytes)
@@ -29,7 +38,6 @@ function New-UnicodeString {
 # Keep this script ASCII-only. Windows PowerShell 5.1 treats UTF-8 files without
 # a BOM as the active ANSI code page, which would corrupt literal CJK text in CI.
 $expected = @(
-  (New-UnicodeString @(0x7A33, 0x5B9A, 0x53EF, 0x9760, 0x7684, 0x670D, 0x52A1, 0x7BA1, 0x7406, 0x5668)),
   (New-UnicodeString @(0x9A8C, 0x8BC1, 0x914D, 0x7F6E)),
   (New-UnicodeString @(0x79FB, 0x9664, 0xFF08, 0x663E, 0x5F0F, 0x786E, 0x8BA4, 0xFF09)),
   (New-UnicodeString @(0x7BA1, 0x7406, 0x5458, 0x6743, 0x9650)),
