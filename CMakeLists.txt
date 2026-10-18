@@ -36,6 +36,23 @@ nssm_compile_messages(
   OUT_BINARIES NSSM_MESSAGES_BINARIES
 )
 
+set(NSSM_RESOURCE_SOURCE "${CMAKE_CURRENT_BINARY_DIR}/generated/nssm.rc")
+find_program(NSSM_RESOURCE_POWERSHELL_EXECUTABLE NAMES pwsh powershell REQUIRED)
+add_custom_command(
+  OUTPUT "${NSSM_RESOURCE_SOURCE}"
+  COMMAND "${CMAKE_COMMAND}" -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/generated"
+  COMMAND "${NSSM_RESOURCE_POWERSHELL_EXECUTABLE}"
+          -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass
+          -File "${CMAKE_CURRENT_SOURCE_DIR}/cmake/ConvertResource.ps1"
+          -InputPath "${CMAKE_CURRENT_SOURCE_DIR}/nssm.rc"
+          -OutputPath "${NSSM_RESOURCE_SOURCE}"
+  DEPENDS
+    "${CMAKE_CURRENT_SOURCE_DIR}/nssm.rc"
+    "${CMAKE_CURRENT_SOURCE_DIR}/cmake/ConvertResource.ps1"
+  COMMENT "Escaping UTF-8 dialog resources for windres"
+  VERBATIM
+)
+
 set(NSSM_SOURCES
   account.cpp
   console.cpp
@@ -52,17 +69,23 @@ set(NSSM_SOURCES
   service.cpp
   settings.cpp
   utf8.cpp
-  nssm.rc
+  "${NSSM_RESOURCE_SOURCE}"
 )
 
 add_executable(nssm ${NSSM_SOURCES})
 add_dependencies(nssm nssm_messages)
 
 set_property(
-  SOURCE nssm.rc
+  SOURCE "${NSSM_RESOURCE_SOURCE}"
   APPEND PROPERTY OBJECT_DEPENDS
     "${NSSM_MESSAGES_HEADER};${NSSM_MESSAGES_RESOURCE};${NSSM_MESSAGES_BINARIES}"
 )
+
+# The generated script is ASCII-only and contains explicit Unicode escapes,
+# so windres no longer depends on the host's active Windows code page.
+set_source_files_properties("${NSSM_RESOURCE_SOURCE}" PROPERTIES GENERATED TRUE)
+set_property(SOURCE "${NSSM_RESOURCE_SOURCE}" APPEND PROPERTY
+             COMPILE_OPTIONS "--codepage=65001")
 
 target_include_directories(nssm PRIVATE
   "${CMAKE_CURRENT_SOURCE_DIR}"
@@ -103,6 +126,14 @@ if(BUILD_TESTING)
   add_test(NAME nssm.version COMMAND $<TARGET_FILE:nssm> version)
   set_tests_properties(nssm.version PROPERTIES
     PASS_REGULAR_EXPRESSION "NSSM ${PROJECT_VERSION} 64-bit"
+  )
+
+  add_test(
+    NAME nssm.resources
+    COMMAND "${NSSM_RESOURCE_POWERSHELL_EXECUTABLE}"
+            -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass
+            -File "${CMAKE_CURRENT_SOURCE_DIR}/cmake/VerifyResources.ps1"
+            -Executable $<TARGET_FILE:nssm>
   )
 endif()
 
