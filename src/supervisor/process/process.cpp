@@ -94,8 +94,8 @@ int check_parent(kill_t *k, PROCESSENTRY32 *pe, unsigned long ppid) {
     Though unlikely, it's possible that the parent exited and its process ID
     was already reused, so we'll also compare against its exit time.
   */
-  HANDLE process_handle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false,
-                                      pe->th32ProcessID);
+  unique_handle process_handle(OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION,
+                                            false, pe->th32ProcessID));
   if (! process_handle) {
     TCHAR pid_string[16];
     _sntprintf_s(pid_string, _countof(pid_string), _TRUNCATE, _T("%lu"), pe->th32ProcessID);
@@ -104,12 +104,7 @@ int check_parent(kill_t *k, PROCESSENTRY32 *pe, unsigned long ppid) {
   }
 
   FILETIME ft;
-  if (get_process_creation_time(process_handle, &ft)) {
-    CloseHandle(process_handle);
-    return 3;
-  }
-
-  CloseHandle(process_handle);
+  if (get_process_creation_time(process_handle.get(), &ft)) return 3;
 
   /* Verify that the parent's creation time is not later. */
   if (CompareFileTime(&k->creation_time, &ft) > 0) return 4;
@@ -152,8 +147,8 @@ int kill_threads(nssm_service_t *service, kill_t *k) {
   int ret = 0;
 
   /* Get a snapshot of all threads in the system. */
-  HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);
-  if (snapshot == INVALID_HANDLE_VALUE) {
+  unique_handle snapshot(CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0));
+  if (! snapshot) {
     log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_CREATETOOLHELP32SNAPSHOT_THREAD_FAILED, k->name, error_string(GetLastError()), 0);
     return 0;
   }
@@ -162,9 +157,8 @@ int kill_threads(nssm_service_t *service, kill_t *k) {
   ZeroMemory(&te, sizeof(te));
   te.dwSize = sizeof(te);
 
-  if (! Thread32First(snapshot, &te)) {
+  if (! Thread32First(snapshot.get(), &te)) {
     log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_THREAD_ENUMERATE_FAILED, k->name, error_string(GetLastError()), 0);
-    CloseHandle(snapshot);
     return 0;
   }
 
@@ -175,11 +169,11 @@ int kill_threads(nssm_service_t *service, kill_t *k) {
 
   while (true) {
     /* Try to get the next thread. */
-    if (! Thread32Next(snapshot, &te)) {
+    if (! Thread32Next(snapshot.get(), &te)) {
       unsigned long error = GetLastError();
       if (error == ERROR_NO_MORE_FILES) break;
-      log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_THREAD_ENUMERATE_FAILED, k->name, error_string(GetLastError()), 0);
-      CloseHandle(snapshot);
+      log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_THREAD_ENUMERATE_FAILED,
+                k->name, error_string(error), 0);
       return ret;
     }
 
@@ -187,8 +181,6 @@ int kill_threads(nssm_service_t *service, kill_t *k) {
       ret |= PostThreadMessage(te.th32ThreadID, WM_QUIT, k->exitcode, 0);
     }
   }
-
-  CloseHandle(snapshot);
 
   return ret;
 }
@@ -315,31 +307,33 @@ void walk_process_tree(nssm_service_t *service, walk_function_t fn, kill_t *k, u
   if (fn == static_cast<walk_function_t>(kill_process)) log_event(EVENTLOG_INFORMATION_TYPE, NSSM_EVENT_KILLING, k->name, pid_string, code, 0);
 
   /* We will need a process handle in order to call TerminateProcess() later. */
-  HANDLE process_handle = OpenProcess(
+  unique_handle process_handle(OpenProcess(
       SYNCHRONIZE | PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_TERMINATE,
-      false, pid);
+      false, pid));
   if (process_handle) {
     /* Kill this process first, then its descendents. */
     TCHAR ppid_string[16];
     _sntprintf_s(ppid_string, _countof(ppid_string), _TRUNCATE, _T("%lu"), ppid);
     if (fn == static_cast<walk_function_t>(kill_process)) log_event(EVENTLOG_INFORMATION_TYPE, NSSM_EVENT_KILL_PROCESS_TREE, pid_string, ppid_string, k->name, 0);
-    k->process_handle = process_handle; /* XXX: open directly? */
+    HANDLE previous_process_handle = k->process_handle;
+    k->process_handle = process_handle.get();
     if (! fn(service, k)) {
       /* Maybe it already died. */
       unsigned long ret;
-      if (! GetExitCodeProcess(process_handle, &ret) || ret == STILL_ACTIVE) {
+      if (! GetExitCodeProcess(process_handle.get(), &ret) ||
+          ret == STILL_ACTIVE) {
         log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_TERMINATEPROCESS_FAILED,
                   pid_string, k->name, error_string(GetLastError()), 0);
       }
     }
 
-    CloseHandle(process_handle);
+    k->process_handle = previous_process_handle;
   }
   else log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_OPENPROCESS_FAILED, pid_string, k->name, error_string(GetLastError()), 0);
 
   /* Get a snapshot of all processes in the system. */
-  HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
-  if (snapshot == INVALID_HANDLE_VALUE) {
+  unique_handle snapshot(CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0));
+  if (! snapshot) {
     log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_CREATETOOLHELP32SNAPSHOT_PROCESS_FAILED, k->name, error_string(GetLastError()), 0);
     return;
   }
@@ -348,9 +342,8 @@ void walk_process_tree(nssm_service_t *service, walk_function_t fn, kill_t *k, u
   ZeroMemory(&pe, sizeof(pe));
   pe.dwSize = sizeof(pe);
 
-  if (! Process32First(snapshot, &pe)) {
+  if (! Process32First(snapshot.get(), &pe)) {
     log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_PROCESS_ENUMERATE_FAILED, k->name, error_string(GetLastError()), 0);
-    CloseHandle(snapshot);
     return;
   }
 
@@ -364,11 +357,11 @@ void walk_process_tree(nssm_service_t *service, walk_function_t fn, kill_t *k, u
 
   while (true) {
     /* Try to get the next process. */
-    if (! Process32Next(snapshot, &pe)) {
+    if (! Process32Next(snapshot.get(), &pe)) {
       unsigned long ret = GetLastError();
       if (ret == ERROR_NO_MORE_FILES) break;
-      log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_PROCESS_ENUMERATE_FAILED, k->name, error_string(GetLastError()), 0);
-      CloseHandle(snapshot);
+      log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_PROCESS_ENUMERATE_FAILED,
+                k->name, error_string(ret), 0);
       k->depth = depth;
       return;
     }
@@ -381,7 +374,6 @@ void walk_process_tree(nssm_service_t *service, walk_function_t fn, kill_t *k, u
   }
   k->depth = depth;
 
-  CloseHandle(snapshot);
 }
 
 void kill_process_tree(kill_t *k, unsigned long ppid) {
