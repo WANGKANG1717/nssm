@@ -55,6 +55,7 @@ add_custom_command(
 
 set(NSSM_SOURCES
   account.cpp
+  child_process.cpp
   console.cpp
   env.cpp
   event.cpp
@@ -135,5 +136,18 @@ if(BUILD_TESTING)
             -File "${CMAKE_CURRENT_SOURCE_DIR}/cmake/VerifyResources.ps1"
             -Executable $<TARGET_FILE:nssm>
   )
+
+  add_executable(nssm_unit_tests
+    tests/child_process_tests.cpp
+    child_process.cpp
+  )
+  target_compile_definitions(nssm_unit_tests PRIVATE
+    UNICODE
+    _UNICODE
+    WINVER=0x0A00
+    _WIN32_WINNT=0x0A00
+  )
+  nssm_configure_compiler(nssm_unit_tests)
+  add_test(NAME nssm.unit COMMAND $<TARGET_FILE:nssm_unit_tests>)
 endif()
 
