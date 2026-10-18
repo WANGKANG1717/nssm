@@ -42,7 +42,7 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(yyjson)
 
 nssm_compile_messages(
-  SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/messages.mc"
+  SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/resources/messages.mc"
   OUTPUT_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated"
   OUT_HEADER NSSM_MESSAGES_HEADER
   OUT_RESOURCE NSSM_MESSAGES_RESOURCE
@@ -57,40 +57,64 @@ add_custom_command(
   COMMAND "${NSSM_RESOURCE_POWERSHELL_EXECUTABLE}"
           -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass
           -File "${CMAKE_CURRENT_SOURCE_DIR}/cmake/ConvertResource.ps1"
-          -InputPath "${CMAKE_CURRENT_SOURCE_DIR}/nssm.rc"
+          -InputPath "${CMAKE_CURRENT_SOURCE_DIR}/resources/nssm.rc"
           -OutputPath "${NSSM_RESOURCE_SOURCE}"
   DEPENDS
-    "${CMAKE_CURRENT_SOURCE_DIR}/nssm.rc"
+    "${CMAKE_CURRENT_SOURCE_DIR}/resources/nssm.rc"
     "${CMAKE_CURRENT_SOURCE_DIR}/cmake/ConvertResource.ps1"
   COMMENT "Escaping UTF-8 dialog resources for windres"
   VERBATIM
 )
 
+set(NSSM_APP_SOURCES
+  src/app/nssm.cpp
+)
+
+set(NSSM_CLI_SOURCES
+  src/cli/console.cpp
+)
+
+set(NSSM_CONFIG_SOURCES
+  src/config/config.cpp
+  src/config/config_service.cpp
+)
+
+set(NSSM_SUPERVISOR_SOURCES
+  src/supervisor/process/child_process.cpp
+  src/supervisor/process/job_object.cpp
+  src/supervisor/process/process.cpp
+  src/supervisor/monitoring/health_check.cpp
+  src/supervisor/monitoring/health_monitor.cpp
+  src/supervisor/monitoring/readiness.cpp
+  src/supervisor/monitoring/resource_monitor.cpp
+  src/supervisor/runtime/account.cpp
+  src/supervisor/runtime/hook.cpp
+  src/supervisor/runtime/nssm_io.cpp
+  src/supervisor/runtime/recovery.cpp
+  src/supervisor/runtime/service.cpp
+)
+
+set(NSSM_PLATFORM_SOURCES
+  src/platform/env.cpp
+  src/platform/event.cpp
+  src/platform/imports.cpp
+  src/platform/registry.cpp
+  src/platform/settings.cpp
+  src/platform/utf8.cpp
+)
+
+set(NSSM_UI_SOURCES
+  src/ui/gui.cpp
+)
+
 set(NSSM_SOURCES
-  account.cpp
-  child_process.cpp
-  config.cpp
-  config_service.cpp
-  console.cpp
-  env.cpp
-  event.cpp
-  gui.cpp
-  health_check.cpp
-  health_monitor.cpp
-  hook.cpp
-  imports.cpp
-  job_object.cpp
-  nssm_io.cpp
-  nssm.cpp
-  nssm.manifest
-  process.cpp
-  readiness.cpp
-  recovery.cpp
-  resource_monitor.cpp
-  registry.cpp
-  service.cpp
-  settings.cpp
-  utf8.cpp
+  ${NSSM_APP_SOURCES}
+  ${NSSM_CLI_SOURCES}
+  ${NSSM_CONFIG_SOURCES}
+  ${NSSM_SUPERVISOR_SOURCES}
+  ${NSSM_PLATFORM_SOURCES}
+  ${NSSM_UI_SOURCES}
+  resources/nssm.manifest
   "${NSSM_RESOURCE_SOURCE}"
 )
 
@@ -110,7 +134,15 @@ set_property(SOURCE "${NSSM_RESOURCE_SOURCE}" APPEND PROPERTY
              COMPILE_OPTIONS "--codepage=65001")
 
 target_include_directories(nssm PRIVATE
-  "${CMAKE_CURRENT_SOURCE_DIR}"
+  "${CMAKE_CURRENT_SOURCE_DIR}/src/app"
+  "${CMAKE_CURRENT_SOURCE_DIR}/src/cli"
+  "${CMAKE_CURRENT_SOURCE_DIR}/src/config"
+  "${CMAKE_CURRENT_SOURCE_DIR}/src/supervisor/process"
+  "${CMAKE_CURRENT_SOURCE_DIR}/src/supervisor/monitoring"
+  "${CMAKE_CURRENT_SOURCE_DIR}/src/supervisor/runtime"
+  "${CMAKE_CURRENT_SOURCE_DIR}/src/platform"
+  "${CMAKE_CURRENT_SOURCE_DIR}/src/ui"
+  "${CMAKE_CURRENT_SOURCE_DIR}/resources"
   "${CMAKE_CURRENT_BINARY_DIR}/generated"
 )
 
@@ -172,12 +204,18 @@ if(BUILD_TESTING)
 
   add_executable(nssm_unit_tests
     tests/child_process_tests.cpp
-    child_process.cpp
-    config.cpp
-    health_check.cpp
-    job_object.cpp
-    readiness.cpp
-    recovery.cpp
+    src/supervisor/process/child_process.cpp
+    src/config/config.cpp
+    src/supervisor/monitoring/health_check.cpp
+    src/supervisor/process/job_object.cpp
+    src/supervisor/monitoring/readiness.cpp
+    src/supervisor/runtime/recovery.cpp
+  )
+  target_include_directories(nssm_unit_tests PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/config"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/supervisor/process"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/supervisor/monitoring"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/supervisor/runtime"
   )
   target_compile_definitions(nssm_unit_tests PRIVATE
     UNICODE

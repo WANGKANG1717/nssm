@@ -1,12 +1,12 @@
 #include <winsock2.h>
 #include <ws2tcpip.h>
 
-#include "../child_process.h"
-#include "../config.h"
-#include "../health_check.h"
-#include "../job_object.h"
-#include "../readiness.h"
-#include "../recovery.h"
+#include "child_process.h"
+#include "config.h"
+#include "health_check.h"
+#include "job_object.h"
+#include "readiness.h"
+#include "recovery.h"
 
 #include <iostream>
 #include <string>

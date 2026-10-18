@@ -12,7 +12,7 @@ NSSM 是一个将任意可执行程序作为 Windows 服务运行并进行管理
 ### 版本说明
 本仓库基于 NSSM 原作（作者 Iain Patterson，上游网站：[nssm.cc](https://nssm.cc/)），遵循 Public Domain 许可。
 在原版基础上主要进行了以下维护与增强：
-- 版本信息升级到 `3.0.0`（`version.h`）。
+- 版本信息升级到 `3.0.0`（`src/app/version.h`）。
 - 最低系统基线升级为 Windows 10（`_WIN32_WINNT=0x0A00`），仅构建 x64。
 - 清理并修复多处稳定性问题（句柄泄漏、内存释放一致性、边界/指针判断、注册表类型校验等）。
 - 服务类型与现代 Windows 行为对齐：不再使用交互式服务类型，统一按 `SERVICE_WIN32_OWN_PROCESS` 处理。
@@ -87,7 +87,29 @@ $env:PATH = "$toolBin;$env:PATH"
 CTest 当前包含：
 
 - `nssm.version`：验证版本、架构和程序可执行性。
+- `nssm.validate`：验证声明式配置样例及 UTF-8/Unicode 解析。
 - `nssm.resources`：验证中文资源的 UTF-16 内容并检测乱码回归。
+- `nssm.unit`：覆盖命令行转义、环境隔离、Job Object、探针、恢复与配置校验。
+
+## 项目结构
+
+```text
+src/
+  app/          程序入口、全局编译契约与版本信息
+  cli/          命令行和控制台适配
+  config/       JSON 配置模型、校验及 SCM 应用
+  supervisor/
+    process/     进程创建、Job Object 与进程树终止
+    monitoring/  Readiness、Health Check 与资源监控
+    runtime/     服务状态机、恢复、Hooks、日志和账户
+  platform/     Windows API、注册表、环境及编码适配
+  ui/           旧 Win32 GUI（与核心运行时隔离）
+resources/      RC、消息目录、图标和 manifest
+tests/          单元测试及配置样例
+cmake/          构建、资源转换和验证脚本
+```
+
+`CMakeLists.txt` 按相同职责分组列出源文件。新增功能应放入对应模块，避免再次把实现堆回仓库根目录。
 
 提交代码前建议至少执行：
 
@@ -266,38 +288,27 @@ ctest --preset mingw-release
 - 在 start/stop/exit/power/rotate 的 pre/post/change/resume 阶段执行脚本或程序。
 - 常见项：注册表下 per-event/action 的命令；GUI 提供逐项配置与测试。
 
-## 模块概览（逐步补充）
+## 模块概览
 
 | 模块 | 文件 | 作用描述 |
 |---|---|---|
-| 环境变量处理 | `env.cpp` | 解析/复制/合并/清理双重 NULL 结尾的环境块；按需展开变量；以候选环境块测试创建进程的合法性；提供复制当前进程环境与增删键值的操作。 |
-| UTF-8/UTF-16 转换与控制台编码 | `utf8.cpp`, `utf8.h` | 在 UNICODE 构建下将控制台输出切换为 UTF-8（避免中文等非 ASCII 乱码）；提供 `to_utf8/to_utf16/from_utf8/from_utf16` 等内存管理友好的双向转换函数。 |
-| 程序入口与命令行/服务调度 | `nssm.cpp` | 程序入口 `_tmain`；解析命令（start/stop/restart/edit/get/set/reset/unset/install/remove/list/processes/version等）；控制服务、权限提升、TLS 初始化、事件消息注册；作为服务进程时注册 `service_main` 并与 SCM 交互；通用字符串与转义、路径处理工具。 |
-| 服务管理核心 | `service.cpp` | 打开/创建/编辑/删除服务；设置启动类型、描述、依赖、恢复策略；服务生命周期：`service_main`、控制处理器、启动/停止/重启/节流（throttle）与挂钩（hooks）；环境隔离与还原；进程创建、亲和性与优先级、状态上报。 |
-| 进程与终止策略 | `process.cpp` | 提权（SeDebugPrivilege）获取；优雅终止顺序（控制台事件、窗口消息、线程消息、TerminateProcess）；遍历并终止进程树；记录/打印进程树；控制台 Ctrl+C 注入与等待；进程创建/退出时间读取与父子关系校验。 |
-| 注册表参数读写 | `registry.cpp` | 事件日志消息注册；服务参数读写（路径、参数、目录、优先级、亲和性、I/O、日志轮转、重启与节流、停止方式、超时等）；REG_SZ/EXPAND_SZ/MULTI_SZ 与双 NULL 块的格式化/反格式化；Hook 配置读写；退出动作（Exit action）获取与设置。 |
-| I/O 重定向与日志轮转 | `io.cpp` | 为子进程构建 stdin/stdout/stderr；可选管道与日志线程；在线/离线日志轮转（按时间/大小）；时间戳前缀、BOM 处理、文件复制截断或移动；句柄复制与清理；为 Hook 复用输出句柄。 |
-| GUI 窗口与对话框逻辑 | `gui.cpp` | 安装/卸载/编辑 GUI；多 Tab 配置（应用、详情、登录、依赖、进程、关闭、退出、I/O、日志轮转、环境、钩子）；从/写入 `nssm_service_t`；浏览文件与校验输入；应用 Hook 配置。 |
-| 控制台与分配 | `console.cpp` | 判断是否在控制台环境启动；按需分配/释放控制台窗口；与 GUI/服务模式的交互。 |
-| 事件与消息输出 | `event.cpp` | 统一的事件日志与消息输出：`log_event`（写 Windows 事件日志）、`print_message`（控制台）、`popup_message`（GUI）；TLS 缓冲与本地化消息加载。 |
-| 动态导入 | `imports.cpp` | 运行时加载 `kernel32.dll`、`advapi32.dll` 可选 API（AttachConsole/QueryFullProcessImageName/条件变量等）；封装加载与失败告警。 |
-| 设置参数框架 | `settings.cpp` | 定义 `settings_t` 表；实现 get/set/dump 针对注册表与原生服务属性（启动类型、类型、账号、依赖、环境、I/O、优先级/亲和性、重启/节流等）；提供命令行 `get/set/reset/dump` 后端。 |
-| 账户与权限 | `account.cpp` | 账户名与 SID 互转、规范化；判断 LocalSystem/虚拟账户；授予“作为服务登录”权限；用户名等价性判断。 |
-| 事件钩子执行 | `hook.cpp` | 钩子事件/动作（start/stop/exit/power/rotate 的 pre/post/change/resume）；设置环境注入上下文变量；同步/异步执行与超时；清理钩子进程树，记录结果。 |
-| 资源与版本信息 | `nssm.rc`, `resource.h`, `version.h` | 程序版本、图标与对话框资源；英文与简体中文 GUI；版本元数据来自 `version.h` 固定宏。 |
-| 事件消息定义 | `messages.mc` | 事件日志与界面提示文本；包含英文和简体中文语言块，GUI 相关文本已中文化；用于 `mc.exe` 生成消息表。 |
+| 配置与 SCM 应用 | `src/config/` | 严格 JSON 校验、配置加载、服务创建与更新。 |
+| 服务监督核心 | `src/supervisor/` | 生命周期、Job Object、探针、恢复策略、资源治理、日志和 Hooks。 |
+| Windows 平台适配 | `src/platform/` | 注册表、环境块、事件日志、动态 API 导入和 Unicode 转换。 |
+| CLI 与入口 | `src/app/`, `src/cli/` | 命令分派、服务入口和控制台交互。 |
+| 旧 GUI | `src/ui/` | 与核心隔离的 Win32 界面，便于后续独立移除。 |
+| 资源与本地化 | `resources/` | RC、manifest、图标以及中英文事件消息目录。 |
 
 ### 头文件接口层（建议入口）
-- 核心头文件：`nssm.h`、`service.h`、`settings.h`、`registry.h`、`process.h`、`io.h`、`event.h`。
+- 核心头文件位于 `src/app/`、`src/config/` 和 `src/supervisor/`；平台兼容接口位于 `src/platform/`。
 - 作用：定义跨模块结构体、常量、注册表参数名与公共函数声明，是理解模块边界和调用关系的首选入口。
 
 ### 消息编译链路
-- 文本来源：`messages.mc`（中英文消息模板）。
+- 文本来源：`resources/messages.mc`（中英文消息模板）。
 - 构建产物：通过消息编译工具（`mc.exe`）与资源编译流程生成消息资源，最终由程序/事件日志加载使用。
 - 说明：运行时不会直接读取 `.mc`，而是读取编译后的消息表资源。
 
 ### 测试与验证现状
-- 当前以本地构建与 GitHub Actions 构建成功作为主要回归验证手段。
-- 运行验证主要依赖手工安装/编辑/启停服务与日志轮转场景检查。
-- 目前仓库内未提供系统化单元测试/集成测试框架，后续可按模块逐步补齐。
+- CTest 覆盖纯逻辑与本地 Win32 API 测试，不依赖外网。
+- 真实 SCM 安装、启停和账户权限场景仍需在管理员环境执行集成测试。
 
