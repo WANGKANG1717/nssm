@@ -25,8 +25,7 @@
 
   So that's that cleared up, then.
 */
-#define PATH_LENGTH 32767
-#define DIR_LENGTH PATH_LENGTH - 12
+#include "windows_limits.h"
 
 #ifndef WINVER
 #define WINVER 0x0A00

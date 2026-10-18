@@ -1,6 +1,11 @@
 #ifndef SERVICE_H
 #define SERVICE_H
 
+#include "windows_limits.h"
+
+#include <windows.h>
+#include <tchar.h>
+
 /*
   MSDN says the commandline in CreateProcess() is limited to 32768 characters
   and the application name to MAX_PATH.
@@ -9,9 +14,7 @@
   A registry value is limited to 16383 characters.
   Therefore we limit the service name to accommodate the path under HKLM.
 */
-#define EXE_LENGTH PATH_LENGTH
-#define VALUE_LENGTH 16383
-#define SERVICE_NAME_LENGTH 257
+inline constexpr size_t EXE_LENGTH = PATH_LENGTH;
 
 #define NSSM_ROTATE_OFFLINE 0
 #define NSSM_ROTATE_ONLINE 1

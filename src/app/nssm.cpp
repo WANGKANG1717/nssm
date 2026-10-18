@@ -134,7 +134,8 @@ int _tmain(int argc, TCHAR **argv) {
       nssm_exit(validate_service_config_command(argc - 2, argv + 2));
     }
     if (str_equiv(argv[1], _T("plan"))) {
-      nssm_exit(plan_service_config_command(argc - 2, argv + 2));
+      nssm_exit(plan_service_config_command(argc - 2, argv + 2,
+                                            nssm_imagepath()));
     }
     if (str_equiv(argv[1], _T("export"))) {
       nssm_exit(export_service_config_command(argc - 2, argv + 2));
@@ -150,7 +151,8 @@ int _tmain(int argc, TCHAR **argv) {
         nssm_exit(elevate(argc, argv, NSSM_MESSAGE_NOT_ADMINISTRATOR_CANNOT_INSTALL));
       }
       create_messages(nssm_unquoted_imagepath());
-      nssm_exit(apply_service_config_command(argc - 2, argv + 2));
+      nssm_exit(apply_service_config_command(argc - 2, argv + 2,
+                                             nssm_imagepath()));
     }
     if (str_equiv(argv[1], _T("start"))) nssm_exit(control_service(NSSM_SERVICE_CONTROL_START, argc - 2, argv + 2));
     if (str_equiv(argv[1], _T("stop"))) nssm_exit(control_service(SERVICE_CONTROL_STOP, argc - 2, argv + 2));
