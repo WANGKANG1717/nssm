@@ -14,26 +14,32 @@
 
 namespace {
 
-std::wstring unquoted_imagepath;
-std::wstring imagepath;
+struct application_paths_t {
+  std::wstring unquoted;
+  std::wstring quoted;
+  unsigned long error = ERROR_SUCCESS;
+};
 
-bool initialize_image_paths(unsigned long *error) {
+application_paths_t load_application_paths() {
+  application_paths_t paths;
   std::vector<wchar_t> buffer(PATH_LENGTH);
   SetLastError(ERROR_SUCCESS);
   const unsigned long length = GetModuleFileNameW(
       nullptr, buffer.data(), static_cast<unsigned long>(buffer.size()));
   if (! length || length >= buffer.size()) {
-    if (error) {
-      const unsigned long path_error = GetLastError();
-      *error = path_error == ERROR_SUCCESS ? ERROR_INSUFFICIENT_BUFFER
-                                           : path_error;
-    }
-    return false;
+    const unsigned long path_error = GetLastError();
+    paths.error = path_error == ERROR_SUCCESS ? ERROR_INSUFFICIENT_BUFFER
+                                              : path_error;
+    return paths;
   }
-  unquoted_imagepath.assign(buffer.data(), length);
-  imagepath = quote_windows_argument(unquoted_imagepath);
-  if (error) *error = ERROR_SUCCESS;
-  return true;
+  paths.unquoted.assign(buffer.data(), length);
+  paths.quoted = quote_windows_argument(paths.unquoted);
+  return paths;
+}
+
+const application_paths_t &application_paths() {
+  static const application_paths_t paths = load_application_paths();
+  return paths;
 }
 
 }  // namespace
@@ -92,21 +98,21 @@ static int elevate(int argc, TCHAR **argv, unsigned long message) {
 }
 
 const TCHAR *nssm_unquoted_imagepath() {
-  return unquoted_imagepath.c_str();
+  return application_paths().unquoted.c_str();
 }
 
 const TCHAR *nssm_imagepath() {
-  return imagepath.c_str();
+  return application_paths().quoted.c_str();
 }
 
 int _tmain(int argc, TCHAR **argv) {
   if (console_attached()) setup_utf8();
 
   /* Remember our path for later. */
-  unsigned long path_error = ERROR_SUCCESS;
-  if (! initialize_image_paths(&path_error)) {
+  const application_paths_t &paths = application_paths();
+  if (paths.error != ERROR_SUCCESS) {
     fwprintf(stderr, L"Unable to resolve the NSSM executable path: %ls\n",
-             error_string(path_error));
+             error_string(paths.error));
     nssm_exit(100);
   }
 
