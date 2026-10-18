@@ -21,7 +21,6 @@
 #include <windows.h>
 
 #include <cstdio>
-#include <cstdlib>
 #include <string>
 #include <tchar.h>
 #include <vector>
@@ -62,10 +61,6 @@ const application_paths_t &application_paths() {
 
 static const TCHAR *nssm_unquoted_imagepath();
 static const TCHAR *nssm_imagepath();
-
-void nssm_exit(int status) {
-  exit(status);
-}
 
 /* User requested us to print our version. */
 static bool is_version(const TCHAR *s) {
@@ -118,7 +113,7 @@ int _tmain(int argc, TCHAR **argv) {
   if (paths.error != ERROR_SUCCESS) {
     fwprintf(stderr, L"Unable to resolve the NSSM executable path: %ls\n",
              error_string(paths.error));
-    nssm_exit(100);
+    return 100;
   }
 
   const bool is_admin = is_process_administrator();
@@ -133,17 +128,17 @@ int _tmain(int argc, TCHAR **argv) {
     if (is_version(argv[1])) {
       _tprintf(_T("%s %s %s %s\n"), kNssmServiceName, NSSM_VERSION,
                NSSM_CONFIGURATION, NSSM_DATE);
-      nssm_exit(0);
+      return 0;
     }
     if (strings_equal_ignore_case(argv[1], _T("validate"))) {
-      nssm_exit(validate_service_config_command(argc - 2, argv + 2));
+      return validate_service_config_command(argc - 2, argv + 2);
     }
     if (strings_equal_ignore_case(argv[1], _T("plan"))) {
-      nssm_exit(plan_service_config_command(argc - 2, argv + 2,
-                                            nssm_imagepath()));
+      return plan_service_config_command(argc - 2, argv + 2,
+                                         nssm_imagepath());
     }
     if (strings_equal_ignore_case(argv[1], _T("export"))) {
-      nssm_exit(export_service_config_command(argc - 2, argv + 2));
+      return export_service_config_command(argc - 2, argv + 2);
     }
     if (strings_equal_ignore_case(argv[1], _T("apply"))) {
       if (! is_admin) {
@@ -151,37 +146,41 @@ int _tmain(int argc, TCHAR **argv) {
         if (arguments.json) {
           print_cli_error(true, L"permission",
                           L"Administrator access is required to apply a service configuration");
-          nssm_exit(static_cast<int>(cli_exit_code::permission));
+          return static_cast<int>(cli_exit_code::permission);
         }
-        nssm_exit(elevate(argc, argv, NSSM_MESSAGE_NOT_ADMINISTRATOR_CANNOT_INSTALL));
+        return elevate(argc, argv,
+                       NSSM_MESSAGE_NOT_ADMINISTRATOR_CANNOT_INSTALL);
       }
       create_messages(nssm_unquoted_imagepath());
-      nssm_exit(apply_service_config_command(argc - 2, argv + 2,
-                                             nssm_imagepath()));
+      return apply_service_config_command(argc - 2, argv + 2,
+                                          nssm_imagepath());
     }
-    if (strings_equal_ignore_case(argv[1], _T("start"))) nssm_exit(control_service(kServiceControlStart, argc - 2, argv + 2));
-    if (strings_equal_ignore_case(argv[1], _T("stop"))) nssm_exit(control_service(SERVICE_CONTROL_STOP, argc - 2, argv + 2));
+    if (strings_equal_ignore_case(argv[1], _T("start"))) return control_service(kServiceControlStart, argc - 2, argv + 2);
+    if (strings_equal_ignore_case(argv[1], _T("stop"))) return control_service(SERVICE_CONTROL_STOP, argc - 2, argv + 2);
     if (strings_equal_ignore_case(argv[1], _T("restart"))) {
       int ret = control_service(SERVICE_CONTROL_STOP, argc - 2, argv + 2);
-      if (ret) nssm_exit(ret);
-      nssm_exit(control_service(kServiceControlStart, argc - 2, argv + 2));
+      if (ret) return ret;
+      return control_service(kServiceControlStart, argc - 2, argv + 2);
     }
-    if (strings_equal_ignore_case(argv[1], _T("pause"))) nssm_exit(control_service(SERVICE_CONTROL_PAUSE, argc - 2, argv + 2));
-    if (strings_equal_ignore_case(argv[1], _T("continue"))) nssm_exit(control_service(SERVICE_CONTROL_CONTINUE, argc - 2, argv + 2));
+    if (strings_equal_ignore_case(argv[1], _T("pause"))) return control_service(SERVICE_CONTROL_PAUSE, argc - 2, argv + 2);
+    if (strings_equal_ignore_case(argv[1], _T("continue"))) return control_service(SERVICE_CONTROL_CONTINUE, argc - 2, argv + 2);
     if (strings_equal_ignore_case(argv[1], _T("status"))) {
       cli_arguments_t arguments = parse_cli_arguments(argc - 2, argv + 2);
       if (arguments.verbose || arguments.json) {
-        nssm_exit(inspect_service_status_command(argc - 2, argv + 2));
+        return inspect_service_status_command(argc - 2, argv + 2);
       }
-      nssm_exit(control_service(SERVICE_CONTROL_INTERROGATE, argc - 2, argv + 2));
+      return control_service(SERVICE_CONTROL_INTERROGATE, argc - 2, argv + 2);
     }
-    if (strings_equal_ignore_case(argv[1], _T("statuscode"))) nssm_exit(control_service(SERVICE_CONTROL_INTERROGATE, argc - 2, argv + 2, true));
-    if (strings_equal_ignore_case(argv[1], _T("rotate"))) nssm_exit(control_service(kServiceControlRotate, argc - 2, argv + 2));
-    if (strings_equal_ignore_case(argv[1], _T("list"))) nssm_exit(list_nssm_services(argc - 2, argv + 2));
-    if (strings_equal_ignore_case(argv[1], _T("processes"))) nssm_exit(service_process_tree(argc - 2, argv + 2));
+    if (strings_equal_ignore_case(argv[1], _T("statuscode"))) return control_service(SERVICE_CONTROL_INTERROGATE, argc - 2, argv + 2, true);
+    if (strings_equal_ignore_case(argv[1], _T("rotate"))) return control_service(kServiceControlRotate, argc - 2, argv + 2);
+    if (strings_equal_ignore_case(argv[1], _T("list"))) return list_nssm_services(argc - 2, argv + 2);
+    if (strings_equal_ignore_case(argv[1], _T("processes"))) return service_process_tree(argc - 2, argv + 2);
     if (strings_equal_ignore_case(argv[1], _T("remove"))) {
-      if (! is_admin) nssm_exit(elevate(argc, argv, NSSM_MESSAGE_NOT_ADMINISTRATOR_CANNOT_REMOVE));
-      nssm_exit(pre_remove_service(argc - 2, argv + 2));
+      if (! is_admin) {
+        return elevate(argc, argv,
+                       NSSM_MESSAGE_NOT_ADMINISTRATOR_CANNOT_REMOVE);
+      }
+      return pre_remove_service(argc - 2, argv + 2);
     }
   }
 
@@ -192,13 +191,12 @@ int _tmain(int argc, TCHAR **argv) {
       {const_cast<wchar_t *>(kNssmServiceName), service_main}, {nullptr, nullptr}};
   if (! StartServiceCtrlDispatcher(table)) {
     unsigned long error = GetLastError();
-    if (error == ERROR_FAILED_SERVICE_CONTROLLER_CONNECT) nssm_exit(usage(1));
+    if (error == ERROR_FAILED_SERVICE_CONTROLLER_CONNECT) return usage(1);
     log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_DISPATCHER_FAILED,
               error_string(error), 0);
-    nssm_exit(100);
+    return 100;
   }
 
   /* And nothing more to do */
-  nssm_exit(0);
   return 0;
 }
