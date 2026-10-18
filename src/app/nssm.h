@@ -51,14 +51,9 @@ static_assert(sizeof(TCHAR) == sizeof(wchar_t));
 
 void nssm_exit(int);
 int str_equiv(const TCHAR *, const TCHAR *);
-int quote(const TCHAR *, TCHAR *, size_t);
-void strip_basename(TCHAR *);
-int str_number(const TCHAR *, unsigned long *, TCHAR **);
-int str_number(const TCHAR *, unsigned long *);
 int usage(int);
 const TCHAR *nssm_unquoted_imagepath();
 const TCHAR *nssm_imagepath();
-const TCHAR *nssm_exe();
 
 #define NSSM _T("NSSM")
 #define NSSM_ARCHITECTURE _T("64-bit")
