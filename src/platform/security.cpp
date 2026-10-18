@@ -1,12 +1,11 @@
 #include "security.h"
 
-#include "config.h"
-
 #include <aclapi.h>
 #include <windows.h>
 
 #include <cstddef>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace {
@@ -132,27 +131,24 @@ bool secure_descriptor(const std::wstring &path, std::wstring *reason) {
   if (descriptor) LocalFree(descriptor);
   return secure;
 }
-
-bool audit_existing_object(const std::wstring &path, const wchar_t *field,
-                           config_validation_t *validation) {
-  std::wstring reason;
-  if (secure_descriptor(path, &reason)) return true;
-  validation->add(std::wstring(field) + L" is insecure: " + path + L" " +
-                  reason);
+bool audit_existing_object(const std::wstring &path, std::wstring *reason) {
+  std::wstring detail;
+  if (secure_descriptor(path, &detail)) return true;
+  *reason = L"is insecure: " + path + L" " + detail;
   return false;
 }
 
 }  // namespace
 
-bool audit_secure_path(const std::wstring &path, const wchar_t *field,
-                       bool must_exist, config_validation_t *validation) {
-  if (! validation || path.empty()) return false;
+bool check_secure_path(const std::wstring &path, bool must_exist,
+                       std::wstring *reason) {
+  if (! reason || path.empty()) return false;
+  reason->clear();
   std::wstring target = path;
   unsigned long attributes = GetFileAttributesW(target.c_str());
   if (attributes == INVALID_FILE_ATTRIBUTES) {
     if (must_exist) {
-      validation->add(std::wstring(field) + L" does not exist or is inaccessible: " +
-                      path);
+      *reason = L"does not exist or is inaccessible: " + path;
       return false;
     }
     target = parent_path(target);
@@ -161,53 +157,19 @@ bool audit_secure_path(const std::wstring &path, const wchar_t *field,
       target = parent_path(target);
     }
     if (target.empty()) {
-      validation->add(std::wstring(field) +
-                      L" has no accessible parent directory: " + path);
+      *reason = L"has no accessible parent directory: " + path;
       return false;
     }
-    return audit_existing_object(target, field, validation);
+    return audit_existing_object(target, reason);
   }
 
-  bool secure = audit_existing_object(target, field, validation);
+  bool secure = audit_existing_object(target, reason);
   std::wstring parent = parent_path(target);
   if (! parent.empty() && parent != target) {
-    secure = audit_existing_object(parent, field, validation) && secure;
-  }
-  return secure;
-}
-
-bool audit_service_paths(const std::wstring &config_path,
-                         const service_config_t &config,
-                         config_validation_t *validation) {
-  bool secure = true;
-  secure = audit_secure_path(config_path, L"configuration path", true,
-                             validation) && secure;
-  secure = audit_secure_path(config.application.path, L"application.path", true,
-                             validation) && secure;
-  secure = audit_secure_path(config.application.working_directory,
-                             L"application.workingDirectory", true,
-                             validation) && secure;
-  if (! config.logging.stdout_path.empty()) {
-    secure = audit_secure_path(config.logging.stdout_path,
-                               L"logging.stdout.path", false, validation) &&
-             secure;
-  }
-  if (! config.logging.stderr_path.empty() &&
-      _wcsicmp(config.logging.stderr_path.c_str(),
-               config.logging.stdout_path.c_str())) {
-    secure = audit_secure_path(config.logging.stderr_path,
-                               L"logging.stderr.path", false, validation) &&
-             secure;
-  }
-  if (config.readiness.probe.type == health_check_type_t::command) {
-    secure = audit_secure_path(config.readiness.probe.command_path,
-                               L"readiness.command.path", true, validation) &&
-             secure;
-  }
-  if (config.health.type == health_check_type_t::command) {
-    secure = audit_secure_path(config.health.command_path,
-                               L"health.command.path", true, validation) &&
-             secure;
+    std::wstring parent_reason;
+    const bool parent_secure = audit_existing_object(parent, &parent_reason);
+    if (secure && ! parent_secure) *reason = std::move(parent_reason);
+    secure = parent_secure && secure;
   }
   return secure;
 }

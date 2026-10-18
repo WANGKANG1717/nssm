@@ -82,6 +82,7 @@ set(NSSM_CONFIG_SOURCES
   src/config/config_loader.cpp
   src/config/config_parse_utils.cpp
   src/config/config_registration.cpp
+  src/config/config_security.cpp
   src/config/config_service.cpp
 )
 
@@ -207,6 +208,7 @@ if(BUILD_TESTING)
     src/supervisor/process/child_process.cpp
     src/config/config.cpp
     src/config/config_parse_utils.cpp
+    src/config/config_security.cpp
     src/supervisor/monitoring/health_check.cpp
     src/supervisor/process/job_object.cpp
     src/supervisor/process/process_options.cpp

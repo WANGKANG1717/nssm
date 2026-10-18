@@ -3,12 +3,12 @@
 
 #include "child_process.h"
 #include "config.h"
+#include "config_security.h"
 #include "health_check.h"
 #include "job_object.h"
 #include "process_options.h"
 #include "readiness.h"
 #include "recovery.h"
-#include "security.h"
 
 #include <aclapi.h>
 
