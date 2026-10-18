@@ -2,6 +2,7 @@
 #include "child_process.h"
 #include "config.h"
 #include "recovery.h"
+#include "security.h"
 
 #include <new>
 #include <string>
@@ -377,6 +378,12 @@ int apply_service_config_command(int argc, wchar_t **argv) {
     }
     return 1;
   }
+  if (! audit_service_paths(path, config, &validation)) {
+    for (const auto &error : validation.errors) {
+      fwprintf(stderr, L"error: %ls\n", error.c_str());
+    }
+    return 1;
+  }
 
   std::vector<wchar_t> dependencies =
       make_dependencies(config.service.dependencies);
@@ -529,6 +536,10 @@ bool load_registered_service_config(nssm_service_t *service,
   }
   if (_wcsicmp(config->service.name.c_str(), service->name)) {
     validation->add(L"The configuration service name does not match the SCM service name");
+    delete config;
+    return false;
+  }
+  if (! audit_service_paths(path, *config, validation)) {
     delete config;
     return false;
   }

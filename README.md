@@ -149,6 +149,11 @@ ctest --preset mingw-release
 文件、注册表和其他对象 ACL 的服务；否则可能因权限不足而无法启动。配置文件不
 接受明文密码字段，需要域身份时优先使用 gMSA。
 
+执行 `apply` 以及服务启动时会审计配置文件、应用程序、工作目录、命令探针和
+日志目录的 Windows ACL。对象必须由 SYSTEM、Administrators 或
+TrustedInstaller 控制，且不能向其他主体授予修改权限；不安全路径会被拒绝，
+以防止低权限用户替换配置或程序后借服务身份执行代码。
+
 - 安装
   - GUI：`nssm install <ServiceName>`
   - 直接安装：`nssm install <ServiceName> <Program> [<Arguments>]`

@@ -7,6 +7,9 @@
 #include "job_object.h"
 #include "readiness.h"
 #include "recovery.h"
+#include "security.h"
+
+#include <aclapi.h>
 
 #include <iostream>
 #include <string>
@@ -249,6 +252,16 @@ void configuration_tests() {
   expect(config.application.arguments.size() == 2 &&
              config.application.environment.size() == 1,
          L"application arrays and environment should be retained");
+
+  constexpr const char *drive_root_json = R"json({
+    "schema": 1,
+    "service": { "name": "root-worker" },
+    "application": { "path": "C:\\worker.exe" }
+  })json";
+  expect(parse_service_config(drive_root_json, strlen(drive_root_json),
+                              &config, &validation) &&
+             config.application.working_directory == L"C:\\",
+         L"an executable in a drive root should derive an absolute working directory");
 
   constexpr const char *virtual_account_json = R"json({
     "schema": 1,
@@ -637,6 +650,45 @@ void readiness_tests() {
          L"readiness should fail when its startup deadline expires");
 }
 
+void path_security_tests() {
+  wchar_t system_directory[MAX_PATH] = {};
+  expect(GetSystemDirectoryW(system_directory, _countof(system_directory)) != 0,
+         L"the Windows system directory should be available");
+  std::wstring cmd_path = std::wstring(system_directory) + L"\\cmd.exe";
+  config_validation_t validation;
+  expect(audit_secure_path(cmd_path, L"test.systemBinary", true, &validation),
+         L"a protected Windows system binary should pass ACL auditing");
+
+  wchar_t temporary_directory[MAX_PATH] = {};
+  wchar_t temporary_file[MAX_PATH] = {};
+  if (! GetTempPathW(_countof(temporary_directory), temporary_directory) ||
+      ! GetTempFileNameW(temporary_directory, L"nsm", 0, temporary_file)) {
+    expect(false, L"an ACL test file should be created");
+    return;
+  }
+  std::vector<unsigned char> everyone(SECURITY_MAX_SID_SIZE);
+  unsigned long sid_size = static_cast<unsigned long>(everyone.size());
+  EXPLICIT_ACCESSW access = {};
+  PACL acl = nullptr;
+  if (CreateWellKnownSid(WinWorldSid, nullptr, everyone.data(), &sid_size)) {
+    access.grfAccessPermissions = GENERIC_WRITE;
+    access.grfAccessMode = GRANT_ACCESS;
+    access.grfInheritance = NO_INHERITANCE;
+    BuildTrusteeWithSidW(&access.Trustee, everyone.data());
+    if (SetEntriesInAclW(1, &access, nullptr, &acl) == ERROR_SUCCESS) {
+      SetNamedSecurityInfoW(temporary_file, SE_FILE_OBJECT,
+                            DACL_SECURITY_INFORMATION, nullptr, nullptr, acl,
+                            nullptr);
+    }
+  }
+  validation.errors.clear();
+  expect(! audit_secure_path(temporary_file, L"test.insecure", true,
+                             &validation),
+         L"a file writable by Everyone must fail ACL auditing");
+  if (acl) LocalFree(acl);
+  DeleteFileW(temporary_file);
+}
+
 }  // namespace
 
 int wmain() {
@@ -650,6 +702,7 @@ int wmain() {
   recovery_tests();
   health_probe_tests();
   readiness_tests();
+  path_security_tests();
 
   if (failures) {
     std::wcerr << failures << L" test assertion(s) failed\n";

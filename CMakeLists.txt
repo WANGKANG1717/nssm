@@ -99,6 +99,7 @@ set(NSSM_PLATFORM_SOURCES
   src/platform/event.cpp
   src/platform/imports.cpp
   src/platform/registry.cpp
+  src/platform/security.cpp
   src/platform/settings.cpp
   src/platform/utf8.cpp
 )
@@ -210,12 +211,14 @@ if(BUILD_TESTING)
     src/supervisor/process/job_object.cpp
     src/supervisor/monitoring/readiness.cpp
     src/supervisor/runtime/recovery.cpp
+    src/platform/security.cpp
   )
   target_include_directories(nssm_unit_tests PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/src/config"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/supervisor/process"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/supervisor/monitoring"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/supervisor/runtime"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/platform"
   )
   target_compile_definitions(nssm_unit_tests PRIVATE
     UNICODE
@@ -224,7 +227,7 @@ if(BUILD_TESTING)
     _WIN32_WINNT=0x0A00
   )
   nssm_configure_compiler(nssm_unit_tests)
-  target_link_libraries(nssm_unit_tests PRIVATE shlwapi winhttp ws2_32 yyjson)
+  target_link_libraries(nssm_unit_tests PRIVATE advapi32 shlwapi winhttp ws2_32 yyjson)
   add_test(NAME nssm.unit COMMAND $<TARGET_FILE:nssm_unit_tests>)
 endif()
 

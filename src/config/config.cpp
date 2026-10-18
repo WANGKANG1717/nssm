@@ -446,7 +446,10 @@ void parse_application(yyjson_val *root, application_config_t *application,
   if (application->working_directory.empty() && ! application->path.empty()) {
     size_t separator = application->path.find_last_of(L"\\/");
     if (separator != std::wstring::npos) {
-      application->working_directory = application->path.substr(0, separator);
+      size_t length = separator == 2 && application->path[1] == L':'
+                          ? separator + 1
+                          : separator;
+      application->working_directory = application->path.substr(0, length);
     }
   }
 
