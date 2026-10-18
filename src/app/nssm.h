@@ -39,17 +39,8 @@ static_assert(sizeof(TCHAR) == sizeof(wchar_t));
 #endif
 
 void nssm_exit(int);
-int usage(int);
 const TCHAR *nssm_unquoted_imagepath();
 const TCHAR *nssm_imagepath();
-
-#define NSSM_ARCHITECTURE _T("64-bit")
-#ifdef _DEBUG
-#define NSSM_DEBUG _T(" debug")
-#else
-#define NSSM_DEBUG _T("")
-#endif
-#define NSSM_CONFIGURATION NSSM_ARCHITECTURE NSSM_DEBUG
 #include "version.h"
 
 #endif

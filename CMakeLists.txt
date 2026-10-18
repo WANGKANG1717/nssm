@@ -75,6 +75,7 @@ set(NSSM_CLI_SOURCES
   src/cli/output.cpp
   src/cli/service_commands.cpp
   src/cli/status.cpp
+  src/cli/usage.cpp
 )
 
 set(NSSM_CONFIG_SOURCES

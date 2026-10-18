@@ -14,6 +14,7 @@
 #include "string_utils.h"
 #include "config.h"
 #include "utf8.h"
+#include "usage.h"
 
 namespace {
 
@@ -64,12 +65,6 @@ static bool is_version(const TCHAR *s) {
   }
   if (strings_equal_ignore_case(s, _T("version"))) return true;
   return false;
-}
-
-/* How to use me correctly */
-int usage(int ret) {
-  print_message(stderr, NSSM_MESSAGE_USAGE, NSSM_VERSION, NSSM_CONFIGURATION, NSSM_DATE);
-  return(ret);
 }
 
 static int elevate(int argc, TCHAR **argv, unsigned long message) {

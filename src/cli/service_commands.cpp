@@ -8,6 +8,7 @@
 #include "service_constants.h"
 #include "service_commands.h"
 #include "string_utils.h"
+#include "usage.h"
 #include "win32_handle.h"
 
 #include <new>

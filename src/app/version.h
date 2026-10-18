@@ -6,6 +6,13 @@
 #define NSSM_BUILD_LABEL "release"
 #endif
 #define NSSM_DATE _T(NSSM_BUILD_LABEL)
+#define NSSM_ARCHITECTURE _T("64-bit")
+#ifdef _DEBUG
+#define NSSM_DEBUG _T(" debug")
+#else
+#define NSSM_DEBUG _T("")
+#endif
+#define NSSM_CONFIGURATION NSSM_ARCHITECTURE NSSM_DEBUG
 #define NSSM_FILEFLAGS 0L
 #define NSSM_COPYRIGHT _T("Public Domain; Author fightroad")
 
