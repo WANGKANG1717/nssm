@@ -86,6 +86,11 @@ void string_utils_tests() {
          L"two null strings should compare equal");
   expect(! strings_equal_ignore_case(nullptr, L"service"),
          L"a null and non-null string must not compare equal");
+  expect(string_starts_with_ignore_case(L"NT service\\Example",
+                                        L"NT SERVICE\\"),
+         L"ordinal prefix comparison should ignore case");
+  expect(! string_starts_with_ignore_case(L"NT SERVICE", L"NT SERVICE\\"),
+         L"ordinal prefix comparison should require the complete prefix");
   ordinal_ignore_case_less less;
   expect(! less(L"Path", L"PATH") && ! less(L"PATH", L"Path"),
          L"ordinal comparator should treat environment names as equivalent");

@@ -1,14 +1,15 @@
 #include "output.h"
+#include "string_utils.h"
 
 #include <cwchar>
 
 cli_arguments_t parse_cli_arguments(int argc, wchar_t **argv) {
   cli_arguments_t parsed;
   for (int index = 0; index < argc; ++index) {
-    if (argv[index] && ! _wcsicmp(argv[index], L"--json")) {
+    if (strings_equal_ignore_case(argv[index], L"--json")) {
       parsed.json = true;
     }
-    else if (argv[index] && ! _wcsicmp(argv[index], L"--verbose")) {
+    else if (strings_equal_ignore_case(argv[index], L"--verbose")) {
       parsed.verbose = true;
     }
     else {

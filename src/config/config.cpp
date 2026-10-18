@@ -172,7 +172,8 @@ void parse_service(yyjson_val *root, service_metadata_config_t *service,
   parse_account(object, &service->account, validation);
   if (service->account.type == service_account_type_t::virtual_account &&
       ! service->account.name.empty() &&
-      _wcsicmp(service->account.name.c_str(), service->name.c_str())) {
+      ! strings_equal_ignore_case(service->account.name.c_str(),
+                                  service->name.c_str())) {
     validation->add(
         L"service.account.name for a virtual account must match service.name");
   }

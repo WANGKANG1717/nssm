@@ -6,6 +6,7 @@
 #include "config_security.h"
 #include "recovery.h"
 #include "service.h"
+#include "string_utils.h"
 
 #include <new>
 #include <string>
@@ -83,7 +84,8 @@ bool load_registered_service_config(nssm_service_t *service,
     delete config;
     return false;
   }
-  if (_wcsicmp(config->service.name.c_str(), service->name)) {
+  if (! strings_equal_ignore_case(config->service.name.c_str(),
+                                  service->name)) {
     validation->add(
         L"The configuration service name does not match the SCM service name");
     delete config;

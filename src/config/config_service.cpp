@@ -2,6 +2,7 @@
 #include "config_operations.h"
 #include "config_registration.h"
 #include "config_security.h"
+#include "string_utils.h"
 #include "win32_handle.h"
 
 #include <string>
@@ -186,13 +187,14 @@ bool read_existing_service_state(SC_HANDLE service,
 }
 
 bool passwordless_service_account(const std::wstring &account) {
-  if (!_wcsicmp(account.c_str(), L"LocalSystem") ||
-      !_wcsicmp(account.c_str(), L"NT AUTHORITY\\LocalService") ||
-      !_wcsicmp(account.c_str(), L"NT AUTHORITY\\NetworkService")) {
+  if (strings_equal_ignore_case(account.c_str(), L"LocalSystem") ||
+      strings_equal_ignore_case(account.c_str(),
+                                L"NT AUTHORITY\\LocalService") ||
+      strings_equal_ignore_case(account.c_str(),
+                                L"NT AUTHORITY\\NetworkService")) {
     return true;
   }
-  if (account.size() > 11 &&
-      !_wcsnicmp(account.c_str(), L"NT SERVICE\\", 11)) {
+  if (string_starts_with_ignore_case(account, L"NT SERVICE\\")) {
     return true;
   }
   return account.ends_with(L'$');
@@ -237,7 +239,8 @@ std::vector<std::wstring> config_changes(const service_config_t &current,
   if (!(current.resources == desired.resources)) changes.emplace_back(L"resources");
   if (!(current.logging == desired.logging)) changes.emplace_back(L"logging");
   if (!(current.security == desired.security)) changes.emplace_back(L"security");
-  if (_wcsicmp(current_path.c_str(), desired_path.c_str())) {
+  if (! strings_equal_ignore_case(current_path.c_str(),
+                                  desired_path.c_str())) {
     changes.emplace_back(L"configPath");
   }
   return changes;
@@ -310,7 +313,8 @@ config_operation_result_t export_service_config(
   service_config_t config;
   config_validation_t validation;
   if (! load_service_config(source.c_str(), &config, &validation) ||
-      _wcsicmp(config.service.name.c_str(), service_name.c_str())) {
+      ! strings_equal_ignore_case(config.service.name.c_str(),
+                                  service_name.c_str())) {
     return operation_failure(
         config_operation_status_t::conflict,
         L"The registered configuration is invalid or belongs to another service");
@@ -391,7 +395,8 @@ config_operation_result_t plan_service_config(
         config_operation_status_t::conflict,
         L"The registered service configuration cannot be loaded");
   }
-  if (_wcsicmp(current.service.name.c_str(), desired.service.name.c_str())) {
+  if (! strings_equal_ignore_case(current.service.name.c_str(),
+                                  desired.service.name.c_str())) {
     return operation_failure(
         config_operation_status_t::conflict,
         L"The registered configuration belongs to a different service");
@@ -403,9 +408,11 @@ config_operation_result_t plan_service_config(
       state.service_type == SERVICE_WIN32_OWN_PROCESS &&
       state.start_type == service_start_type(desired.service.startup) &&
       state.delayed == (desired.service.startup == service_startup_t::delayed) &&
-      !_wcsicmp(state.binary_path.c_str(), wrapper_image_path.c_str()) &&
+      strings_equal_ignore_case(state.binary_path.c_str(),
+                                wrapper_image_path.c_str()) &&
       state.dependencies == make_dependencies(desired.service.dependencies) &&
-      !_wcsicmp(state.account.c_str(), expected_account.c_str()) &&
+      strings_equal_ignore_case(state.account.c_str(),
+                                expected_account.c_str()) &&
       state.display_name == desired.service.display_name &&
       state.description == desired.service.description &&
       state.service_sid_type == service_sid_type(desired.security.service_sid);

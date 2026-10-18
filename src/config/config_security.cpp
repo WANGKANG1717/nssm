@@ -2,6 +2,7 @@
 
 #include "config.h"
 #include "security.h"
+#include "string_utils.h"
 
 bool audit_secure_path(const std::wstring &path, const wchar_t *field,
                        bool must_exist, config_validation_t *validation) {
@@ -29,8 +30,8 @@ bool audit_service_paths(const std::wstring &config_path,
              secure;
   }
   if (! config.logging.stderr_path.empty() &&
-      _wcsicmp(config.logging.stderr_path.c_str(),
-               config.logging.stdout_path.c_str())) {
+      ! strings_equal_ignore_case(config.logging.stderr_path.c_str(),
+                                  config.logging.stdout_path.c_str())) {
     secure = audit_secure_path(config.logging.stderr_path,
                                L"logging.stderr.path", false, validation) &&
              secure;
