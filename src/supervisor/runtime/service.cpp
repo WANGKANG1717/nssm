@@ -79,6 +79,116 @@ static int finish_service_start(nssm_service_t *service,
   return 0;
 }
 
+static void close_failed_child_launch(nssm_service_t *service,
+                                      HANDLE thread_handle) {
+  if (thread_handle) CloseHandle(thread_handle);
+  if (service->process_handle) CloseHandle(service->process_handle);
+  if (service->job_handle) CloseHandle(service->job_handle);
+  service->process_handle = nullptr;
+  service->job_handle = nullptr;
+  service->pid = 0;
+}
+
+static bool configure_service_job(nssm_service_t *service) {
+  unsigned long error = ERROR_SUCCESS;
+  service->job_handle = create_service_job(&error);
+  if (! service->job_handle) {
+    log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_CREATE_JOB_FAILED,
+              service->name, error_string(error), 0);
+    return false;
+  }
+  if (service->config->resources.enabled() &&
+      ! configure_service_job_limits(
+          service->job_handle,
+          service->config->resources.maximum_processes,
+          service->config->resources.memory_limit_bytes, &error)) {
+    log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_CONFIGURE_JOB_FAILED,
+              service->name, error_string(error), 0);
+    CloseHandle(service->job_handle);
+    service->job_handle = nullptr;
+    return false;
+  }
+  return true;
+}
+
+static bool create_suspended_service_process(
+    nssm_service_t *service, STARTUPINFO *startup_info,
+    std::wstring *command_line, wchar_t *environment,
+    PROCESS_INFORMATION *process_info) {
+  const bool inherit_handles =
+      (startup_info->dwFlags & STARTF_USESTDHANDLES) != 0;
+  unsigned long flags = service->priority & priority_mask();
+  flags |= CREATE_SUSPENDED | CREATE_UNICODE_ENVIRONMENT;
+  if (! service->no_console) flags |= CREATE_NEW_CONSOLE;
+
+  if (! CreateProcess(service->exe, command_line->data(), nullptr, nullptr,
+                      inherit_handles, flags, environment, service->dir,
+                      startup_info, process_info)) {
+    const unsigned long error = GetLastError();
+    log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_CREATEPROCESS_FAILED,
+              service->name, service->exe, error_string(error), 0);
+    return false;
+  }
+  service->process_handle = process_info->hProcess;
+  service->pid = process_info->dwProcessId;
+  service->process_started_ms = GetTickCount64();
+  publish_status_snapshot(service);
+  return true;
+}
+
+static bool assign_service_process_to_job(nssm_service_t *service,
+                                          HANDLE thread_handle) {
+  unsigned long error = ERROR_SUCCESS;
+  if (assign_process_to_service_job(service->job_handle,
+                                    service->process_handle, &error)) {
+    return true;
+  }
+  log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_ASSIGN_JOB_FAILED, service->name,
+            error_string(error), 0);
+  TerminateProcess(service->process_handle, error);
+  WaitForSingleObject(service->process_handle, NSSM_SERVICE_STATUS_DEADLINE);
+  close_failed_child_launch(service, thread_handle);
+  return false;
+}
+
+static void apply_service_process_affinity(nssm_service_t *service) {
+  if (! service->affinity) return;
+
+  DWORD_PTR affinity = static_cast<DWORD_PTR>(service->affinity);
+  DWORD_PTR current_affinity = 0;
+  DWORD_PTR system_affinity = 0;
+  if (GetProcessAffinityMask(service->process_handle, &current_affinity,
+                             &system_affinity)) {
+    affinity &= system_affinity;
+  }
+  else {
+    log_event(EVENTLOG_ERROR_TYPE,
+              NSSM_EVENT_GETPROCESSAFFINITYMASK_FAILED, service->name,
+              error_string(GetLastError()), 0);
+  }
+  if (! SetProcessAffinityMask(service->process_handle, affinity)) {
+    log_event(EVENTLOG_WARNING_TYPE,
+              NSSM_EVENT_SETPROCESSAFFINITYMASK_FAILED, service->name,
+              error_string(GetLastError()), 0);
+  }
+}
+
+static bool resume_service_process(nssm_service_t *service,
+                                   HANDLE thread_handle) {
+  if (ResumeThread(thread_handle) != static_cast<unsigned long>(-1)) {
+    CloseHandle(thread_handle);
+    return true;
+  }
+
+  const unsigned long error = GetLastError();
+  log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_RESUME_PROCESS_FAILED,
+            service->name, error_string(error), 0);
+  terminate_service_job(service->job_handle, error, nullptr);
+  WaitForSingleObject(service->process_handle, NSSM_SERVICE_STATUS_DEADLINE);
+  close_failed_child_launch(service, thread_handle);
+  return false;
+}
+
 static inline unsigned long throttle_milliseconds(unsigned long throttle) {
   if (throttle > 7) throttle = 8;
   /* pow() operates on doubles. */
@@ -485,61 +595,17 @@ int start_service(nssm_service_t *service) {
     }
     FreeConsole();
 
-    bool inherit_handles = false;
-    if (si.dwFlags & STARTF_USESTDHANDLES) inherit_handles = true;
-    unsigned long flags = service->priority & priority_mask();
-    flags |= CREATE_SUSPENDED;
-    if (! service->no_console) flags |= CREATE_NEW_CONSOLE;
-    flags |= CREATE_UNICODE_ENVIRONMENT;
-
-    unsigned long job_error = ERROR_SUCCESS;
-    service->job_handle = create_service_job(&job_error);
-    if (! service->job_handle) {
-      log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_CREATE_JOB_FAILED, service->name,
-                error_string(job_error), 0);
+    if (! configure_service_job(service)) {
       close_output_handles(&si);
       return stop_service(service, 3);
     }
-    if (service->config->resources.enabled() &&
-        ! configure_service_job_limits(
-            service->job_handle,
-            service->config->resources.maximum_processes,
-            service->config->resources.memory_limit_bytes, &job_error)) {
-      log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_CONFIGURE_JOB_FAILED,
-                service->name, error_string(job_error), 0);
-      CloseHandle(service->job_handle);
-      service->job_handle = 0;
+    if (! create_suspended_service_process(
+            service, &si, &command_line, child_environment.data(), &pi)) {
       close_output_handles(&si);
+      close_failed_child_launch(service, nullptr);
       return stop_service(service, 3);
     }
-
-    if (! CreateProcess(service->exe, command_line.data(), 0, 0, inherit_handles,
-                        flags, child_environment.data(), service->dir, &si, &pi)) {
-      unsigned long exitcode = 3;
-      unsigned long error = GetLastError();
-      log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_CREATEPROCESS_FAILED, service->name, service->exe, error_string(error), 0);
-      close_output_handles(&si);
-      CloseHandle(service->job_handle);
-      service->job_handle = 0;
-      return stop_service(service, exitcode);
-    }
-    service->process_handle = pi.hProcess;
-    service->pid = pi.dwProcessId;
-    service->process_started_ms = GetTickCount64();
-    publish_status_snapshot(service);
-
-    if (! assign_process_to_service_job(service->job_handle,
-                                        service->process_handle, &job_error)) {
-      log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_ASSIGN_JOB_FAILED, service->name,
-                error_string(job_error), 0);
-      TerminateProcess(service->process_handle, job_error);
-      WaitForSingleObject(service->process_handle, NSSM_SERVICE_STATUS_DEADLINE);
-      if (pi.hThread) CloseHandle(pi.hThread);
-      CloseHandle(service->process_handle);
-      service->process_handle = 0;
-      service->pid = 0;
-      CloseHandle(service->job_handle);
-      service->job_handle = 0;
+    if (! assign_service_process_to_job(service, pi.hThread)) {
       close_output_handles(&si);
       return stop_service(service, 3);
     }
@@ -548,49 +614,10 @@ int start_service(nssm_service_t *service) {
 
     close_output_handles(&si);
 
-    if (service->affinity) {
-      /*
-        We are explicitly storing service->affinity as a 64-bit unsigned integer
-        so that we can parse it regardless of whether we're running in 32-bit
-        or 64-bit mode.  The arguments to SetProcessAffinityMask(), however, are
-        defined as type DWORD_PTR and hence limited to 32 bits on a 32-bit system
-        (or when running the 32-bit NSSM).
-
-        The result is a lot of seemingly-unnecessary casting throughout the code
-        and potentially confusion when we actually try to start the service.
-        Having said that, however, it's unlikely that we're actually going to
-        run in 32-bit mode on a system which has more than 32 CPUs so the
-        likelihood of seeing a confusing situation is somewhat diminished.
-      */
-      DWORD_PTR affinity, system_affinity;
-
-      if (GetProcessAffinityMask(service->process_handle, &affinity, &system_affinity)) affinity = service->affinity & system_affinity;
-      else {
-        affinity = (DWORD_PTR) service->affinity;
-        log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_GETPROCESSAFFINITYMASK_FAILED, service->name, error_string(GetLastError()), 0);
-      }
-
-      if (! SetProcessAffinityMask(service->process_handle, affinity)) {
-        log_event(EVENTLOG_WARNING_TYPE, NSSM_EVENT_SETPROCESSAFFINITYMASK_FAILED, service->name, error_string(GetLastError()), 0);
-      }
-
-    }
-    if (ResumeThread(pi.hThread) == static_cast<unsigned long>(-1)) {
-      unsigned long resume_error = GetLastError();
-      log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_RESUME_PROCESS_FAILED,
-                service->name, error_string(resume_error), 0);
-      terminate_service_job(service->job_handle, resume_error, nullptr);
-      WaitForSingleObject(service->process_handle, NSSM_SERVICE_STATUS_DEADLINE);
-      CloseHandle(pi.hThread);
-      CloseHandle(service->process_handle);
-      service->process_handle = 0;
-      service->pid = 0;
-      CloseHandle(service->job_handle);
-      service->job_handle = 0;
+    apply_service_process_affinity(service);
+    if (! resume_service_process(service, pi.hThread)) {
       return stop_service(service, 3);
     }
-    /* We never use the primary thread handle beyond ResumeThread(). */
-    if (pi.hThread) CloseHandle(pi.hThread);
   }
 
   return finish_service_start(service, child_environment.data());
