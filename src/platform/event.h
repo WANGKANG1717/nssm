@@ -8,14 +8,6 @@
 #include <cstdio>
 
 wchar_t *error_string(unsigned long);
-/*
-  Returns a pointer to a message format string for the given message id.
-  The returned pointer MUST be freed by the caller with LocalFree().
-*/
-wchar_t *message_string(unsigned long);
-static inline void free_message_string(wchar_t *s) {
-  if (s) LocalFree(s);
-}
 void log_event_strings(unsigned short, unsigned long,
                        const wchar_t *const *, size_t);
 

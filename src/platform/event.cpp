@@ -30,7 +30,7 @@ wchar_t *error_string(unsigned long error) {
   return error_message;
 }
 
-wchar_t *message_string(unsigned long error) {
+static wchar_t *message_string(unsigned long error) {
   wchar_t *message = nullptr;
   HMODULE module = GetModuleHandleW(nullptr);
   const unsigned long flags = FORMAT_MESSAGE_ALLOCATE_BUFFER |
