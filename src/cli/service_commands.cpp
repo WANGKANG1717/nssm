@@ -7,6 +7,7 @@
 #include "service_constants.h"
 #include "service_commands.h"
 #include "service_enumeration.h"
+#include "service_operations.h"
 #include "string_utils.h"
 #include "usage.h"
 #include "win32_handle.h"
@@ -18,66 +19,6 @@
 namespace {
 
 int remove_service(nssm_service_t *service);
-
-int service_control_response(unsigned long control, unsigned long status) {
-  switch (control) {
-    case kServiceControlStart:
-      if (status == SERVICE_START_PENDING) return 1;
-      return status == SERVICE_RUNNING ? 0 : -1;
-
-    case SERVICE_CONTROL_STOP:
-    case SERVICE_CONTROL_SHUTDOWN:
-      if (status == SERVICE_RUNNING || status == SERVICE_STOP_PENDING) return 1;
-      return status == SERVICE_STOPPED ? 0 : -1;
-
-    case SERVICE_CONTROL_PAUSE:
-      if (status == SERVICE_PAUSE_PENDING) return 1;
-      return status == SERVICE_PAUSED ? 0 : -1;
-
-    case SERVICE_CONTROL_CONTINUE:
-      if (status == SERVICE_CONTINUE_PENDING) return 1;
-      return status == SERVICE_RUNNING ? 0 : -1;
-
-    case SERVICE_CONTROL_INTERROGATE:
-    case kServiceControlRotate:
-    default:
-      return 0;
-  }
-}
-
-int await_service_control_response(unsigned long control, SC_HANDLE service,
-                                   SERVICE_STATUS *status,
-                                   unsigned long initial_status,
-                                   unsigned long *query_error) {
-  if (query_error) *query_error = ERROR_SUCCESS;
-  unsigned long long last_progress = GetTickCount64();
-  unsigned long checkpoint = 0;
-  while (true) {
-    if (! QueryServiceStatus(service, status)) {
-      if (query_error) *query_error = GetLastError();
-      return -2;
-    }
-    int response = service_control_response(control, status->dwCurrentState);
-    if (! response) return 0;
-    if (response < 0 && status->dwCurrentState != initial_status) return response;
-
-    const unsigned long long now = GetTickCount64();
-    if (status->dwCheckPoint != checkpoint) {
-      checkpoint = status->dwCheckPoint;
-      last_progress = now;
-    }
-    const unsigned long wait_hint =
-        status->dwWaitHint ? status->dwWaitHint : kServiceStatusDeadlineMs;
-    if (now - last_progress >
-        static_cast<unsigned long long>(wait_hint) + kServiceWaitHintMarginMs) {
-      return response;
-    }
-    unsigned long interval = wait_hint / 10;
-    if (interval < 100) interval = 100;
-    if (interval > 1000) interval = 1000;
-    Sleep(interval);
-  }
-}
 
 void print_control_wait_failure(const TCHAR *service_name,
                                 unsigned long control,
@@ -201,97 +142,28 @@ int pre_remove_service(int argc, TCHAR **argv) {
 int control_service(unsigned long control, int argc, TCHAR **argv,
                     bool return_status) {
   if (argc != 1) return usage(1);
-  TCHAR *service_name = argv[0];
-  TCHAR canonical_name[SERVICE_NAME_LENGTH] = {};
-
-  unique_service_handle manager(open_service_manager(
-      SC_MANAGER_CONNECT | SC_MANAGER_ENUMERATE_SERVICE));
-  if (! manager) {
-    print_message(stderr, NSSM_MESSAGE_OPEN_SERVICE_MANAGER_FAILED);
-    return return_status ? 0 : 2;
-  }
-
-  unsigned long access = SERVICE_QUERY_STATUS;
-  switch (control) {
-    case kServiceControlStart:
-      access |= SERVICE_START;
-      break;
-    case SERVICE_CONTROL_CONTINUE:
-    case SERVICE_CONTROL_PAUSE:
-      access |= SERVICE_PAUSE_CONTINUE;
-      break;
-    case SERVICE_CONTROL_STOP:
-      access |= SERVICE_STOP;
-      break;
-    case kServiceControlRotate:
-      access |= SERVICE_USER_DEFINED_CONTROL;
-      break;
-  }
-
-  unique_service_handle service(open_service(
-      manager.get(), service_name, access, canonical_name,
-      _countof(canonical_name)));
-  if (! service) return return_status ? 0 : 3;
-
-  SERVICE_STATUS status = {};
-  int result = 0;
-  unsigned long error = ERROR_SUCCESS;
-  if (control == kServiceControlStart) {
-    result = StartService(service.get(), 0, nullptr);
-    error = result ? ERROR_SUCCESS : GetLastError();
-    if (result) {
-      unsigned long query_error = ERROR_SUCCESS;
-      int response = await_service_control_response(
-          control, service.get(), &status, SERVICE_STOPPED, &query_error);
-      if (response) {
-        print_control_wait_failure(canonical_name, control, status, response,
-                                   query_error);
-        return return_status ? 0 : 1;
-      }
-      _tprintf(_T("%s: %s: %s"), canonical_name,
-               service_control_text(control), error_string(error));
-      return 0;
+  service_control_result_t result;
+  if (! execute_service_control(control, argv[0], &result)) {
+    if (result.wait_response) {
+      print_control_wait_failure(result.service_name.c_str(), control,
+                                 result.status, result.wait_response,
+                                 result.windows_error);
     }
-  }
-  else if (control == SERVICE_CONTROL_INTERROGATE) {
-    result = QueryServiceStatus(service.get(), &status);
-    error = result ? ERROR_SUCCESS : GetLastError();
-    if (result) {
-      _tprintf(_T("%s\n"), service_status_text(status.dwCurrentState));
-      return return_status ? status.dwCurrentState : 0;
+    else {
+      _ftprintf(stderr, _T("%s: %s: %s"), result.service_name.c_str(),
+                service_control_text(control),
+                error_string(result.windows_error));
     }
+    return return_status ? 0 : 1;
+  }
+  if (control == SERVICE_CONTROL_INTERROGATE) {
+    _tprintf(_T("%s\n"), service_status_text(result.status.dwCurrentState));
   }
   else {
-    result = ControlService(service.get(), control, &status);
-    unsigned long initial_status = status.dwCurrentState;
-    error = result ? ERROR_SUCCESS : GetLastError();
-    if (! result && error == ERROR_IO_PENDING) {
-      result = 1;
-      error = ERROR_SUCCESS;
-    }
-    if (result) {
-      unsigned long query_error = ERROR_SUCCESS;
-      int response = await_service_control_response(
-          control, service.get(), &status, initial_status, &query_error);
-      if (response) {
-        print_control_wait_failure(canonical_name, control, status, response,
-                                   query_error);
-        return return_status ? 0 : 1;
-      }
-      _tprintf(_T("%s: %s: %s"), canonical_name,
-               service_control_text(control), error_string(error));
-      return return_status ? status.dwCurrentState : 0;
-    }
+    _tprintf(_T("%s: %s: %s"), result.service_name.c_str(),
+             service_control_text(control), error_string(ERROR_SUCCESS));
   }
-
-  _ftprintf(stderr, _T("%s: %s: %s"), canonical_name,
-            service_control_text(control), error_string(error));
-  if (error == ERROR_SERVICE_NOT_ACTIVE &&
-      (control == SERVICE_CONTROL_SHUTDOWN ||
-       control == SERVICE_CONTROL_STOP)) {
-    return return_status ? SERVICE_STOPPED : 0;
-  }
-  return return_status ? 0 : 1;
+  return return_status ? result.status.dwCurrentState : 0;
 }
 
 int control_service(unsigned long control, int argc, TCHAR **argv) {
