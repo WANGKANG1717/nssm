@@ -83,68 +83,6 @@ TCHAR *expand_environment_string(TCHAR *string) {
 }
 
 /*
-  Set all the environment variables from an environment block in the current
-  environment or remove all the variables in the block from the current
-  environment.
-*/
-static int set_environment_block(TCHAR *env, bool set) {
-  int ret = 0;
-
-  TCHAR *s, *t;
-  for (s = env; *s; s++) {
-    for (t = s; *t && *t != _T('='); t++);
-    if (*t == _T('=')) {
-      *t = _T('\0');
-      if (set) {
-        TCHAR *expanded = expand_environment_string(++t);
-        if (expanded) {
-          if (! SetEnvironmentVariable(s, expanded)) ret++;
-          HeapFree(GetProcessHeap(), 0, expanded);
-        }
-        else {
-          if (! SetEnvironmentVariable(s, t)) ret++;
-        }
-      }
-      else {
-        if (! SetEnvironmentVariable(s, NULL)) ret++;
-      }
-      for (t++; *t; t++);
-    }
-    s = t;
-  }
-
-  return ret;
-}
-
-int set_environment_block(TCHAR *env) {
-  return set_environment_block(env, true);
-}
-
-static int unset_environment_block(TCHAR *env) {
-  return set_environment_block(env, false);
-}
-
-/* Remove all variables from the process environment. */
-int clear_environment() {
-  TCHAR *rawenv = GetEnvironmentStrings();
-  TCHAR *env = useful_environment(rawenv);
-
-  int ret = unset_environment_block(env);
-
-  if (rawenv) FreeEnvironmentStrings(rawenv);
-
-  return ret;
-}
-
-/* Set the current environment to exactly duplicate an environment block. */
-int duplicate_environment(TCHAR *rawenv) {
-  int ret = clear_environment();
-  TCHAR *env = useful_environment(rawenv);
-  ret += set_environment_block(env);
-  return ret;
-}
-
-/*
   Verify an environment block.
   Returns:  1 if environment is invalid.
             0 if environment is OK.
@@ -179,20 +117,6 @@ int test_environment(TCHAR *env) {
   }
 
   return 0;
-}
-
-/*
-  Duplicate an environment block returned by GetEnvironmentStrings().
-  Since such a block is by definition readonly, and duplicate_environment()
-  modifies its inputs, this function takes a copy of the input and operates
-  on that.
-*/
-void duplicate_environment_strings(TCHAR *env) {
-  TCHAR *newenv = copy_environment_block(env);
-  if (! newenv) return;
-
-  duplicate_environment(newenv);
-  HeapFree(GetProcessHeap(), 0, newenv);
 }
 
 /* Safely get a copy of the current environment. */

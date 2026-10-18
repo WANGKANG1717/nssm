@@ -91,6 +91,12 @@ bool build_child_command_line(const std::wstring &executable,
     command_line->push_back(L' ');
     command_line->append(arguments);
   }
+  /* CreateProcessW limits lpCommandLine to 32767 characters including NUL. */
+  if (command_line->size() >= 32767) {
+    command_line->clear();
+    if (error) *error = L"Command line exceeds the CreateProcessW limit";
+    return false;
+  }
   return true;
 }
 

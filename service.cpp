@@ -1,4 +1,5 @@
 #include "nssm.h"
+#include "child_process.h"
 
 bool is_admin;
 bool use_critical_section;
@@ -281,27 +282,6 @@ static inline unsigned long throttle_milliseconds(unsigned long throttle) {
   /* pow() operates on doubles. */
   unsigned long ret = 1; for (unsigned long i = 1; i < throttle; i++) ret *= 2;
   return ret * 1000;
-}
-
-void set_service_environment(nssm_service_t *service) {
-  if (! service) return;
-
-  /*
-    We have to duplicate the block because this function will be called
-    multiple times between registry reads.
-  */
-  if (service->env) duplicate_environment_strings(service->env);
-  if (! service->env_extra) return;
-  TCHAR *env_extra = copy_environment_block(service->env_extra);
-  if (! env_extra) return;
-
-  set_environment_block(env_extra);
-  HeapFree(GetProcessHeap(), 0, env_extra);
-}
-
-void unset_service_environment(nssm_service_t *service) {
-  if (! service) return;
-  duplicate_environment_strings(service->initial_env);
 }
 
 /*
@@ -1852,15 +1832,24 @@ int start_service(nssm_service_t *service) {
   int ret = get_parameters(service, &si);
   if (ret) {
     log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_GET_PARAMETERS_FAILED, service->name, 0);
-    unset_service_environment(service);
     return stop_service(service, 2, true, true);
   }
 
-  /* Launch executable with arguments */
-  TCHAR cmd[CMD_LENGTH];
-  if (_sntprintf_s(cmd, _countof(cmd), _TRUNCATE, _T("\"%s\" %s"), service->exe, service->flags) < 0) {
-    log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_OUT_OF_MEMORY, _T("command line"), _T("start_service"), 0);
-    unset_service_environment(service);
+  std::wstring launch_error;
+  std::wstring command_line;
+  if (! build_child_command_line(service->exe, service->flags, &command_line,
+                                 &launch_error)) {
+    log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_CREATEPROCESS_FAILED, service->name,
+              service->exe, launch_error.c_str(), 0);
+    return stop_service(service, 2, true, true);
+  }
+
+  std::vector<wchar_t> child_environment;
+  if (! build_child_environment(service->initial_env, service->env,
+                                service->env_extra, &child_environment,
+                                &launch_error)) {
+    log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_CREATEPROCESS_FAILED, service->name,
+              service->exe, launch_error.c_str(), 0);
     return stop_service(service, 2, true, true);
   }
 
@@ -1879,7 +1868,6 @@ int start_service(nssm_service_t *service) {
       log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_GET_OUTPUT_HANDLES_FAILED, service->name, 0);
       FreeConsole();
       close_output_handles(&si);
-      unset_service_environment(service);
       return stop_service(service, 4, true, true);
     }
     FreeConsole();
@@ -1889,24 +1877,21 @@ int start_service(nssm_service_t *service) {
       TCHAR code[16];
       _sntprintf_s(code, _countof(code), _TRUNCATE, _T("%lu"), NSSM_HOOK_STATUS_ABORT);
       log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_PRESTART_HOOK_ABORT, NSSM_HOOK_EVENT_START, NSSM_HOOK_ACTION_PRE, service->name, code, 0);
-      unset_service_environment(service);
       return stop_service(service, 5, true, true);
     }
-
-    /* The pre-start hook will have cleaned the environment. */
-    set_service_environment(service);
 
     bool inherit_handles = false;
     if (si.dwFlags & STARTF_USESTDHANDLES) inherit_handles = true;
     unsigned long flags = service->priority & priority_mask();
     if (service->affinity) flags |= CREATE_SUSPENDED;
     if (! service->no_console) flags |= CREATE_NEW_CONSOLE;
-    if (! CreateProcess(0, cmd, 0, 0, inherit_handles, flags, 0, service->dir, &si, &pi)) {
+    flags |= CREATE_UNICODE_ENVIRONMENT;
+    if (! CreateProcess(service->exe, command_line.data(), 0, 0, inherit_handles,
+                        flags, child_environment.data(), service->dir, &si, &pi)) {
       unsigned long exitcode = 3;
       unsigned long error = GetLastError();
       log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_CREATEPROCESS_FAILED, service->name, service->exe, error_string(error), 0);
       close_output_handles(&si);
-      unset_service_environment(service);
       return stop_service(service, exitcode, true, true);
     }
     service->start_count++;
@@ -1948,9 +1933,6 @@ int start_service(nssm_service_t *service) {
     /* We never use the primary thread handle beyond optional ResumeThread(). */
     if (pi.hThread) CloseHandle(pi.hThread);
   }
-
-  /* Restore our environment. */
-  unset_service_environment(service);
 
   /*
     Wait for a clean startup before changing the service status to RUNNING

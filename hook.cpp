@@ -1,4 +1,5 @@
 #include "nssm.h"
+#include "child_process.h"
 
 typedef struct {
   TCHAR *name;
@@ -52,7 +53,7 @@ static unsigned long WINAPI await_hook(void *arg) {
   return NSSM_HOOK_STATUS_SUCCESS;
 }
 
-static void set_hook_runtime(TCHAR *v, FILETIME *start, FILETIME *now) {
+static std::wstring hook_runtime(FILETIME *start, FILETIME *now) {
   if (start && now) {
     ULARGE_INTEGER s;
     s.LowPart = start->dwLowDateTime;
@@ -64,14 +65,11 @@ static void set_hook_runtime(TCHAR *v, FILETIME *start, FILETIME *now) {
       if (t.QuadPart && t.QuadPart >= s.QuadPart) {
         t.QuadPart -= s.QuadPart;
         t.QuadPart /= 10000LL;
-        TCHAR number[16];
-        _sntprintf_s(number, _countof(number), _TRUNCATE, _T("%llu"), t.QuadPart);
-        SetEnvironmentVariable(v, number);
-        return;
+        return std::to_wstring(t.QuadPart);
       }
     }
   }
-  SetEnvironmentVariable(v, _T(""));
+  return L"";
 }
 
 static void add_thread_handle(hook_thread_t *hook_threads, HANDLE thread_handle, TCHAR *name) {
@@ -236,98 +234,93 @@ int nssm_hook(hook_thread_t *hook_threads, nssm_service_t *service, TCHAR *hook_
 
   EnterCriticalSection(&service->hook_section);
 
-  /* Set the environment. */
-  set_service_environment(service);
+  std::vector<environment_entry_t> hook_variables;
+  auto add_variable = [&hook_variables](const wchar_t *name,
+                                        const wchar_t *value) {
+    hook_variables.emplace_back(name, value ? value : L"");
+  };
+  auto add_number = [&hook_variables](const wchar_t *name,
+                                      unsigned long long value) {
+    hook_variables.emplace_back(name, std::to_wstring(value));
+  };
 
-  /* ABI version. */
-  TCHAR number[16];
-  _sntprintf_s(number, _countof(number), _TRUNCATE, _T("%lu"), NSSM_HOOK_VERSION);
-  SetEnvironmentVariable(NSSM_HOOK_ENV_VERSION, number);
+  add_number(NSSM_HOOK_ENV_VERSION, NSSM_HOOK_VERSION);
+  add_variable(NSSM_HOOK_ENV_EVENT, hook_event);
+  add_variable(NSSM_HOOK_ENV_ACTION, hook_action);
+  add_variable(NSSM_HOOK_ENV_TRIGGER,
+               hook_control ? service_control_text(*hook_control) : L"");
+  add_variable(NSSM_HOOK_ENV_LAST_CONTROL,
+               service_control_text(service->last_control));
+  add_variable(NSSM_HOOK_ENV_IMAGE_PATH, nssm_unquoted_imagepath());
+  add_variable(NSSM_HOOK_ENV_NSSM_CONFIGURATION, NSSM_CONFIGURATION);
+  add_variable(NSSM_HOOK_ENV_NSSM_VERSION, NSSM_VERSION);
+  add_variable(NSSM_HOOK_ENV_BUILD_DATE, NSSM_DATE);
+  add_number(NSSM_HOOK_ENV_PID, GetCurrentProcessId());
+  hook_variables.emplace_back(NSSM_HOOK_ENV_RUNTIME,
+                              hook_runtime(&service->nssm_creation_time, &now));
 
-  /* Event triggering this action. */
-  SetEnvironmentVariable(NSSM_HOOK_ENV_EVENT, hook_event);
-
-  /* Hook action. */
-  SetEnvironmentVariable(NSSM_HOOK_ENV_ACTION, hook_action);
-
-  /* Control triggering this action.  May be empty. */
-  if (hook_control) SetEnvironmentVariable(NSSM_HOOK_ENV_TRIGGER, service_control_text(*hook_control));
-  else SetEnvironmentVariable(NSSM_HOOK_ENV_TRIGGER, _T(""));
-
-  /* Last control handled. */
-  SetEnvironmentVariable(NSSM_HOOK_ENV_LAST_CONTROL, service_control_text(service->last_control));
-
-  /* Path to NSSM, unquoted for the environment. */
-  SetEnvironmentVariable(NSSM_HOOK_ENV_IMAGE_PATH, nssm_unquoted_imagepath());
-
-  /* NSSM version. */
-  SetEnvironmentVariable(NSSM_HOOK_ENV_NSSM_CONFIGURATION, NSSM_CONFIGURATION);
-  SetEnvironmentVariable(NSSM_HOOK_ENV_NSSM_VERSION, NSSM_VERSION);
-  SetEnvironmentVariable(NSSM_HOOK_ENV_BUILD_DATE, NSSM_DATE);
-
-  /* NSSM PID. */
-  _sntprintf_s(number, _countof(number), _TRUNCATE, _T("%lu"), GetCurrentProcessId());
-  SetEnvironmentVariable(NSSM_HOOK_ENV_PID, number);
-
-  /* NSSM runtime. */
-  set_hook_runtime(NSSM_HOOK_ENV_RUNTIME, &service->nssm_creation_time, &now);
-
-  /* Application PID. */
   if (service->pid) {
-    _sntprintf_s(number, _countof(number), _TRUNCATE, _T("%lu"), service->pid);
-    SetEnvironmentVariable(NSSM_HOOK_ENV_APPLICATION_PID, number);
-    /* Application runtime. */
-    set_hook_runtime(NSSM_HOOK_ENV_APPLICATION_RUNTIME, &service->creation_time, &now);
-    /* Exit code. */
-    SetEnvironmentVariable(NSSM_HOOK_ENV_EXITCODE, _T(""));
+    add_number(NSSM_HOOK_ENV_APPLICATION_PID, service->pid);
+    hook_variables.emplace_back(
+        NSSM_HOOK_ENV_APPLICATION_RUNTIME,
+        hook_runtime(&service->creation_time, &now));
+    add_variable(NSSM_HOOK_ENV_EXITCODE, L"");
   }
   else {
-    SetEnvironmentVariable(NSSM_HOOK_ENV_APPLICATION_PID, _T(""));
+    add_variable(NSSM_HOOK_ENV_APPLICATION_PID, L"");
     if (str_equiv(hook_event, NSSM_HOOK_EVENT_START) && str_equiv(hook_action, NSSM_HOOK_ACTION_PRE)) {
-      SetEnvironmentVariable(NSSM_HOOK_ENV_APPLICATION_RUNTIME, _T(""));
-      SetEnvironmentVariable(NSSM_HOOK_ENV_EXITCODE, _T(""));
+      add_variable(NSSM_HOOK_ENV_APPLICATION_RUNTIME, L"");
+      add_variable(NSSM_HOOK_ENV_EXITCODE, L"");
     }
     else {
-      set_hook_runtime(NSSM_HOOK_ENV_APPLICATION_RUNTIME, &service->creation_time, &service->exit_time);
-      /* Exit code. */
-      _sntprintf_s(number, _countof(number), _TRUNCATE, _T("%lu"), service->exitcode);
-      SetEnvironmentVariable(NSSM_HOOK_ENV_EXITCODE, number);
+      hook_variables.emplace_back(
+          NSSM_HOOK_ENV_APPLICATION_RUNTIME,
+          hook_runtime(&service->creation_time, &service->exit_time));
+      add_number(NSSM_HOOK_ENV_EXITCODE, service->exitcode);
     }
   }
 
-  /* Deadline for this script. */
-  _sntprintf_s(number, _countof(number), _TRUNCATE, _T("%lu"), deadline);
-  SetEnvironmentVariable(NSSM_HOOK_ENV_DEADLINE, number);
+  add_number(NSSM_HOOK_ENV_DEADLINE, deadline);
+  add_variable(NSSM_HOOK_ENV_SERVICE_NAME, service->name);
+  add_variable(NSSM_HOOK_ENV_SERVICE_DISPLAYNAME, service->displayname);
+  add_number(NSSM_HOOK_ENV_START_REQUESTED_COUNT,
+             service->start_requested_count);
+  add_number(NSSM_HOOK_ENV_START_COUNT, service->start_count);
+  add_number(NSSM_HOOK_ENV_EXIT_COUNT, service->exit_count);
+  add_number(NSSM_HOOK_ENV_THROTTLE_COUNT, service->throttle);
 
-  /* Service name. */
-  SetEnvironmentVariable(NSSM_HOOK_ENV_SERVICE_NAME, service->name);
-  SetEnvironmentVariable(NSSM_HOOK_ENV_SERVICE_DISPLAYNAME, service->displayname);
+  std::wstring launch_error;
+  std::wstring application_command_line;
+  if (! build_child_command_line(service->exe, service->flags,
+                                 &application_command_line, &launch_error)) {
+    log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_HOOK_CREATEPROCESS_FAILED,
+              hook_event, hook_action, service->name, service->exe,
+              launch_error.c_str(), 0);
+    LeaveCriticalSection(&service->hook_section);
+    HeapFree(GetProcessHeap(), 0, hook);
+    return NSSM_HOOK_STATUS_ERROR;
+  }
+  hook_variables.emplace_back(NSSM_HOOK_ENV_COMMAND_LINE,
+                              std::move(application_command_line));
 
-  /* Times the service was asked to start. */
-  _sntprintf_s(number, _countof(number), _TRUNCATE, _T("%lu"), service->start_requested_count);
-  SetEnvironmentVariable(NSSM_HOOK_ENV_START_REQUESTED_COUNT, number);
-
-  /* Times the service actually did start. */
-  _sntprintf_s(number, _countof(number), _TRUNCATE, _T("%lu"), service->start_count);
-  SetEnvironmentVariable(NSSM_HOOK_ENV_START_COUNT, number);
-
-  /* Times the service exited. */
-  _sntprintf_s(number, _countof(number), _TRUNCATE, _T("%lu"), service->exit_count);
-  SetEnvironmentVariable(NSSM_HOOK_ENV_EXIT_COUNT, number);
-
-  /* Throttled count. */
-  _sntprintf_s(number, _countof(number), _TRUNCATE, _T("%lu"), service->throttle);
-  SetEnvironmentVariable(NSSM_HOOK_ENV_THROTTLE_COUNT, number);
-
-  /* Command line. */
-  TCHAR app[CMD_LENGTH];
-  _sntprintf_s(app, _countof(app), _TRUNCATE, _T("\"%s\" %s"), service->exe, service->flags);
-  SetEnvironmentVariable(NSSM_HOOK_ENV_COMMAND_LINE, app);
+  std::vector<wchar_t> application_environment;
+  std::vector<wchar_t> hook_environment;
+  if (! build_child_environment(service->initial_env, service->env,
+                                service->env_extra, &application_environment,
+                                &launch_error) ||
+      ! extend_child_environment(application_environment.data(), hook_variables,
+                                 &hook_environment, &launch_error)) {
+    log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_HOOK_CREATEPROCESS_FAILED,
+              hook_event, hook_action, service->name, service->exe,
+              launch_error.c_str(), 0);
+    LeaveCriticalSection(&service->hook_section);
+    HeapFree(GetProcessHeap(), 0, hook);
+    return NSSM_HOOK_STATUS_ERROR;
+  }
 
   TCHAR cmd[CMD_LENGTH];
   if (get_hook(service->name, hook_event, hook_action, cmd, sizeof(cmd))) {
     log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_GET_HOOK_FAILED, hook_event, hook_action, service->name, 0);
-    unset_service_environment(service);
     LeaveCriticalSection(&service->hook_section);
     HeapFree(GetProcessHeap(), 0, hook);
     return NSSM_HOOK_STATUS_ERROR;
@@ -335,7 +328,6 @@ int nssm_hook(hook_thread_t *hook_threads, nssm_service_t *service, TCHAR *hook_
 
   /* No hook. */
   if (! _tcslen(cmd)) {
-    unset_service_environment(service);
     LeaveCriticalSection(&service->hook_section);
     HeapFree(GetProcessHeap(), 0, hook);
     return NSSM_HOOK_STATUS_NOTFOUND;
@@ -355,7 +347,8 @@ int nssm_hook(hook_thread_t *hook_threads, nssm_service_t *service, TCHAR *hook_
   flags |= CREATE_UNICODE_ENVIRONMENT;
 #endif
   ret = NSSM_HOOK_STATUS_NOTRUN;
-  if (CreateProcess(0, cmd, 0, 0, inherit_handles, flags, 0, service->dir, &si, &pi)) {
+  if (CreateProcess(0, cmd, 0, 0, inherit_handles, flags,
+                    hook_environment.data(), service->dir, &si, &pi)) {
     close_output_handles(&si);
     hook->name = (TCHAR *) HeapAlloc(GetProcessHeap(), 0, HOOK_NAME_LENGTH * sizeof(TCHAR));
     if (hook->name) _sntprintf_s(hook->name, HOOK_NAME_LENGTH, _TRUNCATE, _T("%s (%s/%s)"), service->name, hook_event, hook_action);
@@ -396,9 +389,6 @@ int nssm_hook(hook_thread_t *hook_threads, nssm_service_t *service, TCHAR *hook_
     HeapFree(GetProcessHeap(), 0, hook);
     close_output_handles(&si);
   }
-
-  /* Restore our environment. */
-  unset_service_environment(service);
 
   LeaveCriticalSection(&service->hook_section);
 

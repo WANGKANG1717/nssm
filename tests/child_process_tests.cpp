@@ -47,6 +47,9 @@ void command_line_tests() {
   expect(! build_child_command_line(LR"(C:\bad"path\app.exe)", L"", &command,
                                     &error),
          L"quote in executable should fail validation");
+  expect(! build_child_command_line(L"app.exe", std::wstring(32767, L'x'),
+                                    &command, &error),
+         L"oversized command line should fail validation");
 }
 
 void environment_merge_tests() {
@@ -96,6 +99,22 @@ void environment_validation_tests() {
          L"empty environment must contain a double NUL terminator");
 }
 
+void environment_isolation_tests() {
+  constexpr const wchar_t *name = L"NSSM_UNIT_ENVIRONMENT_ISOLATION";
+  SetEnvironmentVariableW(name, L"wrapper-value");
+  auto extra = make_block({L"NSSM_UNIT_ENVIRONMENT_ISOLATION=child-value"});
+  std::vector<wchar_t> result;
+  std::wstring error;
+  expect(build_child_environment(nullptr, nullptr, extra.data(), &result, &error),
+         L"isolated child environment should build");
+
+  wchar_t value[64] = {};
+  GetEnvironmentVariableW(name, value, static_cast<DWORD>(std::size(value)));
+  expect(std::wstring(value) == L"wrapper-value",
+         L"building a child environment must not mutate the wrapper");
+  SetEnvironmentVariableW(name, nullptr);
+}
+
 }  // namespace
 
 int wmain() {
@@ -103,6 +122,7 @@ int wmain() {
   environment_merge_tests();
   environment_replacement_tests();
   environment_validation_tests();
+  environment_isolation_tests();
 
   if (failures) {
     std::wcerr << failures << L" test assertion(s) failed\n";
