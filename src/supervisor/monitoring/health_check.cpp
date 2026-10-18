@@ -212,7 +212,12 @@ health_probe_result_t check_command(const health_check_config_t &config,
     TerminateProcess(process_handle.get(), error);
     return failure(error, L"assigning command probe job failed");
   }
-  ResumeThread(process_thread.get());
+  if (ResumeThread(process_thread.get()) == static_cast<unsigned long>(-1)) {
+    error = GetLastError();
+    terminate_service_job(job.get(), error, nullptr);
+    WaitForSingleObject(process_handle.get(), 5000);
+    return failure(error, L"resuming command probe failed");
+  }
   process_thread.reset();
   unsigned long wait = WaitForSingleObject(process_handle.get(), config.timeout_ms);
   if (wait != WAIT_OBJECT_0) {
