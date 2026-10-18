@@ -425,6 +425,7 @@ complain_read:
            -1 on fatal error.
 */
 static int try_write(logger_t *logger, void *address, unsigned long bufsize, unsigned long *out, int *complained) {
+  *out = 0;
   int ret = 1;
   unsigned long error;
   for (int tries = 0; tries < 5; tries++) {
@@ -481,6 +482,7 @@ static inline int write_timestamp(logger_t *logger, unsigned long charsize, unsi
 }
 
 static int write_with_timestamp(logger_t *logger, void *address, unsigned long bufsize, unsigned long *out, int *complained, unsigned long charsize) {
+  *out = 0;
   if (logger->timestamp_log) {
     unsigned long log_out = 0;
     int log_complained = 0;
@@ -552,6 +554,8 @@ unsigned long WINAPI log_and_rotate(void *arg) {
 
   while (true) {
     /* Read data from the pipe. */
+    in = 0;
+    out = 0;
     address = &buffer;
     ret = try_read(logger, address, sizeof(buffer), &in, &complained);
     if (ret < 0) {
