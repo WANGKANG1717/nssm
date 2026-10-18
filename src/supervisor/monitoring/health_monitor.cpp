@@ -48,14 +48,18 @@ unsigned long WINAPI health_monitor_thread(void *argument) {
       detail.push_back(L')');
     }
 
+    bool recovered = false;
+    bool first_failure = false;
+    bool watchdog = false;
+    unsigned long failure_count = 0;
+    EnterCriticalSection(&service->health_section);
     if (result.healthy) {
       service->health_failures = 0;
       ++service->health_successes;
       if (service->health_degraded &&
           service->health_successes >= config.success_threshold) {
         service->health_degraded = false;
-        log_event(EVENTLOG_INFORMATION_TYPE, NSSM_EVENT_HEALTH_RECOVERED,
-                  service->name, detail.c_str(), 0);
+        recovered = true;
       }
     }
     else {
@@ -63,27 +67,37 @@ unsigned long WINAPI health_monitor_thread(void *argument) {
       ++service->health_failures;
       if (! service->health_degraded) {
         service->health_degraded = true;
-        TCHAR count[32] = {};
-        _sntprintf_s(count, _countof(count), _TRUNCATE, _T("%lu"),
-                     service->health_failures);
-        log_event(EVENTLOG_WARNING_TYPE, NSSM_EVENT_HEALTH_FAILED,
-                  service->name, detail.c_str(), count, 0);
+        first_failure = true;
       }
-      if (service->health_failures >= config.failure_threshold) {
-        publish_status_snapshot(service);
-        log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_HEALTH_WATCHDOG,
-                  service->name, detail.c_str(), 0);
-        unsigned long error = ERROR_SUCCESS;
-        if (service->job_handle &&
-            ! terminate_service_job(service->job_handle,
-                                    kHealthWatchdogExitCode, &error)) {
-          log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_TERMINATE_JOB_FAILED,
-                    service->name, error_string(error), 0);
-        }
-        return kHealthWatchdogExitCode;
-      }
+      failure_count = service->health_failures;
+      watchdog = failure_count >= config.failure_threshold;
+    }
+    LeaveCriticalSection(&service->health_section);
+
+    if (recovered) {
+      log_event(EVENTLOG_INFORMATION_TYPE, NSSM_EVENT_HEALTH_RECOVERED,
+                service->name, detail.c_str(), 0);
+    }
+    if (first_failure) {
+      TCHAR count[32] = {};
+      _sntprintf_s(count, _countof(count), _TRUNCATE, _T("%lu"),
+                   failure_count);
+      log_event(EVENTLOG_WARNING_TYPE, NSSM_EVENT_HEALTH_FAILED,
+                service->name, detail.c_str(), count, 0);
     }
     publish_status_snapshot(service);
+    if (watchdog) {
+      log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_HEALTH_WATCHDOG,
+                service->name, detail.c_str(), 0);
+      unsigned long error = ERROR_SUCCESS;
+      if (service->job_handle &&
+          ! terminate_service_job(service->job_handle,
+                                  kHealthWatchdogExitCode, &error)) {
+        log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_TERMINATE_JOB_FAILED,
+                  service->name, error_string(error), 0);
+      }
+      return kHealthWatchdogExitCode;
+    }
 
     if (WaitForSingleObject(stop_event, config.interval_ms) == WAIT_OBJECT_0) {
       return 0;

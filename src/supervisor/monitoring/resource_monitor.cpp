@@ -75,23 +75,27 @@ unsigned long WINAPI resource_monitor_thread(void *argument) {
                                 ? calculate_job_cpu_percent(
                                       previous, current, elapsed_ms, processors)
                                 : 0;
+    bool cpu_exceeded = false;
+    EnterCriticalSection(&service->resource_section);
     service->resource_cpu_percent = percent;
     service->resource_memory_bytes = current.job_memory;
     service->resource_processes = current.active_processes;
-    publish_status_snapshot(service);
     if (config.maximum_cpu_percent && elapsed_ms) {
       if (percent > config.maximum_cpu_percent) {
         ++service->resource_cpu_violations;
-        if (service->resource_cpu_violations >=
-            config.cpu_violation_threshold) {
-          terminate_for_resource(
-              service, L"CPU limit",
-              std::to_wstring(percent) + L"% used; limit " +
-                  std::to_wstring(config.maximum_cpu_percent) + L"%");
-          return kResourceWatchdogExitCode;
-        }
+        cpu_exceeded = service->resource_cpu_violations >=
+                       config.cpu_violation_threshold;
       }
       else service->resource_cpu_violations = 0;
+    }
+    LeaveCriticalSection(&service->resource_section);
+    publish_status_snapshot(service);
+    if (cpu_exceeded) {
+      terminate_for_resource(
+          service, L"CPU limit",
+          std::to_wstring(percent) + L"% used; limit " +
+              std::to_wstring(config.maximum_cpu_percent) + L"%");
+      return kResourceWatchdogExitCode;
     }
     previous = current;
     previous_tick = now;

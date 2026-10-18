@@ -20,14 +20,16 @@ std::wstring mapping_name(const std::wstring &service_name) {
   return L"Global\\NSSM.Status." + service_name;
 }
 
-runtime_health_t current_health(const nssm_service_t *service) {
+runtime_health_t current_health(const nssm_service_t *service,
+                                bool health_degraded,
+                                unsigned long health_successes) {
   if (! service || ! service->config) return runtime_health_t::unknown;
   if (! service->pid) return runtime_health_t::stopped;
   if (service->config->health.type == health_check_type_t::disabled) {
     return runtime_health_t::disabled;
   }
-  if (service->health_degraded) return runtime_health_t::degraded;
-  if (service->health_successes) return runtime_health_t::healthy;
+  if (health_degraded) return runtime_health_t::degraded;
+  if (health_successes) return runtime_health_t::healthy;
   return runtime_health_t::starting;
 }
 
@@ -40,14 +42,21 @@ void publish_status_snapshot_unlocked(nssm_service_t *service) {
   snapshot->version = kStatusVersion;
   snapshot->wrapper_pid = GetCurrentProcessId();
   snapshot->child_pid = service->pid;
-  snapshot->health = static_cast<unsigned long>(current_health(service));
+  EnterCriticalSection(&service->health_section);
+  bool health_degraded = service->health_degraded;
+  unsigned long health_successes = service->health_successes;
+  LeaveCriticalSection(&service->health_section);
+  snapshot->health = static_cast<unsigned long>(
+      current_health(service, health_degraded, health_successes));
   snapshot->restart_count = service->recovery_state
                                 ? service->recovery_state->consecutive_restarts
                                 : 0;
+  EnterCriticalSection(&service->resource_section);
   snapshot->cpu_percent = service->resource_cpu_percent;
   snapshot->process_count = service->resource_processes;
-  snapshot->process_started_ms = service->process_started_ms;
   snapshot->memory_bytes = service->resource_memory_bytes;
+  LeaveCriticalSection(&service->resource_section);
+  snapshot->process_started_ms = service->process_started_ms;
   MemoryBarrier();
   InterlockedIncrement(&snapshot->sequence);
 }
