@@ -1,4 +1,5 @@
 #include "nssm.h"
+#include "child_process.h"
 #include "console.h"
 #include "event.h"
 #include "messages.h"
@@ -49,35 +50,23 @@ int usage(int ret) {
 }
 
 static int elevate(int argc, TCHAR **argv, unsigned long message) {
-  (void) argc;
   print_message(stderr, message);
 
-  SHELLEXECUTEINFO sei;
-  ZeroMemory(&sei, sizeof(sei));
+  std::vector<std::wstring> arguments;
+  arguments.reserve(argc > 1 ? static_cast<size_t>(argc - 1) : 0);
+  for (int index = 1; index < argc; ++index) {
+    arguments.emplace_back(argv[index]);
+  }
+  std::wstring parameters = join_windows_arguments(arguments);
+
+  SHELLEXECUTEINFO sei = {};
   sei.cbSize = sizeof(sei);
   sei.lpVerb = _T("runas");
-  sei.lpFile = (TCHAR *) nssm_imagepath();
-
-  TCHAR *args = (TCHAR *) HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, EXE_LENGTH * sizeof(TCHAR));
-  if (! args) {
-    print_message(stderr, NSSM_MESSAGE_OUT_OF_MEMORY, _T("GetCommandLine()"), _T("elevate()"));
-    return 111;
-  }
-
-  /* Get command line, which includes the path to NSSM, and skip that part. */
-  _sntprintf_s(args, EXE_LENGTH, _TRUNCATE, _T("%s"), GetCommandLine());
-  size_t s = _tcslen(argv[0]) + 1;
-  if (args[0] == _T('"')) s += 2;
-  while (isspace(args[s])) s++;
-
-  sei.lpParameters = args + s;
+  sei.lpFile = nssm_unquoted_imagepath();
+  sei.lpParameters = parameters.c_str();
   sei.nShow = SW_SHOW;
 
-  unsigned long exitcode = 0;
-  if (! ShellExecuteEx(&sei)) exitcode = 100;
-
-  HeapFree(GetProcessHeap(), 0, (void *) args);
-  return exitcode;
+  return ShellExecuteEx(&sei) ? 0 : 100;
 }
 
 const TCHAR *nssm_unquoted_imagepath() {
