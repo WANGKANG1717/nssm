@@ -4,6 +4,7 @@
 #include "messages.h"
 #include "service.h"
 #include "service_constants.h"
+#include "string_utils.h"
 #include "nssm_io.h"
 #include "utf8.h"
 #include "win32_handle.h"
@@ -286,7 +287,8 @@ int get_output_handles(nssm_service_t *service, STARTUPINFO *si) {
   /* stderr */
   if (service->stderr_path[0]) {
     /* Same as stdout? */
-    if (str_equiv(service->stderr_path, service->stdout_path)) {
+    if (strings_equal_ignore_case(service->stderr_path,
+                                  service->stdout_path)) {
       service->stderr_sharing = service->stdout_sharing;
       service->stderr_disposition = service->stdout_disposition;
       service->stderr_flags = service->stdout_flags;

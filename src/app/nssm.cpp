@@ -11,6 +11,7 @@
 #include "service_constants.h"
 #include "service_commands.h"
 #include "status.h"
+#include "string_utils.h"
 #include "config.h"
 #include "utf8.h"
 
@@ -50,14 +51,6 @@ void nssm_exit(int status) {
   exit(status);
 }
 
-/* Are two strings case-insensitively equivalent? */
-int str_equiv(const TCHAR *a, const TCHAR *b) {
-  size_t len = _tcslen(a);
-  if (_tcslen(b) != len) return 0;
-  if (_tcsnicmp(a, b, len)) return 0;
-  return 1;
-}
-
 /* User requested us to print our version. */
 static bool is_version(const TCHAR *s) {
   if (! s || ! *s) return false;
@@ -67,9 +60,9 @@ static bool is_version(const TCHAR *s) {
     /* -v, -V, -version, --version */
     s++;
     if (*s == '-') s++;
-    else if (str_equiv(s, _T("v"))) return true;
+    else if (strings_equal_ignore_case(s, _T("v"))) return true;
   }
-  if (str_equiv(s, _T("version"))) return true;
+  if (strings_equal_ignore_case(s, _T("version"))) return true;
   return false;
 }
 
@@ -132,17 +125,17 @@ int _tmain(int argc, TCHAR **argv) {
                NSSM_CONFIGURATION, NSSM_DATE);
       nssm_exit(0);
     }
-    if (str_equiv(argv[1], _T("validate"))) {
+    if (strings_equal_ignore_case(argv[1], _T("validate"))) {
       nssm_exit(validate_service_config_command(argc - 2, argv + 2));
     }
-    if (str_equiv(argv[1], _T("plan"))) {
+    if (strings_equal_ignore_case(argv[1], _T("plan"))) {
       nssm_exit(plan_service_config_command(argc - 2, argv + 2,
                                             nssm_imagepath()));
     }
-    if (str_equiv(argv[1], _T("export"))) {
+    if (strings_equal_ignore_case(argv[1], _T("export"))) {
       nssm_exit(export_service_config_command(argc - 2, argv + 2));
     }
-    if (str_equiv(argv[1], _T("apply"))) {
+    if (strings_equal_ignore_case(argv[1], _T("apply"))) {
       if (! is_admin) {
         cli_arguments_t arguments = parse_cli_arguments(argc - 2, argv + 2);
         if (arguments.json) {
@@ -156,27 +149,27 @@ int _tmain(int argc, TCHAR **argv) {
       nssm_exit(apply_service_config_command(argc - 2, argv + 2,
                                              nssm_imagepath()));
     }
-    if (str_equiv(argv[1], _T("start"))) nssm_exit(control_service(kServiceControlStart, argc - 2, argv + 2));
-    if (str_equiv(argv[1], _T("stop"))) nssm_exit(control_service(SERVICE_CONTROL_STOP, argc - 2, argv + 2));
-    if (str_equiv(argv[1], _T("restart"))) {
+    if (strings_equal_ignore_case(argv[1], _T("start"))) nssm_exit(control_service(kServiceControlStart, argc - 2, argv + 2));
+    if (strings_equal_ignore_case(argv[1], _T("stop"))) nssm_exit(control_service(SERVICE_CONTROL_STOP, argc - 2, argv + 2));
+    if (strings_equal_ignore_case(argv[1], _T("restart"))) {
       int ret = control_service(SERVICE_CONTROL_STOP, argc - 2, argv + 2);
       if (ret) nssm_exit(ret);
       nssm_exit(control_service(kServiceControlStart, argc - 2, argv + 2));
     }
-    if (str_equiv(argv[1], _T("pause"))) nssm_exit(control_service(SERVICE_CONTROL_PAUSE, argc - 2, argv + 2));
-    if (str_equiv(argv[1], _T("continue"))) nssm_exit(control_service(SERVICE_CONTROL_CONTINUE, argc - 2, argv + 2));
-    if (str_equiv(argv[1], _T("status"))) {
+    if (strings_equal_ignore_case(argv[1], _T("pause"))) nssm_exit(control_service(SERVICE_CONTROL_PAUSE, argc - 2, argv + 2));
+    if (strings_equal_ignore_case(argv[1], _T("continue"))) nssm_exit(control_service(SERVICE_CONTROL_CONTINUE, argc - 2, argv + 2));
+    if (strings_equal_ignore_case(argv[1], _T("status"))) {
       cli_arguments_t arguments = parse_cli_arguments(argc - 2, argv + 2);
       if (arguments.verbose || arguments.json) {
         nssm_exit(inspect_service_status_command(argc - 2, argv + 2));
       }
       nssm_exit(control_service(SERVICE_CONTROL_INTERROGATE, argc - 2, argv + 2));
     }
-    if (str_equiv(argv[1], _T("statuscode"))) nssm_exit(control_service(SERVICE_CONTROL_INTERROGATE, argc - 2, argv + 2, true));
-    if (str_equiv(argv[1], _T("rotate"))) nssm_exit(control_service(kServiceControlRotate, argc - 2, argv + 2));
-    if (str_equiv(argv[1], _T("list"))) nssm_exit(list_nssm_services(argc - 2, argv + 2));
-    if (str_equiv(argv[1], _T("processes"))) nssm_exit(service_process_tree(argc - 2, argv + 2));
-    if (str_equiv(argv[1], _T("remove"))) {
+    if (strings_equal_ignore_case(argv[1], _T("statuscode"))) nssm_exit(control_service(SERVICE_CONTROL_INTERROGATE, argc - 2, argv + 2, true));
+    if (strings_equal_ignore_case(argv[1], _T("rotate"))) nssm_exit(control_service(kServiceControlRotate, argc - 2, argv + 2));
+    if (strings_equal_ignore_case(argv[1], _T("list"))) nssm_exit(list_nssm_services(argc - 2, argv + 2));
+    if (strings_equal_ignore_case(argv[1], _T("processes"))) nssm_exit(service_process_tree(argc - 2, argv + 2));
+    if (strings_equal_ignore_case(argv[1], _T("remove"))) {
       if (! is_admin) nssm_exit(elevate(argc, argv, NSSM_MESSAGE_NOT_ADMINISTRATOR_CANNOT_REMOVE));
       nssm_exit(pre_remove_service(argc - 2, argv + 2));
     }

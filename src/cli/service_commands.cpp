@@ -7,6 +7,7 @@
 #include "service.h"
 #include "service_constants.h"
 #include "service_commands.h"
+#include "string_utils.h"
 #include "win32_handle.h"
 
 #include <new>
@@ -95,7 +96,8 @@ void print_control_wait_failure(const TCHAR *service_name,
 }  // namespace
 
 int list_nssm_services(int argc, TCHAR **argv) {
-  const bool including_native = argc > 0 && str_equiv(argv[0], _T("all"));
+  const bool including_native =
+      argc > 0 && strings_equal_ignore_case(argv[0], _T("all"));
   unique_service_handle manager(open_service_manager(
       SC_MANAGER_CONNECT | SC_MANAGER_ENUMERATE_SERVICE));
   if (! manager) {
@@ -229,7 +231,7 @@ int service_process_tree(int argc, TCHAR **argv) {
 
 int pre_remove_service(int argc, TCHAR **argv) {
   if (argc != 2 || ! argv[0] || ! argv[0][0] ||
-      ! str_equiv(argv[1], _T("confirm"))) {
+      ! strings_equal_ignore_case(argv[1], _T("confirm"))) {
     print_message(stderr, NSSM_MESSAGE_PRE_REMOVE_SERVICE);
     return 100;
   }

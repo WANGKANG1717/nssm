@@ -8,6 +8,7 @@
 #include "job_object.h"
 #include "readiness.h"
 #include "recovery.h"
+#include "string_utils.h"
 #include "win32_handle.h"
 
 #include <aclapi.h>
@@ -72,6 +73,19 @@ void command_line_tests() {
   expect(command ==
              LR"("C:\Apps\app.exe" plain "two words" "" "quoted\"value" "C:\path with space\\")",
          L"argument array should follow Windows backslash and quote rules");
+}
+
+void string_utils_tests() {
+  expect(strings_equal_ignore_case(L"ServiceName", L"servicename"),
+         L"ordinal service name comparison should ignore ASCII case");
+  expect(strings_equal_ignore_case(L"服务Ä", L"服务ä"),
+         L"ordinal service name comparison should support Unicode case");
+  expect(! strings_equal_ignore_case(L"service-a", L"service-b"),
+         L"different service names must not compare equal");
+  expect(strings_equal_ignore_case(nullptr, nullptr),
+         L"two null strings should compare equal");
+  expect(! strings_equal_ignore_case(nullptr, L"service"),
+         L"a null and non-null string must not compare equal");
 }
 
 void environment_merge_tests() {
@@ -704,6 +718,7 @@ void path_security_tests() {
 
 int wmain() {
   command_line_tests();
+  string_utils_tests();
   environment_merge_tests();
   environment_replacement_tests();
   environment_validation_tests();

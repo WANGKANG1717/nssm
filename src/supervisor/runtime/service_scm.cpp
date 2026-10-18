@@ -3,6 +3,7 @@
 #include "messages.h"
 #include "security.h"
 #include "service.h"
+#include "string_utils.h"
 
 #include <vector>
 
@@ -78,7 +79,10 @@ SC_HANDLE open_service(SC_HANDLE manager, TCHAR *service_name,
     auto *statuses =
         reinterpret_cast<ENUM_SERVICE_STATUS_PROCESS *>(buffer.data());
     for (unsigned long index = 0; index < count; ++index) {
-      if (! str_equiv(statuses[index].lpDisplayName, service_name)) continue;
+      if (! strings_equal_ignore_case(statuses[index].lpDisplayName,
+                                      service_name)) {
+        continue;
+      }
       if (_sntprintf_s(canonical_name, canonical_name_length, _TRUNCATE,
                        _T("%s"), statuses[index].lpServiceName) < 0) {
         print_message(stderr, NSSM_MESSAGE_OUT_OF_MEMORY,

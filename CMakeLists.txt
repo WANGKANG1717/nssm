@@ -110,6 +110,7 @@ set(NSSM_PLATFORM_SOURCES
   src/platform/event.cpp
   src/platform/registry.cpp
   src/platform/security.cpp
+  src/platform/string_utils.cpp
   src/platform/utf8.cpp
 )
 
@@ -212,6 +213,7 @@ if(BUILD_TESTING)
     src/supervisor/monitoring/readiness.cpp
     src/supervisor/runtime/recovery.cpp
     src/platform/security.cpp
+    src/platform/string_utils.cpp
   )
   target_include_directories(nssm_unit_tests PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/src/config"

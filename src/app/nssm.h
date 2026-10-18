@@ -39,7 +39,6 @@ static_assert(sizeof(TCHAR) == sizeof(wchar_t));
 #endif
 
 void nssm_exit(int);
-int str_equiv(const TCHAR *, const TCHAR *);
 int usage(int);
 const TCHAR *nssm_unquoted_imagepath();
 const TCHAR *nssm_imagepath();
