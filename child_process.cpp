@@ -97,6 +97,16 @@ std::wstring quote_windows_argument(const std::wstring &argument) {
   return quoted;
 }
 
+std::wstring join_windows_arguments(
+    const std::vector<std::wstring> &arguments) {
+  std::wstring serialized;
+  for (const auto &argument : arguments) {
+    if (! serialized.empty()) serialized.push_back(L' ');
+    serialized.append(quote_windows_argument(argument));
+  }
+  return serialized;
+}
+
 bool build_child_command_line(const std::wstring &executable,
                               const std::wstring &arguments,
                               std::wstring *command_line,
@@ -134,11 +144,7 @@ bool build_child_command_line(const std::wstring &executable,
                               const std::vector<std::wstring> &arguments,
                               std::wstring *command_line,
                               std::wstring *error) {
-  std::wstring serialized;
-  for (const auto &argument : arguments) {
-    if (! serialized.empty()) serialized.push_back(L' ');
-    serialized.append(quote_windows_argument(argument));
-  }
+  std::wstring serialized = join_windows_arguments(arguments);
   return build_child_command_line(executable, serialized, command_line, error);
 }
 

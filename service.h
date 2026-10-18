@@ -13,7 +13,7 @@
 #define CMD_LENGTH 32768
 #define KEY_LENGTH 255
 #define VALUE_LENGTH 16383
-#define SERVICE_NAME_LENGTH 256
+#define SERVICE_NAME_LENGTH 257
 
 #define ACTION_LEN 16
 
@@ -29,7 +29,9 @@
 #define NSSM_ROTATE_ONLINE 1
 #define NSSM_ROTATE_ONLINE_ASAP 2
 
-typedef struct {
+struct service_config_t;
+
+typedef struct nssm_service_t {
   bool native;
   TCHAR name[SERVICE_NAME_LENGTH];
   TCHAR displayname[SERVICE_NAME_LENGTH];
@@ -41,6 +43,8 @@ typedef struct {
   size_t passwordlen;
   unsigned long type;
   TCHAR image[PATH_LENGTH];
+  TCHAR config_path[PATH_LENGTH];
+  service_config_t *config;
   TCHAR exe[EXE_LENGTH];
   TCHAR flags[VALUE_LENGTH];
   TCHAR dir[DIR_LENGTH];

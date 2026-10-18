@@ -261,8 +261,8 @@ int _tmain(int argc, TCHAR **argv) {
   if (argc > 1) {
     /*
       Valid commands are:
-      start, stop, pause, continue, install, edit, get, set, reset, unset, remove
-      status, statuscode, rotate, list, processes, version
+      validate, apply, start, stop, restart, pause, continue, remove, status,
+      statuscode, rotate, list, processes, version
     */
     if (is_version(argv[1])) {
       _tprintf(_T("%s %s %s %s\n"), NSSM, NSSM_VERSION, NSSM_CONFIGURATION, NSSM_DATE);
@@ -270,6 +270,13 @@ int _tmain(int argc, TCHAR **argv) {
     }
     if (str_equiv(argv[1], _T("validate"))) {
       nssm_exit(validate_service_config_command(argc - 2, argv + 2));
+    }
+    if (str_equiv(argv[1], _T("apply"))) {
+      if (! is_admin) {
+        nssm_exit(elevate(argc, argv, NSSM_MESSAGE_NOT_ADMINISTRATOR_CANNOT_INSTALL));
+      }
+      create_messages();
+      nssm_exit(apply_service_config_command(argc - 2, argv + 2));
     }
     if (str_equiv(argv[1], _T("start"))) nssm_exit(control_service(NSSM_SERVICE_CONTROL_START, argc - 2, argv + 2));
     if (str_equiv(argv[1], _T("stop"))) nssm_exit(control_service(SERVICE_CONTROL_STOP, argc - 2, argv + 2));
@@ -283,17 +290,16 @@ int _tmain(int argc, TCHAR **argv) {
     if (str_equiv(argv[1], _T("status"))) nssm_exit(control_service(SERVICE_CONTROL_INTERROGATE, argc - 2, argv + 2));
     if (str_equiv(argv[1], _T("statuscode"))) nssm_exit(control_service(SERVICE_CONTROL_INTERROGATE, argc - 2, argv + 2, true));
     if (str_equiv(argv[1], _T("rotate"))) nssm_exit(control_service(NSSM_SERVICE_CONTROL_ROTATE, argc - 2, argv + 2));
-    if (str_equiv(argv[1], _T("install"))) {
-      if (! is_admin) nssm_exit(elevate(argc, argv, NSSM_MESSAGE_NOT_ADMINISTRATOR_CANNOT_INSTALL));
-      create_messages();
-      nssm_exit(pre_install_service(argc - 2, argv + 2));
-    }
     if (str_equiv(argv[1], _T("edit")) || str_equiv(argv[1], _T("get")) || str_equiv(argv[1], _T("set")) || str_equiv(argv[1], _T("reset")) || str_equiv(argv[1], _T("unset")) || str_equiv(argv[1], _T("dump"))) {
-      int ret = pre_edit_service(argc - 1, argv + 1);
-      if (ret == 3 && ! is_admin && argc == 3) nssm_exit(elevate(argc, argv, NSSM_MESSAGE_NOT_ADMINISTRATOR_CANNOT_EDIT));
-      /* There might be a password here. */
-      for (int i = 0; i < argc; i++) SecureZeroMemory(argv[i], _tcslen(argv[i]) * sizeof(TCHAR));
-      nssm_exit(ret);
+      fwprintf(stderr,
+               L"error: registry-based configuration commands were removed; "
+               L"edit the JSON file and run 'nssm apply <config.json>'\n");
+      nssm_exit(2);
+    }
+    if (str_equiv(argv[1], _T("install"))) {
+      fwprintf(stderr,
+               L"error: 'install' was replaced by 'nssm apply <config.json>'\n");
+      nssm_exit(2);
     }
     if (str_equiv(argv[1], _T("list"))) nssm_exit(list_nssm_services(argc - 2, argv + 2));
     if (str_equiv(argv[1], _T("processes"))) nssm_exit(service_process_tree(argc - 2, argv + 2));

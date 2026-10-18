@@ -1,4 +1,5 @@
 #include "config.h"
+#include "child_process.h"
 
 #include <windows.h>
 #include <shlwapi.h>
@@ -90,6 +91,10 @@ bool read_required_string(yyjson_val *object, const char *name,
     validation->add(std::wstring(path) + L" is not valid UTF-8");
     return false;
   }
+  if (destination->find(L'\0') != std::wstring::npos) {
+    validation->add(std::wstring(path) + L" must not contain U+0000");
+    return false;
+  }
   return true;
 }
 
@@ -102,7 +107,7 @@ bool read_optional_string(yyjson_val *object, const char *name,
 }
 
 bool valid_service_name(const std::wstring &name) {
-  if (name.empty() || name.size() > 256) return false;
+  if (name.empty() || name.size() > kMaximumServiceNameCharacters) return false;
   for (wchar_t character : name) {
     if (character == L'/' || character == L'\\' || character < 32) return false;
   }
@@ -138,14 +143,19 @@ void parse_account(yyjson_val *service, service_account_config_t *account,
 
   read_optional_string(object, "name", L"service.account.name", &account->name,
                        validation);
-  bool needs_name = account->type == service_account_type_t::virtual_account ||
-                    account->type == service_account_type_t::gmsa ||
+  bool needs_name = account->type == service_account_type_t::gmsa ||
                     account->type == service_account_type_t::user;
   if (needs_name && account->name.empty()) {
     validation->add(L"service.account.name is required for this account type");
   }
   if (! needs_name && ! account->name.empty()) {
-    validation->add(L"service.account.name is not allowed for this account type");
+    if (account->type != service_account_type_t::virtual_account) {
+      validation->add(L"service.account.name is not allowed for this account type");
+    }
+  }
+  if (account->type == service_account_type_t::gmsa &&
+      ! account->name.empty() && ! account->name.ends_with(L'$')) {
+    validation->add(L"service.account.name for a gMSA must end with '$'");
   }
 }
 
@@ -171,7 +181,8 @@ void parse_dependencies(yyjson_val *service,
       bool valid = false;
       std::wstring dependency = utf8_to_wide(
           yyjson_get_str(value), yyjson_get_len(value), &valid);
-      if (! valid || dependency.empty()) {
+      if (! valid || dependency.empty() ||
+          dependency.find(L'\0') != std::wstring::npos) {
         validation->add(L"service.dependencies[" + std::to_wstring(index) +
                         L"] must be non-empty valid UTF-8");
       }
@@ -203,6 +214,9 @@ void parse_service(yyjson_val *root, service_metadata_config_t *service,
   read_optional_string(object, "description", L"service.description",
                        &service->description, validation);
   if (service->display_name.empty()) service->display_name = service->name;
+  if (service->display_name.size() > kMaximumServiceNameCharacters) {
+    validation->add(L"service.displayName must not exceed 256 characters");
+  }
 
   std::wstring startup;
   if (read_optional_string(object, "startup", L"service.startup", &startup,
@@ -215,6 +229,12 @@ void parse_service(yyjson_val *root, service_metadata_config_t *service,
   }
 
   parse_account(object, &service->account, validation);
+  if (service->account.type == service_account_type_t::virtual_account &&
+      ! service->account.name.empty() &&
+      _wcsicmp(service->account.name.c_str(), service->name.c_str())) {
+    validation->add(
+        L"service.account.name for a virtual account must match service.name");
+  }
   parse_dependencies(object, &service->dependencies, validation);
 }
 
@@ -240,9 +260,9 @@ void parse_arguments(yyjson_val *application,
       bool valid = false;
       std::wstring argument = utf8_to_wide(yyjson_get_str(value),
                                            yyjson_get_len(value), &valid);
-      if (! valid) {
+      if (! valid || argument.find(L'\0') != std::wstring::npos) {
         validation->add(L"application.arguments[" + std::to_wstring(index) +
-                        L"] is not valid UTF-8");
+                        L"] must be valid UTF-8 without U+0000");
       }
       else arguments->push_back(std::move(argument));
     }
@@ -276,7 +296,8 @@ void parse_environment(yyjson_val *application,
     bool name_valid = false;
     std::wstring name = utf8_to_wide(yyjson_get_str(key), yyjson_get_len(key),
                                      &name_valid);
-    if (! name_valid || name.empty() || name.find(L'=') != std::wstring::npos) {
+    if (! name_valid || name.empty() || name.find(L'=') != std::wstring::npos ||
+        name.find(L'\0') != std::wstring::npos) {
       validation->add(L"application.environment contains an invalid variable name");
       continue;
     }
@@ -291,8 +312,9 @@ void parse_environment(yyjson_val *application,
     bool value_valid = false;
     std::wstring converted = utf8_to_wide(yyjson_get_str(value),
                                           yyjson_get_len(value), &value_valid);
-    if (! value_valid) {
-      validation->add(L"application.environment." + name + L" is not valid UTF-8");
+    if (! value_valid || converted.find(L'\0') != std::wstring::npos) {
+      validation->add(L"application.environment." + name +
+                      L" must be valid UTF-8 without U+0000");
       continue;
     }
     config->environment.emplace_back(std::move(name), std::move(converted));
@@ -316,6 +338,9 @@ void parse_application(yyjson_val *root, application_config_t *application,
   if (application->path.empty() || PathIsRelativeW(application->path.c_str())) {
     validation->add(L"application.path must be an absolute path");
   }
+  if (application->path.size() > kMaximumPathCharacters) {
+    validation->add(L"application.path is too long");
+  }
   read_optional_string(object, "workingDirectory",
                        L"application.workingDirectory",
                        &application->working_directory, validation);
@@ -331,6 +356,21 @@ void parse_application(yyjson_val *root, application_config_t *application,
   }
 
   parse_arguments(object, &application->arguments, validation);
+  std::wstring serialized = join_windows_arguments(application->arguments);
+  if (serialized.size() > kMaximumSerializedArgumentCharacters) {
+    validation->add(L"application.arguments serialize to more than 16382 characters");
+  }
+  std::wstring command_line;
+  std::wstring command_error;
+  if (! application->path.empty() &&
+      ! build_child_command_line(application->path, serialized, &command_line,
+                                 &command_error)) {
+    validation->add(L"application command line is invalid: " + command_error);
+  }
+  if (application->working_directory.size() >
+      kMaximumWorkingDirectoryCharacters) {
+    validation->add(L"application.workingDirectory is too long");
+  }
   parse_environment(object, application, validation);
 }
 

@@ -12,27 +12,11 @@ NSSM: The non-sucking service manager
 Version %s %s, %s
 Usage: nssm <option> [<args> ...]
 
-To show service installation GUI:
+To validate or apply a declarative JSON configuration:
 
-        nssm install [<servicename>]
+        nssm validate <config.json>
 
-To install a service without confirmation:
-
-        nssm install <servicename> <app> [<args> ...]
-
-To show service editing GUI:
-
-        nssm edit <servicename>
-
-To retrieve or edit service parameters directly:
-
-        nssm dump <servicename>
-
-        nssm get <servicename> <parameter> [<subparameter>]
-
-        nssm set <servicename> <parameter> [<subparameter>] <value>
-
-        nssm reset <servicename> <parameter> [<subparameter>]
+        nssm apply <config.json>
 
 To show service removal GUI:
 
@@ -64,15 +48,8 @@ NSSM：稳定可靠的服务管理器
 用法：nssm <选项> [<参数> ...]
 
 常用命令：
-  安装（GUI）: nssm install [<服务名>]
-  安装（直接）: nssm install <服务名> <可执行程序> [<参数> ...]
-  编辑（GUI）: nssm edit <服务名>
-
-  导出/读取/设置/重置：
-    nssm dump <服务名>
-    nssm get <服务名> <参数> [<子参数>]
-    nssm set <服务名> <参数> [<子参数>] <值>
-    nssm reset <服务名> <参数> [<子参数>]
+  验证配置：nssm validate <配置文件.json>
+  安装或更新：nssm apply <配置文件.json>
 
   移除（GUI）: nssm remove [<服务名>]
   移除（直接）: nssm remove <服务名> confirm
@@ -2176,6 +2153,18 @@ Failed to resume the application process for service %1:
 .
 Language = Chinese
 恢复服务 %1 的应用程序进程失败：
+%2
+.
+
+MessageId = +1
+SymbolicName = NSSM_EVENT_CONFIG_LOAD_FAILED
+Severity = Error
+Language = English
+Failed to load the declarative configuration for service %1:
+%2
+.
+Language = Chinese
+加载服务 %1 的声明式配置失败：
 %2
 .
 

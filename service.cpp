@@ -1,5 +1,6 @@
 #include "nssm.h"
 #include "child_process.h"
+#include "config.h"
 #include "job_object.h"
 
 bool is_admin;
@@ -824,6 +825,7 @@ void cleanup_nssm_service(nssm_service_t *service) {
   if (service->throttle_timer) CloseHandle(service->throttle_timer);
   if (service->hook_section_initialised) DeleteCriticalSection(&service->hook_section);
   if (service->initial_env) HeapFree(GetProcessHeap(), 0, service->initial_env);
+  delete service->config;
   HeapFree(GetProcessHeap(), 0, service);
 }
 
@@ -1531,6 +1533,7 @@ int remove_service(nssm_service_t *service) {
 void WINAPI service_main(unsigned long argc, TCHAR **argv) {
   nssm_service_t *service = alloc_nssm_service();
   if (! service) return;
+  set_nssm_service_defaults(service);
 
   static volatile bool await_debugger = (argc > 1 && str_equiv(argv[1], _T("debug")));
   while (await_debugger) Sleep(1000);
@@ -1609,6 +1612,19 @@ void WINAPI service_main(unsigned long argc, TCHAR **argv) {
 
   /* Remember our initial environment. */
   service->initial_env = copy_environment();
+
+  config_validation_t config_validation;
+  if (! load_registered_service_config(service, &config_validation)) {
+    std::wstring details;
+    for (const auto &error : config_validation.errors) {
+      if (! details.empty()) details.append(L"; ");
+      details.append(error);
+    }
+    log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_CONFIG_LOAD_FAILED, service->name,
+              details.c_str(), 0);
+    stop_service(service, 2, true, true);
+    return;
+  }
 
   /* Remember our creation time. */
   if (get_process_creation_time(GetCurrentProcess(), &service->nssm_creation_time)) ZeroMemory(&service->nssm_creation_time, sizeof(service->nssm_creation_time));
@@ -1831,7 +1847,7 @@ int start_service(nssm_service_t *service) {
   ZeroMemory(&pi, sizeof(pi));
 
   /* Get startup parameters */
-  int ret = get_parameters(service, &si);
+  int ret = service->config ? 0 : get_parameters(service, &si);
   if (ret) {
     log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_GET_PARAMETERS_FAILED, service->name, 0);
     return stop_service(service, 2, true, true);

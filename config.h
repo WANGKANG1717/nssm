@@ -5,6 +5,13 @@
 #include <utility>
 #include <vector>
 
+struct nssm_service_t;
+
+inline constexpr size_t kMaximumServiceNameCharacters = 256;
+inline constexpr size_t kMaximumPathCharacters = 32766;
+inline constexpr size_t kMaximumWorkingDirectoryCharacters = 32754;
+inline constexpr size_t kMaximumSerializedArgumentCharacters = 16382;
+
 enum class service_startup_t {
   automatic,
   delayed,
@@ -62,5 +69,8 @@ bool parse_service_config(const char *json, size_t length,
 bool load_service_config(const wchar_t *path, service_config_t *config,
                          config_validation_t *validation);
 int validate_service_config_command(int argc, wchar_t **argv);
+int apply_service_config_command(int argc, wchar_t **argv);
+bool load_registered_service_config(nssm_service_t *service,
+                                    config_validation_t *validation);
 
 #endif

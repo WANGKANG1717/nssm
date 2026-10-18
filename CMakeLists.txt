@@ -70,6 +70,7 @@ set(NSSM_SOURCES
   account.cpp
   child_process.cpp
   config.cpp
+  config_service.cpp
   console.cpp
   env.cpp
   event.cpp
@@ -143,6 +144,15 @@ if(BUILD_TESTING)
   add_test(NAME nssm.version COMMAND $<TARGET_FILE:nssm> version)
   set_tests_properties(nssm.version PROPERTIES
     PASS_REGULAR_EXPRESSION "NSSM ${PROJECT_VERSION} 64-bit"
+  )
+
+  add_test(
+    NAME nssm.validate
+    COMMAND $<TARGET_FILE:nssm> validate
+            "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/minimal-service.json"
+  )
+  set_tests_properties(nssm.validate PROPERTIES
+    PASS_REGULAR_EXPRESSION "Configuration is valid: nssm-config-test"
   )
 
   add_test(

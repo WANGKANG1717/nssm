@@ -1,0 +1,24 @@
+{
+  "schema": 1,
+  "service": {
+    "name": "nssm-config-test",
+    "displayName": "NSSM 声明式配置测试",
+    "description": "验证 UTF-8 配置文件与参数数组。",
+    "startup": "manual",
+    "account": {
+      "type": "virtual"
+    }
+  },
+  "application": {
+    "path": "C:\\Windows\\System32\\cmd.exe",
+    "arguments": [
+      "/d",
+      "/c",
+      "exit 0"
+    ],
+    "inheritEnvironment": true,
+    "environment": {
+      "NSSM_TEST_VALUE": "中文值"
+    }
+  }
+}

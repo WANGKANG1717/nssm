@@ -222,6 +222,53 @@ void configuration_tests() {
              config.application.environment.size() == 1,
          L"application arrays and environment should be retained");
 
+  constexpr const char *virtual_account_json = R"json({
+    "schema": 1,
+    "service": {
+      "name": "worker",
+      "account": { "type": "virtual" }
+    },
+    "application": { "path": "C:\\Apps\\worker.exe" }
+  })json";
+  expect(parse_service_config(virtual_account_json,
+                              strlen(virtual_account_json), &config,
+                              &validation),
+         L"a virtual account should derive its name from the service name");
+
+  constexpr const char *mismatched_virtual_account_json = R"json({
+    "schema": 1,
+    "service": {
+      "name": "worker",
+      "account": { "type": "virtual", "name": "other" }
+    },
+    "application": { "path": "C:\\Apps\\worker.exe" }
+  })json";
+  expect(! parse_service_config(mismatched_virtual_account_json,
+                                strlen(mismatched_virtual_account_json),
+                                &config, &validation),
+         L"an explicit virtual account name must match the service name");
+
+  constexpr const char *invalid_gmsa_json = R"json({
+    "schema": 1,
+    "service": {
+      "name": "worker",
+      "account": { "type": "gmsa", "name": "DOMAIN\\worker" }
+    },
+    "application": { "path": "C:\\Apps\\worker.exe" }
+  })json";
+  expect(! parse_service_config(invalid_gmsa_json, strlen(invalid_gmsa_json),
+                                &config, &validation),
+         L"a gMSA account name must end with a dollar sign");
+
+  constexpr const char *embedded_nul_json = R"json({
+    "schema": 1,
+    "service": { "name": "worker\u0000hidden" },
+    "application": { "path": "C:\\Apps\\worker.exe" }
+  })json";
+  expect(! parse_service_config(embedded_nul_json, strlen(embedded_nul_json),
+                                &config, &validation),
+         L"configuration strings containing U+0000 must be rejected");
+
   constexpr const char *invalid_json = R"json({
     "schema": 1,
     "unknown": true,
