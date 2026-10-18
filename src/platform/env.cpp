@@ -1,4 +1,8 @@
 #include "nssm.h"
+#include "env.h"
+#include "event.h"
+#include "messages.h"
+#include "registry.h"
 
 /*
   Environment block is of the form:

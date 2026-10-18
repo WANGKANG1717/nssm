@@ -3,6 +3,7 @@
 #include "config.h"
 #include "nssm.h"
 #include "recovery.h"
+#include "service.h"
 
 #include <sddl.h>
 

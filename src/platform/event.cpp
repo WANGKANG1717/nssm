@@ -1,4 +1,5 @@
 #include "nssm.h"
+#include "event.h"
 
 #include <vector>
 

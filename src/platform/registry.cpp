@@ -1,10 +1,17 @@
 #include "nssm.h"
+#include "event.h"
+#include "messages.h"
+#include "registry.h"
 #include "win32_handle.h"
+
+namespace {
+constexpr size_t kRegistryPathLength = 255;
+}
 
 int create_messages() {
   unique_registry_key key;
 
-  TCHAR registry[KEY_LENGTH];
+  TCHAR registry[kRegistryPathLength];
   if (_sntprintf_s(registry, _countof(registry), _TRUNCATE, _T("SYSTEM\\CurrentControlSet\\Services\\EventLog\\Application\\%s"), NSSM) < 0) {
     log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_OUT_OF_MEMORY, _T("eventlog registry"), _T("create_messages()"), 0);
     return 1;

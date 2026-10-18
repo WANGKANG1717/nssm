@@ -3,6 +3,9 @@
 #include "config.h"
 #include "health_check.h"
 #include "job_object.h"
+#include "event.h"
+#include "messages.h"
+#include "service.h"
 #include "status_snapshot.h"
 
 #include <string>

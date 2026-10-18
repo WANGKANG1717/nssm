@@ -47,17 +47,6 @@
 #include <stdarg.h>
 #include <stdio.h>
 static_assert(sizeof(TCHAR) == sizeof(wchar_t));
-#include "utf8.h"
-#include "service.h"
-#include "account.h"
-#include "console.h"
-#include "env.h"
-#include "event.h"
-#include "messages.h"
-#include "process.h"
-#include "process_options.h"
-#include "registry.h"
-#include "nssm_io.h"
 #endif
 
 void nssm_exit(int);

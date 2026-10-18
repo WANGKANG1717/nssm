@@ -4,6 +4,7 @@
 #include "output.h"
 #include "recovery.h"
 #include "security.h"
+#include "service.h"
 #include "win32_handle.h"
 
 #include <new>

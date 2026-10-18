@@ -1,4 +1,8 @@
 #include "nssm.h"
+#include "account.h"
+#include "event.h"
+#include "messages.h"
+#include "utf8.h"
 
 #include <sddl.h>
 

@@ -1,4 +1,8 @@
 #include "nssm.h"
+#include "event.h"
+#include "messages.h"
+#include "registry.h"
+#include "service.h"
 #include "win32_handle.h"
 
 #include <vector>

@@ -1,4 +1,7 @@
 #include "nssm.h"
+#include "event.h"
+#include "messages.h"
+#include "service.h"
 #include "win32_handle.h"
 
 namespace {

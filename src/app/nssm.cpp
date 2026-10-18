@@ -1,7 +1,13 @@
 #include "nssm.h"
+#include "console.h"
+#include "event.h"
+#include "messages.h"
 #include "output.h"
+#include "registry.h"
+#include "service.h"
 #include "status.h"
 #include "config.h"
+#include "utf8.h"
 
 extern bool is_admin;
 static TCHAR unquoted_imagepath[PATH_LENGTH];

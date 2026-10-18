@@ -1,4 +1,8 @@
 #include "nssm.h"
+#include "account.h"
+#include "event.h"
+#include "messages.h"
+#include "service.h"
 
 #include <vector>
 

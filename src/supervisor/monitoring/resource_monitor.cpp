@@ -1,6 +1,9 @@
 #include "nssm.h"
 #include "config.h"
+#include "event.h"
 #include "job_object.h"
+#include "messages.h"
+#include "service.h"
 #include "status_snapshot.h"
 
 #include <string>

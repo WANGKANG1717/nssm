@@ -1,4 +1,9 @@
 #include "nssm.h"
+#include "event.h"
+#include "messages.h"
+#include "process.h"
+#include "registry.h"
+#include "service.h"
 
 HANDLE get_debug_token() {
   long error;

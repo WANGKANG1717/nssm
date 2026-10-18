@@ -1,4 +1,11 @@
 #include "nssm.h"
+#include "console.h"
+#include "event.h"
+#include "messages.h"
+#include "registry.h"
+#include "service.h"
+#include "nssm_io.h"
+#include "utf8.h"
 
 #define COMPLAINED_READ (1 << 0)
 #define COMPLAINED_WRITE (1 << 1)
