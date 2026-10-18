@@ -1,4 +1,5 @@
 #include "nssm.h"
+#include "config.h"
 
 extern unsigned long tls_index;
 extern bool is_admin;
@@ -266,6 +267,9 @@ int _tmain(int argc, TCHAR **argv) {
     if (is_version(argv[1])) {
       _tprintf(_T("%s %s %s %s\n"), NSSM, NSSM_VERSION, NSSM_CONFIGURATION, NSSM_DATE);
       nssm_exit(0);
+    }
+    if (str_equiv(argv[1], _T("validate"))) {
+      nssm_exit(validate_service_config_command(argc - 2, argv + 2));
     }
     if (str_equiv(argv[1], _T("start"))) nssm_exit(control_service(NSSM_SERVICE_CONTROL_START, argc - 2, argv + 2));
     if (str_equiv(argv[1], _T("stop"))) nssm_exit(control_service(SERVICE_CONTROL_STOP, argc - 2, argv + 2));

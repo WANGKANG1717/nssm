@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.25)
 
-project(nssm VERSION 3.0.0 LANGUAGES CXX RC)
+project(nssm VERSION 3.0.0 LANGUAGES C CXX RC)
 
 set(NSSM_BUILD_LABEL "release" CACHE STRING
     "Stable label shown by 'nssm version' (avoid timestamps for reproducible builds)")
@@ -8,7 +8,8 @@ set(NSSM_BUILD_LABEL "release" CACHE STRING
 if(NOT WIN32)
   message(FATAL_ERROR "NSSM can only be built for Windows")
 endif()
-if(NOT MINGW OR NOT CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+if(NOT MINGW OR NOT CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR
+   NOT CMAKE_C_COMPILER_ID STREQUAL "GNU")
   message(FATAL_ERROR "NSSM supports only MinGW-w64 GCC")
 endif()
 
@@ -27,6 +28,18 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 include(CompilerOptions)
 include(CompileMessages)
+include(FetchContent)
+
+set(YYJSON_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(YYJSON_BUILD_MISC OFF CACHE BOOL "" FORCE)
+set(YYJSON_BUILD_DOC OFF CACHE BOOL "" FORCE)
+FetchContent_Declare(
+  yyjson
+  GIT_REPOSITORY https://github.com/ibireme/yyjson.git
+  GIT_TAG 8b4a38dc994a110abaec8a400615567bd996105f
+  GIT_SHALLOW TRUE
+)
+FetchContent_MakeAvailable(yyjson)
 
 nssm_compile_messages(
   SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/messages.mc"
@@ -56,6 +69,7 @@ add_custom_command(
 set(NSSM_SOURCES
   account.cpp
   child_process.cpp
+  config.cpp
   console.cpp
   env.cpp
   event.cpp
@@ -116,6 +130,7 @@ target_link_libraries(nssm PRIVATE
   shlwapi
   user32
   uuid
+  yyjson
 )
 
 set_target_properties(nssm PROPERTIES
@@ -141,6 +156,7 @@ if(BUILD_TESTING)
   add_executable(nssm_unit_tests
     tests/child_process_tests.cpp
     child_process.cpp
+    config.cpp
     job_object.cpp
   )
   target_compile_definitions(nssm_unit_tests PRIVATE
@@ -150,6 +166,7 @@ if(BUILD_TESTING)
     _WIN32_WINNT=0x0A00
   )
   nssm_configure_compiler(nssm_unit_tests)
+  target_link_libraries(nssm_unit_tests PRIVATE shlwapi yyjson)
   add_test(NAME nssm.unit COMMAND $<TARGET_FILE:nssm_unit_tests>)
 endif()
 

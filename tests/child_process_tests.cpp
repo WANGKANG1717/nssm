@@ -1,4 +1,5 @@
 #include "../child_process.h"
+#include "../config.h"
 #include "../job_object.h"
 
 #include <iostream>
@@ -184,6 +185,62 @@ void job_object_tests() {
   CloseHandle(process.hProcess);
 }
 
+void configuration_tests() {
+  constexpr const char *valid_json = R"json({
+    "schema": 1,
+    "service": {
+      "name": "示例服务",
+      "displayName": "示例服务",
+      "startup": "delayed",
+      "account": { "type": "system" },
+      "dependencies": ["Tcpip"]
+    },
+    "application": {
+      "path": "C:\\Apps\\worker.exe",
+      "arguments": ["--name", "值 with spaces"],
+      "inheritEnvironment": true,
+      "environment": { "MODE": "production" }
+    }
+  })json";
+  service_config_t config;
+  config_validation_t validation;
+  expect(parse_service_config(valid_json, strlen(valid_json), &config,
+                              &validation),
+         L"valid declarative configuration should parse");
+  expect(config.schema == 1 && config.service.name == L"示例服务",
+         L"UTF-8 service metadata should convert to UTF-16");
+  expect(config.application.arguments.size() == 2 &&
+             config.application.environment.size() == 1,
+         L"application arrays and environment should be retained");
+
+  constexpr const char *invalid_json = R"json({
+    "schema": 1,
+    "unknown": true,
+    "service": { "name": "bad/name" },
+    "application": {
+      "path": "relative.exe",
+      "environment": { "Path": "one", "PATH": "two" }
+    }
+  })json";
+  expect(! parse_service_config(invalid_json, strlen(invalid_json), &config,
+                               &validation),
+         L"unsafe or ambiguous configuration should be rejected");
+  expect(validation.errors.size() >= 4,
+         L"configuration validation should report all independent errors");
+
+  constexpr const char *password_json = R"json({
+    "schema": 1,
+    "service": {
+      "name": "secure",
+      "account": { "type": "user", "name": "DOMAIN\\svc", "password": "bad" }
+    },
+    "application": { "path": "C:\\Apps\\worker.exe" }
+  })json";
+  expect(! parse_service_config(password_json, strlen(password_json), &config,
+                               &validation),
+         L"plaintext password fields must not be accepted");
+}
+
 }  // namespace
 
 int wmain() {
@@ -193,6 +250,7 @@ int wmain() {
   environment_validation_tests();
   environment_isolation_tests();
   job_object_tests();
+  configuration_tests();
 
   if (failures) {
     std::wcerr << failures << L" test assertion(s) failed\n";
