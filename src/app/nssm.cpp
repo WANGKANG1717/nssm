@@ -39,7 +39,6 @@ bool initialize_image_paths(unsigned long *error) {
 }  // namespace
 
 void nssm_exit(int status) {
-  unsetup_utf8();
   exit(status);
 }
 

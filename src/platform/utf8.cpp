@@ -9,19 +9,9 @@
 #include <cstring>
 #include <cwchar>
 
-static unsigned long original_console_code_page;
-
 void setup_utf8() {
-  original_console_code_page = GetConsoleOutputCP();
-  SetConsoleOutputCP(CP_UTF8);
   _setmode(_fileno(stdout), _O_U8TEXT);
   _setmode(_fileno(stderr), _O_U8TEXT);
-}
-
-void unsetup_utf8() {
-  if (original_console_code_page) {
-    SetConsoleOutputCP(original_console_code_page);
-  }
 }
 
 int to_utf16(const wchar_t *source, wchar_t **destination,
