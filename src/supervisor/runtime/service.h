@@ -117,9 +117,6 @@ typedef struct nssm_service_t {
 } nssm_service_t;
 
 void WINAPI service_main(unsigned long, TCHAR **);
-const TCHAR *service_control_text(unsigned long);
-const TCHAR *service_status_text(unsigned long);
-void log_service_control(TCHAR *, unsigned long, bool);
 unsigned long WINAPI service_control_handler(unsigned long, unsigned long, void *, void *);
 
 nssm_service_t *alloc_nssm_service();

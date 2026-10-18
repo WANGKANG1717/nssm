@@ -12,6 +12,7 @@
 #include "service.h"
 #include "service_config.h"
 #include "service_constants.h"
+#include "service_control.h"
 #include "service_status.h"
 #include "service_wait.h"
 #include "status_snapshot.h"

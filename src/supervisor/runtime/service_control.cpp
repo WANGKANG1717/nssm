@@ -1,6 +1,7 @@
 #include "event.h"
 #include "messages.h"
 #include "service.h"
+#include "service_control.h"
 #include "service_constants.h"
 
 const TCHAR *service_control_text(unsigned long control) {
@@ -31,7 +32,7 @@ const TCHAR *service_status_text(unsigned long status) {
   }
 }
 
-void log_service_control(TCHAR *service_name, unsigned long control,
+void log_service_control(const TCHAR *service_name, unsigned long control,
                          bool handled) {
   const TCHAR *text = service_control_text(control);
   unsigned long event = NSSM_EVENT_SERVICE_CONTROL_UNKNOWN;

@@ -1,23 +1,18 @@
-#include "config.h"
-#include "config_registration.h"
 #include "event.h"
 #include "messages.h"
-#include "service.h"
+#include "service_control.h"
 #include "service_constants.h"
 #include "service_commands.h"
 #include "service_enumeration.h"
 #include "service_operations.h"
 #include "string_utils.h"
 #include "usage.h"
-#include "win32_handle.h"
+#include "windows_limits.h"
 
-#include <new>
 #include <string>
 #include <vector>
 
 namespace {
-
-int remove_service(nssm_service_t *service);
 
 void print_control_wait_failure(const TCHAR *service_name,
                                 unsigned long control,
@@ -78,14 +73,22 @@ int pre_remove_service(int argc, TCHAR **argv) {
     return 100;
   }
   if (_tcslen(argv[0]) >= SERVICE_NAME_LENGTH) return usage(1);
-
-  nssm_service_t *service = alloc_nssm_service();
-  if (! service) return 1;
-  set_nssm_service_defaults(service);
-  wmemcpy(service->name, argv[0], _tcslen(argv[0]) + 1);
-  int result = remove_service(service);
-  cleanup_nssm_service(service);
-  return result;
+  unsigned long error = ERROR_SUCCESS;
+  const service_removal_status_t status =
+      remove_managed_service(argv[0], &error);
+  if (status == service_removal_status_t::unmanaged) {
+    _ftprintf(stderr,
+              _T("%s: refusing to remove a service not managed by this NSSM: %s\n"),
+              argv[0], error_string(error));
+    return 4;
+  }
+  if (status == service_removal_status_t::system_error) {
+    _ftprintf(stderr, _T("%s: DeleteService: %s\n"), argv[0],
+              error_string(error));
+    return 5;
+  }
+  print_message(stdout, NSSM_MESSAGE_SERVICE_REMOVED, argv[0]);
+  return 0;
 }
 
 int control_service(unsigned long control, int argc, TCHAR **argv,
@@ -118,37 +121,3 @@ int control_service(unsigned long control, int argc, TCHAR **argv,
 int control_service(unsigned long control, int argc, TCHAR **argv) {
   return control_service(control, argc, argv, false);
 }
-
-namespace {
-
-int remove_service(nssm_service_t *service) {
-  if (! service) return 1;
-  unique_service_handle manager(open_service_manager(
-      SC_MANAGER_CONNECT | SC_MANAGER_ENUMERATE_SERVICE));
-  if (! manager) {
-    print_message(stderr, NSSM_MESSAGE_OPEN_SERVICE_MANAGER_FAILED);
-    return 2;
-  }
-
-  service->handle = open_service(manager.get(), service->name, DELETE,
-                                 nullptr, 0);
-  if (! service->handle) return 3;
-
-  std::wstring config_path;
-  unsigned long registration_error = ERROR_SUCCESS;
-  if (! registered_service_config_path(service->name, &config_path,
-                                       &registration_error)) {
-    _ftprintf(stderr,
-              _T("%s: refusing to remove a service not managed by this NSSM: %s\n"),
-              service->name, error_string(registration_error));
-    return 4;
-  }
-  if (! DeleteService(service->handle)) {
-    print_message(stderr, NSSM_MESSAGE_DELETESERVICE_FAILED);
-    return 5;
-  }
-  print_message(stdout, NSSM_MESSAGE_SERVICE_REMOVED, service->name);
-  return 0;
-}
-
-}  // namespace

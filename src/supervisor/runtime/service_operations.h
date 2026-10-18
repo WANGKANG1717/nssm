@@ -26,4 +26,13 @@ bool query_service_process_tree(const std::wstring &,
                                 std::vector<service_process_entry_t> *,
                                 unsigned long *);
 
+enum class service_removal_status_t {
+  success,
+  unmanaged,
+  system_error,
+};
+
+service_removal_status_t remove_managed_service(const std::wstring &,
+                                                unsigned long *);
+
 #endif

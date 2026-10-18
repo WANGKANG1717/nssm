@@ -1,5 +1,6 @@
 #include "service_operations.h"
 
+#include "config_registration.h"
 #include "service_constants.h"
 #include "process.h"
 #include "win32_handle.h"
@@ -239,4 +240,38 @@ bool query_service_process_tree(
   }
   if (error) *error = ERROR_SUCCESS;
   return true;
+}
+
+service_removal_status_t remove_managed_service(
+    const std::wstring &service_name, unsigned long *error) {
+  if (service_name.empty()) {
+    if (error) *error = ERROR_INVALID_PARAMETER;
+    return service_removal_status_t::system_error;
+  }
+  unique_service_handle manager(OpenSCManagerW(
+      nullptr, SERVICES_ACTIVE_DATABASE, SC_MANAGER_CONNECT));
+  if (! manager) {
+    if (error) *error = GetLastError();
+    return service_removal_status_t::system_error;
+  }
+  unique_service_handle service(
+      OpenServiceW(manager.get(), service_name.c_str(), DELETE));
+  if (! service) {
+    if (error) *error = GetLastError();
+    return service_removal_status_t::system_error;
+  }
+
+  std::wstring config_path;
+  unsigned long registration_error = ERROR_SUCCESS;
+  if (! registered_service_config_path(service_name.c_str(), &config_path,
+                                        &registration_error)) {
+    if (error) *error = registration_error;
+    return service_removal_status_t::unmanaged;
+  }
+  if (! DeleteService(service.get())) {
+    if (error) *error = GetLastError();
+    return service_removal_status_t::system_error;
+  }
+  if (error) *error = ERROR_SUCCESS;
+  return service_removal_status_t::success;
 }
