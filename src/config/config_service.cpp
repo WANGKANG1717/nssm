@@ -1,6 +1,7 @@
 #include "nssm.h"
 #include "child_process.h"
 #include "config.h"
+#include "config_registration.h"
 #include "output.h"
 #include "recovery.h"
 #include "security.h"
@@ -12,8 +13,6 @@
 #include <vector>
 
 namespace {
-
-#define NSSM_REG_CONFIG_PATH _T("ConfigPath")
 
 static_assert(SERVICE_NAME_LENGTH == kMaximumServiceNameCharacters + 1);
 static_assert(EXE_LENGTH == kMaximumPathCharacters + 1);
@@ -105,82 +104,6 @@ bool account_name(const service_config_t &config, std::wstring *name,
       return false;
   }
   return false;
-}
-
-bool full_config_path(const wchar_t *path, std::wstring *full,
-                      config_validation_t *validation) {
-  unsigned long needed = GetFullPathNameW(path, 0, nullptr, nullptr);
-  if (! needed) {
-    validation->add(L"Unable to resolve the configuration path");
-    return false;
-  }
-  std::vector<wchar_t> buffer(needed);
-  unsigned long written = GetFullPathNameW(path, needed, buffer.data(), nullptr);
-  if (! written || written >= needed) {
-    validation->add(L"Unable to resolve the configuration path");
-    return false;
-  }
-  *full = buffer.data();
-  return true;
-}
-
-bool write_config_path(const std::wstring &service_name,
-                       const std::wstring &path, unsigned long *error) {
-  std::wstring key_path = L"SYSTEM\\CurrentControlSet\\Services\\" +
-                          service_name + L"\\Parameters";
-  unique_registry_key key;
-  unsigned long disposition = 0;
-  long result = RegCreateKeyExW(HKEY_LOCAL_MACHINE, key_path.c_str(), 0, nullptr,
-                                0, KEY_SET_VALUE, nullptr, key.put(), &disposition);
-  if (result != ERROR_SUCCESS) {
-    if (error) *error = static_cast<unsigned long>(result);
-    return false;
-  }
-  result = RegSetValueExW(
-      key.get(), NSSM_REG_CONFIG_PATH, 0, REG_SZ,
-      reinterpret_cast<const unsigned char *>(path.c_str()),
-      static_cast<unsigned long>((path.size() + 1) * sizeof(wchar_t)));
-  if (error) *error = static_cast<unsigned long>(result);
-  return result == ERROR_SUCCESS;
-}
-
-bool read_config_path(const std::wstring &service_name, std::wstring *path,
-                      unsigned long *error) {
-  std::wstring key_path = L"SYSTEM\\CurrentControlSet\\Services\\" +
-                          service_name + L"\\Parameters";
-  unique_registry_key key;
-  long result = RegOpenKeyExW(HKEY_LOCAL_MACHINE, key_path.c_str(), 0,
-                              KEY_QUERY_VALUE, key.put());
-  if (result != ERROR_SUCCESS) {
-    if (error) *error = static_cast<unsigned long>(result);
-    return false;
-  }
-
-  unsigned long type = 0;
-  unsigned long bytes = 0;
-  result = RegQueryValueExW(key.get(), NSSM_REG_CONFIG_PATH, nullptr, &type, nullptr,
-                            &bytes);
-  if (result != ERROR_SUCCESS || type != REG_SZ || bytes < sizeof(wchar_t) ||
-      bytes > PATH_LENGTH * sizeof(wchar_t)) {
-    if (error) {
-      *error = result == ERROR_SUCCESS ? ERROR_INVALID_DATA
-                                       : static_cast<unsigned long>(result);
-    }
-    return false;
-  }
-
-  std::vector<wchar_t> buffer(bytes / sizeof(wchar_t) + 1, L'\0');
-  result = RegQueryValueExW(key.get(), NSSM_REG_CONFIG_PATH, nullptr, &type,
-                            reinterpret_cast<unsigned char *>(buffer.data()),
-                            &bytes);
-  if (result != ERROR_SUCCESS) {
-    if (error) *error = static_cast<unsigned long>(result);
-    return false;
-  }
-  buffer.back() = L'\0';
-  *path = buffer.data();
-  if (error) *error = ERROR_SUCCESS;
-  return true;
 }
 
 std::vector<wchar_t> copy_multisz(const wchar_t *source) {
@@ -403,16 +326,6 @@ bool atomic_copy_file(const std::wstring &source,
 }
 
 }  // namespace
-
-bool registered_service_config_path(const wchar_t *service_name,
-                                    std::wstring *path,
-                                    unsigned long *error) {
-  if (! service_name || ! service_name[0] || ! path) {
-    if (error) *error = ERROR_INVALID_PARAMETER;
-    return false;
-  }
-  return read_config_path(service_name, path, error);
-}
 
 int export_service_config_command(int argc, wchar_t **argv) {
   cli_arguments_t arguments = parse_cli_arguments(argc, argv);
