@@ -1,19 +1,14 @@
 #include "nssm.h"
 
+#include <vector>
+
 #define NSSM_SOURCE _T("nssm")
 #define NSSM_ERROR_BUFSIZE 65535
 #define NSSM_NUM_EVENT_STRINGS 16
-unsigned long tls_index;
-
-/* Convert error code to error string - must call LocalFree() on return value */
+/* Convert an error code using storage owned by the current thread. */
 TCHAR *error_string(unsigned long error) {
-  /* Thread-safe buffer */
-  TCHAR *error_message = (TCHAR *) TlsGetValue(tls_index);
-  if (! error_message) {
-    error_message = (TCHAR *) LocalAlloc(LPTR, NSSM_ERROR_BUFSIZE);
-    if (! error_message) return _T("<out of memory for error message>");
-    TlsSetValue(tls_index, (void *) error_message);
-  }
+  thread_local std::vector<TCHAR> error_buffer(NSSM_ERROR_BUFSIZE);
+  TCHAR *error_message = error_buffer.data();
 
   if (! FormatMessage(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, 0, error, GetUserDefaultLangID(), (TCHAR *) error_message, NSSM_ERROR_BUFSIZE, 0)) {
     if (! FormatMessage(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, 0, error, 0, (TCHAR *) error_message, NSSM_ERROR_BUFSIZE, 0)) {
