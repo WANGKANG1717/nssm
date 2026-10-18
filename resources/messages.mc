@@ -1090,6 +1090,20 @@ GetProcessTimes() 失败：
 .
 
 MessageId = +1
+SymbolicName = NSSM_EVENT_GETEXITCODEPROCESS_FAILED
+Severity = Error
+Language = English
+Failed to read the exit code for service %1.
+GetExitCodeProcess() failed:
+%2
+.
+Language = Chinese
+无法读取服务 %1 的退出码。
+GetExitCodeProcess() 失败：
+%2
+.
+
+MessageId = +1
 SymbolicName = NSSM_EVENT_ATTACHCONSOLE_FAILED
 Severity = Error
 Language = English

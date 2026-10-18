@@ -682,7 +682,12 @@ void CALLBACK end_service(void *arg, unsigned char why) {
   unsigned long exitcode = 0;
   TCHAR code[16];
   if (service->process_handle) {
-    GetExitCodeProcess(service->process_handle, &exitcode);
+    if (! GetExitCodeProcess(service->process_handle, &exitcode)) {
+      const unsigned long error = GetLastError();
+      exitcode = error ? error : ERROR_GEN_FAILURE;
+      log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_GETEXITCODEPROCESS_FAILED,
+                service->name, error_string(exitcode), 0);
+    }
     service->exitcode = exitcode;
     /* Check real exit time. */
     if (exitcode != STILL_ACTIVE) get_process_exit_time(service->process_handle, &service->exit_time);
