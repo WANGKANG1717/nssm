@@ -16,6 +16,9 @@ $unmanagedServiceName = "$serviceName-unmanaged"
 $testRoot = Join-Path $env:ProgramData $serviceName
 $configPath = Join-Path $testRoot 'service.json'
 $exportPath = Join-Path $testRoot 'exported.json'
+$unsafeRoot = Join-Path $env:ProgramData "$serviceName-unsafe"
+$secureLeaf = Join-Path $unsafeRoot 'secure'
+$unsafeConfigPath = Join-Path $secureLeaf 'service.json'
 
 function Set-SecureTestAcl([string]$Path, [bool]$Directory) {
   $acl = New-Object Security.AccessControl.DirectorySecurity
@@ -81,6 +84,26 @@ try {
   $configuration | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $configPath -Encoding utf8
   Set-SecureTestAcl $configPath $false
 
+  [void](New-Item -ItemType Directory -Path $secureLeaf -Force)
+  $unsafeAcl = New-Object Security.AccessControl.DirectorySecurity
+  $unsafeAcl.SetAccessRuleProtection($true, $false)
+  $unsafeAcl.SetOwner(
+    [Security.Principal.NTAccount]::new('BUILTIN', 'Administrators'))
+  foreach ($identity in @('SYSTEM', 'BUILTIN\Administrators', 'Everyone')) {
+    $rule = New-Object Security.AccessControl.FileSystemAccessRule(
+      $identity, 'FullControl', 'ContainerInherit, ObjectInherit', 'None', 'Allow')
+    [void]$unsafeAcl.AddAccessRule($rule)
+  }
+  Set-Acl -LiteralPath $unsafeRoot -AclObject $unsafeAcl
+  Set-SecureTestAcl $secureLeaf $true
+  $configuration | ConvertTo-Json -Depth 10 |
+    Set-Content -LiteralPath $unsafeConfigPath -Encoding utf8
+  Set-SecureTestAcl $unsafeConfigPath $false
+  & $executablePath plan --json $unsafeConfigPath 2>$null | Out-Null
+  if ($LASTEXITCODE -ne 6) {
+    throw 'configuration beneath an insecure ancestor was not rejected'
+  }
+
   $applied = Invoke-NssmJson @('apply', '--json', $configPath)
   if (-not $applied.ok) { throw 'apply did not report success' }
   $managedServices = @(& $executablePath list)
@@ -116,5 +139,8 @@ finally {
   & sc.exe delete $unmanagedServiceName 2>$null | Out-Null
   if (Test-Path -LiteralPath $testRoot) {
     Remove-Item -LiteralPath $testRoot -Recurse -Force
+  }
+  if (Test-Path -LiteralPath $unsafeRoot) {
+    Remove-Item -LiteralPath $unsafeRoot -Recurse -Force
   }
 }
