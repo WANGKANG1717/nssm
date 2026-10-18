@@ -4,6 +4,7 @@
 #include "process.h"
 #include "registry.h"
 #include "service.h"
+#include "service_wait.h"
 
 HANDLE get_debug_token() {
   long error;

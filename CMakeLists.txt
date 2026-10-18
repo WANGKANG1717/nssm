@@ -99,6 +99,7 @@ set(NSSM_SUPERVISOR_SOURCES
   src/supervisor/runtime/service_dependencies.cpp
   src/supervisor/runtime/service_metadata.cpp
   src/supervisor/runtime/service_scm.cpp
+  src/supervisor/runtime/service_wait.cpp
 )
 
 set(NSSM_PLATFORM_SOURCES

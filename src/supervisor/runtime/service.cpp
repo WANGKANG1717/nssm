@@ -14,6 +14,7 @@
 #include "readiness.h"
 #include "registry.h"
 #include "service.h"
+#include "service_wait.h"
 #include "status_snapshot.h"
 #include "recovery.h"
 #include "resource_monitor.h"
@@ -792,94 +793,4 @@ void throttle_restart(nssm_service_t *service) {
   SleepConditionVariableCS(&service->throttle_condition,
                            &service->throttle_section, ms);
   LeaveCriticalSection(&service->throttle_section);
-}
-
-/*
-  When responding to a stop (or any other) request we need to set dwWaitHint to
-  the number of milliseconds we expect the operation to take, and optionally
-  increase dwCheckPoint.  If dwWaitHint milliseconds elapses without the
-  operation completing or dwCheckPoint increasing, the system will consider the
-  service to be hung.
-
-  However the system will consider the service to be hung after 30000
-  milliseconds regardless of the value of dwWaitHint if dwCheckPoint has not
-  changed.  Therefore if we want to wait longer than that we must periodically
-  increase dwCheckPoint.
-
-  Furthermore, it will consider the service to be hung after 60000 milliseconds
-  regardless of the value of dwCheckPoint unless dwWaitHint is increased every
-  time dwCheckPoint is also increased.
-
-  Our strategy then is to retrieve the initial dwWaitHint and wait for
-  NSSM_SERVICE_STATUS_DEADLINE milliseconds.  If the process is still running
-  and we haven't finished waiting we increment dwCheckPoint and add whichever is
-  smaller of NSSM_SERVICE_STATUS_DEADLINE or the remaining timeout to
-  dwWaitHint.
-
-  Only doing both these things will prevent the system from killing the service.
-
-  If the status_handle and service_status arguments are omitted, this function
-  will not try to update the service manager but it will still log to the
-  event log that it is waiting for a handle.
-
-  Returns: 1 if the wait timed out.
-           0 if the wait completed.
-          -1 on error.
-*/
-int await_single_handle(SERVICE_STATUS_HANDLE status_handle, SERVICE_STATUS *status, HANDLE handle, TCHAR *name, TCHAR *function_name, unsigned long timeout) {
-  unsigned long interval;
-  unsigned long ret;
-  unsigned long waited;
-  TCHAR interval_milliseconds[16];
-  TCHAR timeout_milliseconds[16];
-  TCHAR waited_milliseconds[16];
-  TCHAR *function = function_name;
-
-  /* Add brackets to function name. */
-  size_t funclen = _tcslen(function_name) + 3;
-  TCHAR *func = (TCHAR *) HeapAlloc(GetProcessHeap(), 0, funclen * sizeof(TCHAR));
-  if (func) {
-    if (_sntprintf_s(func, funclen, _TRUNCATE, _T("%s()"), function_name) > -1) function = func;
-  }
-
-  _sntprintf_s(timeout_milliseconds, _countof(timeout_milliseconds), _TRUNCATE, _T("%lu"), timeout);
-
-  waited = 0;
-  while (waited < timeout) {
-    interval = timeout - waited;
-    if (interval > NSSM_SERVICE_STATUS_DEADLINE) interval = NSSM_SERVICE_STATUS_DEADLINE;
-
-    if (status) {
-      status->dwWaitHint += interval;
-      status->dwCheckPoint++;
-      SetServiceStatus(status_handle, status);
-    }
-
-    if (waited) {
-      _sntprintf_s(waited_milliseconds, _countof(waited_milliseconds), _TRUNCATE, _T("%lu"), waited);
-      _sntprintf_s(interval_milliseconds, _countof(interval_milliseconds), _TRUNCATE, _T("%lu"), interval);
-      log_event(EVENTLOG_INFORMATION_TYPE, NSSM_EVENT_AWAITING_SINGLE_HANDLE, function, name, waited_milliseconds, interval_milliseconds, timeout_milliseconds, 0);
-    }
-
-    switch (WaitForSingleObject(handle, interval)) {
-      case WAIT_OBJECT_0:
-        ret = 0;
-        goto awaited;
-
-      case WAIT_TIMEOUT:
-        ret = 1;
-        break;
-
-      default:
-        ret = -1;
-        goto awaited;
-    }
-
-    waited += interval;
-  }
-
-awaited:
-  if (func) HeapFree(GetProcessHeap(), 0, func);
-
-  return ret;
 }
