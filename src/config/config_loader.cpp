@@ -53,9 +53,13 @@ bool load_service_config(const wchar_t *path, service_config_t *config,
     const unsigned long chunk = static_cast<unsigned long>(
         remaining > 1024 * 1024 ? 1024 * 1024 : remaining);
     unsigned long read = 0;
-    if (! ReadFile(file.get(), content.data() + offset, chunk, &read, nullptr) ||
-        ! read) {
+    if (! ReadFile(file.get(), content.data() + offset, chunk, &read,
+                   nullptr)) {
       validation->add(read_error_message(GetLastError()));
+      return false;
+    }
+    if (! read) {
+      validation->add(read_error_message(ERROR_HANDLE_EOF));
       return false;
     }
     offset += read;
