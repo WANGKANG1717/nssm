@@ -93,9 +93,6 @@ static void add_thread_handle(hook_thread_t *hook_threads, HANDLE thread_handle,
 }
 
 bool valid_hook_name(const TCHAR *hook_event, const TCHAR *hook_action, bool quiet) {
-  bool valid_event = false;
-  bool valid_action = false;
-
   /* Exit/Post */
   if (str_equiv(hook_event, NSSM_HOOK_EVENT_EXIT)) {
     if (str_equiv(hook_action, NSSM_HOOK_ACTION_POST)) return true;

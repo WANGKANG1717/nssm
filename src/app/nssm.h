@@ -64,6 +64,7 @@
 #include "imports.h"
 #include "messages.h"
 #include "process.h"
+#include "process_options.h"
 #include "registry.h"
 #include "settings.h"
 #include "nssm_io.h"
@@ -142,14 +143,6 @@ const TCHAR *nssm_exe();
 #define NSSM_EXIT_REALLY 2
 #define NSSM_EXIT_UNCLEAN 3
 #define NSSM_NUM_EXIT_ACTIONS 4
-
-/* Process priority. */
-#define NSSM_REALTIME_PRIORITY 0
-#define NSSM_HIGH_PRIORITY 1
-#define NSSM_ABOVE_NORMAL_PRIORITY 2
-#define NSSM_NORMAL_PRIORITY 3
-#define NSSM_BELOW_NORMAL_PRIORITY 4
-#define NSSM_IDLE_PRIORITY 5
 
 /* How many milliseconds to wait before updating service status. */
 #define NSSM_SERVICE_STATUS_DEADLINE 20000

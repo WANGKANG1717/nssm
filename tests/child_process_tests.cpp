@@ -5,6 +5,7 @@
 #include "config.h"
 #include "health_check.h"
 #include "job_object.h"
+#include "process_options.h"
 #include "readiness.h"
 #include "recovery.h"
 #include "security.h"
@@ -24,6 +25,43 @@ void expect(bool condition, const wchar_t *message) {
   if (condition) return;
   std::wcerr << L"FAILED: " << message << L'\n';
   ++failures;
+}
+
+void process_option_tests() {
+  __int64 mask = 0;
+  wchar_t single_and_range[] = L"0,2-4,63";
+  expect(affinity_string_to_mask(single_and_range, &mask) == 0,
+         L"valid CPU affinity should parse");
+  expect(mask == static_cast<__int64>((1ULL << 0) | (1ULL << 2) |
+                                     (1ULL << 3) | (1ULL << 4) |
+                                     (1ULL << 63)),
+         L"CPU affinity should preserve CPUs 0 through 63");
+
+  wchar_t *canonical = nullptr;
+  expect(affinity_mask_to_string(mask, &canonical) == 0 && canonical,
+         L"CPU affinity should format");
+  if (canonical) {
+    expect(wcscmp(canonical, L"0,2-4,63") == 0,
+           L"CPU affinity should have a canonical representation");
+    HeapFree(GetProcessHeap(), 0, canonical);
+  }
+
+  wchar_t trailing_separator[] = L"0,";
+  expect(affinity_string_to_mask(trailing_separator, &mask) != 0,
+         L"trailing CPU affinity separators should be rejected");
+  wchar_t out_of_range[] = L"64";
+  expect(affinity_string_to_mask(out_of_range, &mask) != 0,
+         L"CPU affinity values above 63 should be rejected");
+  wchar_t descending_range[] = L"4-2";
+  expect(affinity_string_to_mask(descending_range, &mask) != 0,
+         L"descending CPU affinity ranges should be rejected");
+
+  expect(priority_constant_to_index(HIGH_PRIORITY_CLASS) ==
+             NSSM_HIGH_PRIORITY,
+         L"priority constants should map to UI indices");
+  expect(priority_index_to_constant(NSSM_BELOW_NORMAL_PRIORITY) ==
+             BELOW_NORMAL_PRIORITY_CLASS,
+         L"priority indices should map to process constants");
 }
 
 std::vector<wchar_t> make_block(
@@ -692,6 +730,7 @@ void path_security_tests() {
 }  // namespace
 
 int wmain() {
+  process_option_tests();
   command_line_tests();
   environment_merge_tests();
   environment_replacement_tests();

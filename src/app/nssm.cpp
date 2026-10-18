@@ -194,6 +194,7 @@ void check_admin() {
 }
 
 static int elevate(int argc, TCHAR **argv, unsigned long message) {
+  (void) argc;
   print_message(stderr, message);
 
   SHELLEXECUTEINFO sei;

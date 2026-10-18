@@ -152,6 +152,7 @@ int CALLBACK kill_window(HWND window, LPARAM arg) {
   successfully prodded.
 */
 int kill_threads(nssm_service_t *service, kill_t *k) {
+  (void) service;
   int ret = 0;
 
   /* Get a snapshot of all threads in the system. */
@@ -202,6 +203,7 @@ int kill_threads(kill_t *k) {
 
 /* Give the process a chance to die gracefully. */
 int kill_process(nssm_service_t *service, kill_t *k) {
+  (void) service;
   if (! k) return 1;
 
   unsigned long ret;
@@ -252,6 +254,7 @@ int kill_process(kill_t *k) {
 
 /* Simulate a Control-C event to our console (shared with the app). */
 int kill_console(nssm_service_t *service, kill_t *k) {
+  (void) service;
   unsigned long ret;
 
   if (! k) return 1;
@@ -401,6 +404,7 @@ void kill_process_tree(kill_t *k, unsigned long ppid) {
 }
 
 int print_process(nssm_service_t *service, kill_t *k) {
+  (void) service;
   TCHAR exe[EXE_LENGTH];
   TCHAR *buffer = 0;
   if (k->depth) {

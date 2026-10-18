@@ -480,7 +480,7 @@ int configure(HWND window, nssm_service_t *service, nssm_service_t *orig_service
 
   HWND combo = GetDlgItem(tablist[NSSM_TAB_DETAILS], IDC_STARTUP);
   service->startup = (unsigned long) SendMessage(combo, CB_GETCURSEL, 0, 0);
-  if (service->startup == CB_ERR) service->startup = 0;
+  if (service->startup == static_cast<unsigned long>(CB_ERR)) service->startup = 0;
 
   /* Get logon stuff. */
   if (SendDlgItemMessage(tablist[NSSM_TAB_LOGON], IDC_LOCALSYSTEM, BM_GETCHECK, 0, 0) & BST_CHECKED) {
@@ -700,7 +700,7 @@ int configure(HWND window, nssm_service_t *service, nssm_service_t *orig_service
   check_number(tablist[NSSM_TAB_EXIT], IDC_THROTTLE, &service->throttle_delay);
   combo = GetDlgItem(tablist[NSSM_TAB_EXIT], IDC_APPEXIT);
   service->default_exit_action = (unsigned long) SendMessage(combo, CB_GETCURSEL, 0, 0);
-  if (service->default_exit_action == CB_ERR) service->default_exit_action = 0;
+  if (service->default_exit_action == static_cast<unsigned long>(CB_ERR)) service->default_exit_action = 0;
   check_number(tablist[NSSM_TAB_EXIT], IDC_RESTART_DELAY, &service->restart_delay);
 
   /* Get I/O stuff. */
@@ -942,6 +942,9 @@ static void tab_insert_message_string(HWND tabs, WPARAM index, unsigned long id)
 }
 
 UINT_PTR CALLBACK browse_hook(HWND dlg, UINT message, WPARAM w, LPARAM l) {
+  (void) dlg;
+  (void) w;
+  (void) l;
   switch (message) {
     case WM_INITDIALOG:
       return 1;
@@ -994,7 +997,7 @@ void browse(HWND window, TCHAR *current, unsigned long flags, ...) {
     TCHAR *filter_buffer = (TCHAR *) ofn.lpstrFilter;
     /* "Applications" + NULL + "*.exe" + NULL */
     va_start(arg, flags);
-    while (i = va_arg(arg, int)) {
+    while ((i = va_arg(arg, int))) {
       TCHAR *localised = message_string(i);
       if (localised) {
         if (append_browse_filter_part(&filter_buffer, &bufsize, &len, localised)) {
@@ -1054,6 +1057,7 @@ void browse(HWND window, TCHAR *current, unsigned long flags, ...) {
 }
 
 INT_PTR CALLBACK tab_dlg(HWND tab, UINT message, WPARAM w, LPARAM l) {
+  (void) l;
   switch (message) {
     case WM_INITDIALOG:
       return 1;

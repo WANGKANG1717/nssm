@@ -21,11 +21,6 @@ const TCHAR *priority_strings[] = { _T("REALTIME_PRIORITY_CLASS"), _T("HIGH_PRIO
 static hook_thread_t hook_threads = { NULL, 0 };
 static constexpr int kStartHandledByRecovery = -1;
 
-typedef struct {
-  int first;
-  int last;
-} list_t;
-
 /*
   Check the status in response to a control.
   Returns:  1 if the status is expected, eg STOP following CONTROL_STOP.
@@ -139,150 +134,6 @@ static inline void wait_for_hooks(nssm_service_t *service, bool notify) {
   EnterCriticalSection(&service->hook_section);
   await_hook_threads(&hook_threads, status_handle, status, NSSM_HOOK_THREAD_DEADLINE);
   LeaveCriticalSection(&service->hook_section);
-}
-
-int affinity_mask_to_string(__int64 mask, TCHAR **string) {
-  if (! string) return 1;
-  if (! mask) {
-    *string = 0;
-    return 0;
-  }
-
-  __int64 i, n;
-
-  /* SetProcessAffinityMask() accepts a mask of up to 64 processors. */
-  list_t set[64];
-  for (n = 0; n < _countof(set); n++) set[n].first = set[n].last = -1;
-
-  for (i = 0, n = 0; i < _countof(set); i++) {
-    if (mask & (1LL << i)) {
-      if (set[n].first == -1) set[n].first = set[n].last = (int) i;
-      else if (set[n].last == (int) i - 1) set[n].last = (int) i;
-      else {
-        n++;
-        set[n].first = set[n].last = (int) i;
-      }
-    }
-  }
-
-  /* Worst case is 2x2 characters for first and last CPU plus - and/or , */
-  size_t len = (size_t) (n + 1) * 6;
-  *string = (TCHAR *) HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, len * sizeof(TCHAR));
-  if (! *string) return 2;
-
-  size_t s = 0;
-  int ret;
-  for (i = 0; i <= n; i++) {
-    if (i) (*string)[s++] = _T(',');
-    ret = _sntprintf_s(*string + s, 3, _TRUNCATE, _T("%u"), set[i].first);
-    if (ret < 0) {
-      HeapFree(GetProcessHeap(), 0, *string);
-      *string = 0;
-      return 3;
-    }
-    else s += ret;
-    if (set[i].last != set[i].first) {
-      ret =_sntprintf_s(*string + s, 4, _TRUNCATE, _T("%c%u"), (set[i].last == set[i].first + 1) ? _T(',') : _T('-'), set[i].last);
-      if (ret < 0) {
-        HeapFree(GetProcessHeap(), 0, *string);
-        *string = 0;
-        return 4;
-      }
-      else s += ret;
-    }
-  }
-
-  return 0;
-}
-
-int affinity_string_to_mask(TCHAR *string, __int64 *mask) {
-  if (! mask) return 1;
-
-  *mask = 0LL;
-  if (! string) return 0;
-
-  list_t set[64];
-
-  TCHAR *s = string;
-  TCHAR *end;
-  int ret;
-  int i;
-  int n = 0;
-  unsigned long number;
-
-  for (n = 0; n < _countof(set); n++) set[n].first = set[n].last = -1;
-  n = 0;
-
-  while (*s) {
-    ret = str_number(s, &number, &end);
-    s = end;
-    if (ret == 0 || ret == 2) {
-      if (number >= _countof(set)) return 2;
-      set[n].first = set[n].last = (int) number;
-
-      switch (*s) {
-        case 0:
-          break;
-
-        case _T(','):
-          n++;
-          s++;
-          break;
-
-        case _T('-'):
-          if (! *(++s)) return 3;
-          ret = str_number(s, &number, &end);
-          if (ret == 0 || ret == 2) {
-            s = end;
-            if (! *s || *s == _T(',')) {
-              set[n].last = (int) number;
-              if (! *s) break;
-              n++;
-              s++;
-            }
-            else return 3;
-          }
-          else return 3;
-          break;
-
-        default:
-          return 3;
-      }
-    }
-    else return 4;
-  }
-
-  for (i = 0; i <= n; i++) {
-    for (int j = set[i].first; j <= set[i].last; j++) *mask |= (1LL << (__int64) j);
-  }
-
-  return 0;
-}
-
-unsigned long priority_mask() {
- return REALTIME_PRIORITY_CLASS | HIGH_PRIORITY_CLASS | ABOVE_NORMAL_PRIORITY_CLASS | NORMAL_PRIORITY_CLASS | BELOW_NORMAL_PRIORITY_CLASS | IDLE_PRIORITY_CLASS;
-}
-
-int priority_constant_to_index(unsigned long constant) {
-  switch (constant & priority_mask()) {
-    case REALTIME_PRIORITY_CLASS: return NSSM_REALTIME_PRIORITY;
-    case HIGH_PRIORITY_CLASS: return NSSM_HIGH_PRIORITY;
-    case ABOVE_NORMAL_PRIORITY_CLASS: return NSSM_ABOVE_NORMAL_PRIORITY;
-    case BELOW_NORMAL_PRIORITY_CLASS: return NSSM_BELOW_NORMAL_PRIORITY;
-    case IDLE_PRIORITY_CLASS: return NSSM_IDLE_PRIORITY;
-  }
-  return NSSM_NORMAL_PRIORITY;
-}
-
-unsigned long priority_index_to_constant(int index) {
-  switch (index) {
-    case NSSM_REALTIME_PRIORITY: return REALTIME_PRIORITY_CLASS;
-    case NSSM_HIGH_PRIORITY: return HIGH_PRIORITY_CLASS;
-    case NSSM_ABOVE_NORMAL_PRIORITY: return ABOVE_NORMAL_PRIORITY_CLASS;
-    case NSSM_BELOW_NORMAL_PRIORITY: return BELOW_NORMAL_PRIORITY_CLASS;
-    case NSSM_IDLE_PRIORITY: return IDLE_PRIORITY_CLASS;
-  }
-  return NORMAL_PRIORITY_CLASS;
 }
 
 static inline unsigned long throttle_milliseconds(unsigned long throttle) {
@@ -478,6 +329,7 @@ int remove_from_dependencies(TCHAR *dependencies, unsigned long dependencieslen,
 }
 
 int set_service_dependencies(const TCHAR *service_name, SC_HANDLE service_handle, TCHAR *buffer) {
+  (void) service_name;
   TCHAR *dependencies = _T("");
   unsigned long num_dependencies = 0;
 
@@ -757,6 +609,7 @@ int get_service_startup(const TCHAR *service_name, SC_HANDLE service_handle, con
 }
 
 int get_service_username(const TCHAR *service_name, const QUERY_SERVICE_CONFIG *qsc, TCHAR **username, size_t *usernamelen) {
+  (void) service_name;
   if (! username) return 1;
   if (! usernamelen) return 1;
 
@@ -892,8 +745,6 @@ int pre_edit_service(int argc, TCHAR **argv) {
   enum { MODE_EDITING, MODE_GETTING, MODE_SETTING, MODE_RESETTING, MODE_DUMPING } mode = MODE_EDITING;
   const TCHAR *verb = argv[0];
   const TCHAR *service_name = argv[1];
-  bool getting = false;
-  bool unsetting = false;
 
   /* Minimum number of arguments. */
   int mandatory = 2;
@@ -1769,6 +1620,7 @@ void log_service_control(TCHAR *service_name, unsigned long control, bool handle
 
 /* Service control handler */
 unsigned long WINAPI service_control_handler(unsigned long control, unsigned long event, void *data, void *context) {
+  (void) data;
   nssm_service_t *service = (nssm_service_t *) context;
 
   switch (control) {

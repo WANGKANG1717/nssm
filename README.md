@@ -105,7 +105,7 @@ src/
   cli/          命令行和控制台适配
   config/       JSON 配置模型、校验及 SCM 应用
   supervisor/
-    process/     进程创建、Job Object 与进程树终止
+    process/     进程创建、Job Object、CPU/优先级选项与进程树终止
     monitoring/  Readiness、Health Check 与资源监控
     runtime/     服务状态机、恢复、Hooks、日志和账户
   platform/     Windows API、注册表、环境及编码适配
@@ -116,6 +116,10 @@ cmake/          构建、资源转换和验证脚本
 ```
 
 `CMakeLists.txt` 按相同职责分组列出源文件。新增功能应放入对应模块，避免再次把实现堆回仓库根目录。
+
+CPU 亲和性和进程优先级的解析与转换集中在
+`src/supervisor/process/process_options.*`，不再耦合到服务状态机实现。
+GUI 暂时保留在 `src/ui/`，但不承载新的核心能力；声明式 CLI 是推荐的管理入口。
 
 提交代码前建议至少执行：
 

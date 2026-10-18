@@ -154,12 +154,6 @@ TCHAR *service_status_text(unsigned long);
 void log_service_control(TCHAR *, unsigned long, bool);
 unsigned long WINAPI service_control_handler(unsigned long, unsigned long, void *, void *);
 
-int affinity_mask_to_string(__int64, TCHAR **);
-int affinity_string_to_mask(TCHAR *, __int64 *);
-unsigned long priority_mask();
-int priority_constant_to_index(unsigned long);
-unsigned long priority_index_to_constant(int);
-
 nssm_service_t *alloc_nssm_service();
 void set_nssm_service_defaults(nssm_service_t *);
 void cleanup_nssm_service(nssm_service_t *);
