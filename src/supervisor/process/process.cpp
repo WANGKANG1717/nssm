@@ -6,6 +6,8 @@
 #include "service_wait.h"
 #include "win32_handle.h"
 
+#include <string>
+
 HANDLE get_debug_token() {
   unique_handle token;
   const unsigned long access = TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY;
@@ -382,25 +384,19 @@ void kill_process_tree(kill_t *k, unsigned long ppid) {
 
 int print_process(nssm_service_t *service, kill_t *k) {
   (void) service;
-  TCHAR exe[EXE_LENGTH];
-  TCHAR *buffer = 0;
-  if (k->depth) {
-    buffer = (TCHAR *) HeapAlloc(GetProcessHeap(), 0, (k->depth + 1) * sizeof(TCHAR));
-    if (buffer) {
-      unsigned long i;
-      for (i = 0; i < k->depth; i++) buffer[i] = _T(' ');
-      buffer[i] = _T('\0');
-    }
+  std::wstring executable(EXE_LENGTH, L'\0');
+  unsigned long size = static_cast<unsigned long>(executable.size());
+  if (QueryFullProcessImageNameW(k->process_handle, 0, executable.data(),
+                                &size)) {
+    executable.resize(size);
   }
-
-  unsigned long size = _countof(exe);
-  if (! QueryFullProcessImageName(k->process_handle, 0, exe, &size)) {
-    _sntprintf_s(exe, _countof(exe), _TRUNCATE, _T("???"));
+  else {
+    executable = L"???";
   }
+  std::wstring indentation(k->depth, L' ');
 
-  _tprintf(_T("% 8lu %s%s\n"), k->pid, buffer ? buffer : _T(""), exe);
-
-  if (buffer) HeapFree(GetProcessHeap(), 0, buffer);
+  wprintf(L"% 8lu %ls%ls\n", k->pid, indentation.c_str(),
+          executable.c_str());
   return 1;
 }
 
