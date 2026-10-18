@@ -12,8 +12,31 @@
 #include "config.h"
 #include "utf8.h"
 
-static TCHAR unquoted_imagepath[PATH_LENGTH];
-static TCHAR imagepath[PATH_LENGTH];
+namespace {
+
+std::wstring unquoted_imagepath;
+std::wstring imagepath;
+
+bool initialize_image_paths(unsigned long *error) {
+  std::vector<wchar_t> buffer(PATH_LENGTH);
+  SetLastError(ERROR_SUCCESS);
+  const unsigned long length = GetModuleFileNameW(
+      nullptr, buffer.data(), static_cast<unsigned long>(buffer.size()));
+  if (! length || length >= buffer.size()) {
+    if (error) {
+      const unsigned long path_error = GetLastError();
+      *error = path_error == ERROR_SUCCESS ? ERROR_INSUFFICIENT_BUFFER
+                                           : path_error;
+    }
+    return false;
+  }
+  unquoted_imagepath.assign(buffer.data(), length);
+  imagepath = quote_windows_argument(unquoted_imagepath);
+  if (error) *error = ERROR_SUCCESS;
+  return true;
+}
+
+}  // namespace
 
 void nssm_exit(int status) {
   unsetup_utf8();
@@ -70,22 +93,25 @@ static int elevate(int argc, TCHAR **argv, unsigned long message) {
 }
 
 const TCHAR *nssm_unquoted_imagepath() {
-  return unquoted_imagepath;
+  return unquoted_imagepath.c_str();
 }
 
 const TCHAR *nssm_imagepath() {
-  return imagepath;
+  return imagepath.c_str();
 }
 
 int _tmain(int argc, TCHAR **argv) {
   if (console_attached()) setup_utf8();
 
-  const bool is_admin = is_process_administrator();
-
   /* Remember our path for later. */
-  GetModuleFileName(0, unquoted_imagepath, _countof(unquoted_imagepath));
-  GetModuleFileName(0, imagepath, _countof(imagepath));
-  PathQuoteSpaces(imagepath);
+  unsigned long path_error = ERROR_SUCCESS;
+  if (! initialize_image_paths(&path_error)) {
+    fwprintf(stderr, L"Unable to resolve the NSSM executable path: %ls\n",
+             error_string(path_error));
+    nssm_exit(100);
+  }
+
+  const bool is_admin = is_process_administrator();
 
   /* Elevate */
   if (argc > 1) {
