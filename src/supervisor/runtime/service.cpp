@@ -25,6 +25,14 @@ const TCHAR *priority_strings[] = { _T("REALTIME_PRIORITY_CLASS"), _T("HIGH_PRIO
 
 static constexpr int kStartHandledByRecovery = -1;
 
+static bool start_detached_thread(LPTHREAD_START_ROUTINE function,
+                                  void *context) {
+  HANDLE thread = CreateThread(nullptr, 0, function, context, 0, nullptr);
+  if (! thread) return false;
+  CloseHandle(thread);
+  return true;
+}
+
 static bool prepare_child_launch(nssm_service_t *service,
                                  std::wstring *command_line,
                                  std::vector<wchar_t> *environment) {
@@ -364,7 +372,7 @@ void WINAPI service_main(unsigned long argc, TCHAR **argv) {
   if (get_process_creation_time(GetCurrentProcess(), &service->nssm_creation_time)) ZeroMemory(&service->nssm_creation_time, sizeof(service->nssm_creation_time));
 
   service->allow_restart = true;
-  if (! CreateThread(NULL, 0, launch_service, (void *) service, 0, NULL)) {
+  if (! start_detached_thread(launch_service, service)) {
     log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_CREATETHREAD_FAILED, error_string(GetLastError()), 0);
     stop_service(service, 0);
   }
@@ -506,7 +514,7 @@ unsigned long WINAPI service_control_handler(unsigned long control, unsigned lon
         waiting for the application to exit.  Spawn a new thread to wait
         while we acknowledge the request.
       */
-      if (! CreateThread(NULL, 0, shutdown_service, context, 0, NULL)) {
+      if (! start_detached_thread(shutdown_service, context)) {
         log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_CREATETHREAD_FAILED, error_string(GetLastError()), 0);
 
         /*
