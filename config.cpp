@@ -134,6 +134,20 @@ bool read_required_number(yyjson_val *object, const char *name,
   return true;
 }
 
+void read_optional_number64(yyjson_val *object, const char *name,
+                            const wchar_t *path,
+                            unsigned long long maximum,
+                            unsigned long long *destination,
+                            config_validation_t *validation) {
+  yyjson_val *value = yyjson_obj_get(object, name);
+  if (! value) return;
+  if (! yyjson_is_uint(value) || yyjson_get_uint(value) > maximum) {
+    validation->add(std::wstring(path) + L" is outside the allowed range");
+    return;
+  }
+  *destination = yyjson_get_uint(value);
+}
+
 bool valid_service_name(const std::wstring &name) {
   if (name.empty() || name.size() > kMaximumServiceNameCharacters) return false;
   for (wchar_t character : name) {
@@ -576,6 +590,46 @@ void parse_health(yyjson_val *root, health_check_config_t *health,
   }
 }
 
+void parse_resources(yyjson_val *root, resource_limit_config_t *resources,
+                     config_validation_t *validation) {
+  yyjson_val *object = yyjson_obj_get(root, "resources");
+  if (! object) return;
+  if (! yyjson_is_obj(object)) {
+    validation->add(L"resources must be an object");
+    return;
+  }
+  reject_unknown_fields(object, L"resources",
+                        {"monitorIntervalMs", "memoryLimitBytes",
+                         "maximumProcesses", "cpu"},
+                        validation);
+  read_optional_number(object, "monitorIntervalMs",
+                       L"resources.monitorIntervalMs", 100, 60000,
+                       &resources->monitor_interval_ms, validation);
+  constexpr unsigned long long kMaximumMemory = 16ULL * 1024ULL * 1024ULL *
+                                                 1024ULL * 1024ULL;
+  read_optional_number64(object, "memoryLimitBytes",
+                         L"resources.memoryLimitBytes", kMaximumMemory,
+                         &resources->memory_limit_bytes, validation);
+  read_optional_number(object, "maximumProcesses",
+                       L"resources.maximumProcesses", 0, 65535,
+                       &resources->maximum_processes, validation);
+
+  yyjson_val *cpu = yyjson_obj_get(object, "cpu");
+  if (! cpu) return;
+  if (! yyjson_is_obj(cpu)) {
+    validation->add(L"resources.cpu must be an object");
+    return;
+  }
+  reject_unknown_fields(cpu, L"resources.cpu",
+                        {"maximumPercent", "violationThreshold"}, validation);
+  read_required_number(cpu, "maximumPercent",
+                       L"resources.cpu.maximumPercent", 1, 100,
+                       &resources->maximum_cpu_percent, validation);
+  read_optional_number(cpu, "violationThreshold",
+                       L"resources.cpu.violationThreshold", 1, 1000,
+                       &resources->cpu_violation_threshold, validation);
+}
+
 std::wstring read_error_message(unsigned long error) {
   return L"Unable to read configuration file (Windows error " +
          std::to_wstring(error) + L")";
@@ -613,7 +667,7 @@ bool parse_service_config(const char *json, size_t length,
   }
   reject_unknown_fields(root, L"root",
                         {"schema", "service", "application", "recovery",
-                         "health"},
+                         "health", "resources"},
                         validation);
 
   yyjson_val *schema = yyjson_obj_get(root, "schema");
@@ -626,6 +680,7 @@ bool parse_service_config(const char *json, size_t length,
   parse_application(root, &config->application, validation);
   parse_recovery(root, &config->recovery, validation);
   parse_health(root, &config->health, validation);
+  parse_resources(root, &config->resources, validation);
   yyjson_doc_free(document);
   return validation->ok();
 }

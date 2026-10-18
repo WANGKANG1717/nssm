@@ -4,6 +4,7 @@
 #include "job_object.h"
 #include "health_monitor.h"
 #include "recovery.h"
+#include "resource_monitor.h"
 
 bool is_admin;
 bool use_critical_section;
@@ -811,6 +812,7 @@ nssm_service_t *alloc_nssm_service() {
 /* Free memory for a service. */
 void cleanup_nssm_service(nssm_service_t *service) {
   if (! service) return;
+  stop_resource_monitor(service);
   stop_health_monitor(service);
   if (service->username) HeapFree(GetProcessHeap(), 0, service->username);
   if (service->password) {
@@ -828,6 +830,7 @@ void cleanup_nssm_service(nssm_service_t *service) {
   if (service->throttle_timer) CloseHandle(service->throttle_timer);
   if (service->hook_section_initialised) DeleteCriticalSection(&service->hook_section);
   if (service->health_section_initialised) DeleteCriticalSection(&service->health_section);
+  if (service->resource_section_initialised) DeleteCriticalSection(&service->resource_section);
   if (service->initial_env) HeapFree(GetProcessHeap(), 0, service->initial_env);
   delete service->config;
   delete service->recovery_state;
@@ -1618,6 +1621,8 @@ void WINAPI service_main(unsigned long argc, TCHAR **argv) {
   /* Serialise health monitor startup and shutdown with process exit. */
   InitializeCriticalSection(&service->health_section);
   service->health_section_initialised = true;
+  InitializeCriticalSection(&service->resource_section);
+  service->resource_section_initialised = true;
 
   /* Remember our initial environment. */
   service->initial_env = copy_environment();
@@ -1676,11 +1681,20 @@ int monitor_service(nssm_service_t *service) {
   if (! RegisterWaitForSingleObject(&service->wait_handle, service->process_handle, end_service, (void *) service, INFINITE, WT_EXECUTEONLYONCE | WT_EXECUTELONGFUNCTION)) {
     log_event(EVENTLOG_WARNING_TYPE, NSSM_EVENT_REGISTERWAITFORSINGLEOBJECT_FAILED, service->name, service->exe, error_string(GetLastError()), 0);
   }
-  else if (! start_health_monitor(service)) {
-    log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_HEALTH_MONITOR_START_FAILED,
-              service->name, error_string(GetLastError()), 0);
-    if (service->job_handle) {
-      terminate_service_job(service->job_handle, ERROR_NOT_READY, nullptr);
+  else {
+    if (! start_health_monitor(service)) {
+      log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_HEALTH_MONITOR_START_FAILED,
+                service->name, error_string(GetLastError()), 0);
+      if (service->job_handle) {
+        terminate_service_job(service->job_handle, ERROR_NOT_READY, nullptr);
+      }
+    }
+    else if (! start_resource_monitor(service)) {
+      log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_RESOURCE_MONITOR_START_FAILED,
+                service->name, error_string(GetLastError()), 0);
+      if (service->job_handle) {
+        terminate_service_job(service->job_handle, ERROR_NOT_READY, nullptr);
+      }
     }
   }
 
@@ -1943,6 +1957,18 @@ int start_service(nssm_service_t *service) {
       close_output_handles(&si);
       return stop_service(service, 3, true, true);
     }
+    if (service->config && service->config->resources.enabled() &&
+        ! configure_service_job_limits(
+            service->job_handle,
+            service->config->resources.maximum_processes,
+            service->config->resources.memory_limit_bytes, &job_error)) {
+      log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_CONFIGURE_JOB_FAILED,
+                service->name, error_string(job_error), 0);
+      CloseHandle(service->job_handle);
+      service->job_handle = 0;
+      close_output_handles(&si);
+      return stop_service(service, 3, true, true);
+    }
 
     if (! CreateProcess(service->exe, command_line.data(), 0, 0, inherit_handles,
                         flags, child_environment.data(), service->dir, &si, &pi)) {
@@ -2121,6 +2147,7 @@ void CALLBACK end_service(void *arg, unsigned char why) {
     if (service->stopping) return;
     service->stopping = true;
   }
+  stop_resource_monitor(service);
   stop_health_monitor(service);
 
   service->rotate_stdout_online = service->rotate_stderr_online = NSSM_ROTATE_OFFLINE;

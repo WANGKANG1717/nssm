@@ -138,6 +138,19 @@ void job_object_tests() {
   expect(job != nullptr && error == ERROR_SUCCESS,
          L"kill-on-close job should be created");
   if (! job) return;
+  expect(configure_service_job_limits(job, 3, 64ULL * 1024ULL * 1024ULL,
+                                      &error),
+         L"Job Object resource limits should configure");
+  JOBOBJECT_EXTENDED_LIMIT_INFORMATION limits = {};
+  expect(QueryInformationJobObject(job, JobObjectExtendedLimitInformation,
+                                   &limits, sizeof(limits), nullptr) &&
+             (limits.BasicLimitInformation.LimitFlags &
+              JOB_OBJECT_LIMIT_ACTIVE_PROCESS) &&
+             (limits.BasicLimitInformation.LimitFlags &
+              JOB_OBJECT_LIMIT_JOB_MEMORY) &&
+             limits.BasicLimitInformation.ActiveProcessLimit == 3 &&
+             limits.JobMemoryLimit == 64ULL * 1024ULL * 1024ULL,
+         L"configured Job Object limits should be queryable");
 
   wchar_t system_directory[MAX_PATH] = {};
   UINT length = GetSystemDirectoryW(system_directory,
@@ -170,6 +183,14 @@ void job_object_tests() {
          L"job accounting should be queryable");
   expect(accounting.active_processes == 0 && accounting.total_processes >= 1,
          L"job accounting should record the completed child");
+  expect(accounting.job_memory <= accounting.peak_job_memory,
+         L"current Job memory should not exceed its recorded peak");
+  job_accounting_t previous = {};
+  job_accounting_t current = {};
+  current.user_time_100ns = 500ULL * 10000ULL;
+  expect(calculate_job_cpu_percent(previous, current, 1000, 1) == 50 &&
+             calculate_job_cpu_percent(previous, current, 1000, 2) == 25,
+         L"Job CPU usage should be normalized across active processors");
 
   CloseHandle(process.hThread);
   CloseHandle(process.hProcess);
@@ -304,6 +325,24 @@ void configuration_tests() {
   expect(! parse_service_config(mixed_health_json, strlen(mixed_health_json),
                                 &config, &validation),
          L"health settings for an unselected probe type must be rejected");
+
+  constexpr const char *resource_json = R"json({
+    "schema": 1,
+    "service": { "name": "worker" },
+    "application": { "path": "C:\\Apps\\worker.exe" },
+    "resources": {
+      "monitorIntervalMs": 1000,
+      "memoryLimitBytes": 268435456,
+      "maximumProcesses": 8,
+      "cpu": { "maximumPercent": 75, "violationThreshold": 3 }
+    }
+  })json";
+  expect(parse_service_config(resource_json, strlen(resource_json), &config,
+                              &validation) &&
+             config.resources.memory_limit_bytes == 268435456ULL &&
+             config.resources.maximum_processes == 8 &&
+             config.resources.maximum_cpu_percent == 75,
+         L"resource limits should parse from declarative configuration");
 
   constexpr const char *invalid_json = R"json({
     "schema": 1,

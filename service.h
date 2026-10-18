@@ -122,6 +122,11 @@ typedef struct nssm_service_t {
   unsigned long health_failures;
   unsigned long health_successes;
   bool health_degraded;
+  CRITICAL_SECTION resource_section;
+  bool resource_section_initialised;
+  HANDLE resource_stop_event;
+  HANDLE resource_thread;
+  unsigned long resource_cpu_violations;
   CONDITION_VARIABLE throttle_condition;
   HANDLE throttle_timer;
   LARGE_INTEGER throttle_duetime;

@@ -85,6 +85,7 @@ set(NSSM_SOURCES
   nssm.manifest
   process.cpp
   recovery.cpp
+  resource_monitor.cpp
   registry.cpp
   service.cpp
   settings.cpp

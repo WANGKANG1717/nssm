@@ -76,6 +76,18 @@ struct health_check_config_t {
   unsigned long maximum_age_ms = 60000;
 };
 
+struct resource_limit_config_t {
+  unsigned long monitor_interval_ms = 1000;
+  unsigned long long memory_limit_bytes = 0;
+  unsigned long maximum_processes = 0;
+  unsigned long maximum_cpu_percent = 0;
+  unsigned long cpu_violation_threshold = 3;
+
+  bool enabled() const {
+    return memory_limit_bytes || maximum_processes || maximum_cpu_percent;
+  }
+};
+
 struct service_account_config_t {
   service_account_type_t type = service_account_type_t::system;
   std::wstring name;
@@ -104,6 +116,7 @@ struct service_config_t {
   application_config_t application;
   recovery_config_t recovery;
   health_check_config_t health;
+  resource_limit_config_t resources;
 };
 
 struct config_validation_t {

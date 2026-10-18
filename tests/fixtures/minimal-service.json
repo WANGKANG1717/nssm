@@ -38,5 +38,14 @@
     "timeoutMs": 5000,
     "failureThreshold": 3,
     "successThreshold": 1
+  },
+  "resources": {
+    "monitorIntervalMs": 1000,
+    "memoryLimitBytes": 268435456,
+    "maximumProcesses": 16,
+    "cpu": {
+      "maximumPercent": 90,
+      "violationThreshold": 5
+    }
   }
 }

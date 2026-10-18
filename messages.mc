@@ -2219,6 +2219,36 @@ Language = Chinese
 .
 
 MessageId = +1
+SymbolicName = NSSM_EVENT_RESOURCE_MONITOR_START_FAILED
+Severity = Error
+Language = English
+Failed to start the resource monitor for service %1: %2.
+.
+Language = Chinese
+无法启动服务 %1 的资源监控：%2。
+.
+
+MessageId = +1
+SymbolicName = NSSM_EVENT_CONFIGURE_JOB_FAILED
+Severity = Error
+Language = English
+Failed to configure Job Object resource limits for service %1: %2.
+.
+Language = Chinese
+无法为服务 %1 配置 Job Object 资源限制：%2。
+.
+
+MessageId = +1
+SymbolicName = NSSM_EVENT_RESOURCE_EXCEEDED
+Severity = Error
+Language = English
+Service %1 exceeded its %2: %3.
+.
+Language = Chinese
+服务 %1 超出%2：%3。
+.
+
+MessageId = +1
 SymbolicName = NSSM_EVENT_SERVICE_CONFIG_DESCRIPTION_FAILED
 Severity = Informational
 Language = English
