@@ -121,13 +121,6 @@ const TCHAR *nssm_exe();
 #define NSSM_STARTUP_MANUAL 2
 #define NSSM_STARTUP_DISABLED 3
 
-/* Exit actions. */
-#define NSSM_EXIT_RESTART 0
-#define NSSM_EXIT_IGNORE 1
-#define NSSM_EXIT_REALLY 2
-#define NSSM_EXIT_UNCLEAN 3
-#define NSSM_NUM_EXIT_ACTIONS 4
-
 /* How many milliseconds to wait before updating service status. */
 #define NSSM_SERVICE_STATUS_DEADLINE 20000
 

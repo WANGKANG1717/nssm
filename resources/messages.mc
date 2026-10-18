@@ -810,30 +810,6 @@ Language = Chinese
 .
 
 MessageId = +1
-SymbolicName = NSSM_EVENT_EXIT_IGNORE
-Severity = Informational
-Language = English
-Service %1 action for exit code %2 is %3.
-No action will be taken to restart %4.
-.
-Language = Chinese
-服务 %1 的退出码 %2 对应动作为 %3。
-不会对 %4 执行重启操作。
-.
-
-MessageId = +1
-SymbolicName = NSSM_EVENT_EXIT_REALLY
-Severity = Informational
-Language = English
-Service %1 action for exit code %2 is %3.
-Exiting.
-.
-Language = Chinese
-服务 %1 对退出码 %2 的处理动作为 %3。
-退出。
-.
-
-MessageId = +1
 SymbolicName = NSSM_EVENT_OPENKEY_FAILED
 Severity = Error
 Language = English
@@ -867,32 +843,6 @@ Failed to write registry value %1:
 Language = Chinese
 写入注册表值 %1 失败：
 %2
-.
-
-MessageId = +1
-SymbolicName = NSSM_EVENT_EXIT_UNCLEAN
-Severity = Informational
-Language = English
-Service %1 action for exit code %2 is %3.
-Exiting.
-.
-Language = Chinese
-退出代码%2的服务%1操作为%3。
-退出。
-.
-
-MessageId = +1
-SymbolicName = NSSM_EVENT_GRACEFUL_SUICIDE
-Severity = Informational
-Language = English
-Service %1 application %2 exited with exit code 0 but the default exit action is %3.
-Honouring the %4 action would result in the service being flagged as failed and subject to recovery actions.
-The service will instead be stopped gracefully.  To suppress this message, explicitly configure the exit action for exit code 0 to either %5 or %6.
-.
-Language = Chinese
-服务 %1 的应用 %2 以退出码 0 退出，但默认退出动作为 %3。
-若执行 %4 动作，将导致服务被标记为失败并触发恢复策略。
-因此将改为优雅停止该服务。要抑制此消息，请将退出码 0 的退出动作显式配置为 %5 或 %6。
 .
 
 MessageId = +1
@@ -1036,18 +986,6 @@ Language = Chinese
 .
 
 MessageId = +1
-SymbolicName = NSSM_EVENT_THROTTLED
-Severity = Warning
-Language = English
-Service %1 ran for less than %2 milliseconds.
-Restart will be delayed by %3 milliseconds.
-.
-Language = Chinese
-服务 %1 运行时间少于 %2 毫秒。
-重启将延迟 %3 毫秒。
-.
-
-MessageId = +1
 SymbolicName = NSSM_EVENT_RESET_THROTTLE
 Severity = Informational
 Language = English
@@ -1055,16 +993,6 @@ Request to resume service %1.  Throttling of restart attempts will be reset.
 .
 Language = Chinese
 收到恢复服务 %1 的请求。将重置重启节流。
-.
-
-MessageId = +1
-SymbolicName = NSSM_EVENT_BOGUS_THROTTLE
-Severity = Warning
-Language = English
-The registry value %2, used to specify the minimum number of milliseconds which must elapse before service %1 is considered to have started successfully, was not of type REG_DWORD.  The default time of %3 milliseconds will be used.
-.
-Language = Chinese
-注册表值 %2（指定服务 %1 被认为成功启动所需的最少毫秒数）不是 REG_DWORD 类型。将使用默认值 %3 毫秒。
 .
 
 MessageId = +1
@@ -1657,28 +1585,6 @@ SetProcessAffinityMask(): %2
 Language = Chinese
 为服务 %1 设置请求的亲和性掩码失败。
 SetProcessAffinityMask()：%2
-.
-
-MessageId = +1
-SymbolicName = NSSM_EVENT_BOGUS_RESTART_DELAY
-Severity = Warning
-Language = English
-The registry value %2, used to specify the number of milliseconds by which restarts of service %1 will be delayed, was not of type REG_DWORD.
-No mandatory delay will be employed.
-.
-Language = Chinese
-注册表值 %2（指定服务 %1 的重启延迟毫秒数）不是 REG_DWORD 类型。
-将不会采用强制延迟。
-.
-
-MessageId = +1
-SymbolicName = NSSM_EVENT_RESTART_DELAY
-Severity = Informational
-Language = English
-Restart of service %1 will be delayed by %2 milliseconds.
-.
-Language = Chinese
-服务 %1 的重启将延迟 %2 毫秒。
 .
 
 MessageId = +1

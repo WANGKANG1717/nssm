@@ -9,7 +9,6 @@
 #include "resource_monitor.h"
 
 bool is_admin;
-const TCHAR *exit_action_strings[] = { _T("Restart"), _T("Ignore"), _T("Exit"), _T("Suicide"), 0 };
 const TCHAR *startup_strings[] = { _T("SERVICE_AUTO_START"), _T("SERVICE_DELAYED_AUTO_START"), _T("SERVICE_DEMAND_START"), _T("SERVICE_DISABLED"), 0 };
 const TCHAR *priority_strings[] = { _T("REALTIME_PRIORITY_CLASS"), _T("HIGH_PRIORITY_CLASS"), _T("ABOVE_NORMAL_PRIORITY_CLASS"), _T("NORMAL_PRIORITY_CLASS"), _T("BELOW_NORMAL_PRIORITY_CLASS"), _T("IDLE_PRIORITY_CLASS"), 0 };
 
@@ -123,7 +122,7 @@ static inline unsigned long throttle_milliseconds(unsigned long throttle) {
   control immediately.
 */
 static unsigned long WINAPI shutdown_service(void *arg) {
-  return stop_service((nssm_service_t *) arg, 0, true, true);
+  return stop_service((nssm_service_t *) arg, 0);
 }
 
 /*
@@ -627,7 +626,6 @@ void set_nssm_service_defaults(nssm_service_t *service) {
   service->stderr_sharing = NSSM_STDERR_SHARING;
   service->stderr_disposition = NSSM_STDERR_DISPOSITION;
   service->stderr_flags = NSSM_STDERR_FLAGS;
-  service->throttle_delay = NSSM_RESET_THROTTLE_RESTART;
   service->stop_method = ~0;
   service->kill_console_delay = NSSM_KILL_CONSOLE_GRACE_PERIOD;
   service->kill_window_delay = NSSM_KILL_WINDOW_GRACE_PERIOD;
@@ -901,7 +899,7 @@ void WINAPI service_main(unsigned long argc, TCHAR **argv) {
   log_service_control(service->name, 0, true);
 
   service->status.dwCurrentState = SERVICE_START_PENDING;
-  service->status.dwWaitHint = service->throttle_delay + NSSM_WAITHINT_MARGIN;
+  service->status.dwWaitHint = NSSM_RESET_THROTTLE_RESTART + NSSM_WAITHINT_MARGIN;
   SetServiceStatus(service->status_handle, &service->status);
 
   if (is_admin) {
@@ -941,7 +939,7 @@ void WINAPI service_main(unsigned long argc, TCHAR **argv) {
     }
     log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_CONFIG_LOAD_FAILED, service->name,
               details.c_str(), 0);
-    stop_service(service, 2, true, true);
+    stop_service(service, 2);
     return;
   }
   if (! create_status_snapshot(service)) {
@@ -955,7 +953,7 @@ void WINAPI service_main(unsigned long argc, TCHAR **argv) {
   service->allow_restart = true;
   if (! CreateThread(NULL, 0, launch_service, (void *) service, 0, NULL)) {
     log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_CREATETHREAD_FAILED, error_string(GetLastError()), 0);
-    stop_service(service, 0, true, true);
+    stop_service(service, 0);
   }
 }
 
@@ -1106,7 +1104,7 @@ unsigned long WINAPI service_control_handler(unsigned long control, unsigned lon
         service->kill_window_delay = NSSM_KILL_WINDOW_GRACE_PERIOD;
         service->kill_threads_delay = NSSM_KILL_THREADS_GRACE_PERIOD;
 
-        stop_service(service, 0, true, true);
+        stop_service(service, 0);
       }
       return NO_ERROR;
 
@@ -1168,7 +1166,7 @@ int start_service(nssm_service_t *service) {
                                  &launch_error)) {
     log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_CREATEPROCESS_FAILED, service->name,
               service->exe, launch_error.c_str(), 0);
-    return stop_service(service, 2, true, true);
+    return stop_service(service, 2);
   }
 
   std::vector<wchar_t> child_environment;
@@ -1177,7 +1175,7 @@ int start_service(nssm_service_t *service) {
                                 &launch_error)) {
     log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_CREATEPROCESS_FAILED, service->name,
               service->exe, launch_error.c_str(), 0);
-    return stop_service(service, 2, true, true);
+    return stop_service(service, 2);
   }
 
   throttle_restart(service);
@@ -1193,7 +1191,7 @@ int start_service(nssm_service_t *service) {
       log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_GET_OUTPUT_HANDLES_FAILED, service->name, 0);
       FreeConsole();
       close_output_handles(&si);
-      return stop_service(service, 4, true, true);
+      return stop_service(service, 4);
     }
     FreeConsole();
 
@@ -1210,7 +1208,7 @@ int start_service(nssm_service_t *service) {
       log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_CREATE_JOB_FAILED, service->name,
                 error_string(job_error), 0);
       close_output_handles(&si);
-      return stop_service(service, 3, true, true);
+      return stop_service(service, 3);
     }
     if (service->config->resources.enabled() &&
         ! configure_service_job_limits(
@@ -1222,7 +1220,7 @@ int start_service(nssm_service_t *service) {
       CloseHandle(service->job_handle);
       service->job_handle = 0;
       close_output_handles(&si);
-      return stop_service(service, 3, true, true);
+      return stop_service(service, 3);
     }
 
     if (! CreateProcess(service->exe, command_line.data(), 0, 0, inherit_handles,
@@ -1233,7 +1231,7 @@ int start_service(nssm_service_t *service) {
       close_output_handles(&si);
       CloseHandle(service->job_handle);
       service->job_handle = 0;
-      return stop_service(service, exitcode, true, true);
+      return stop_service(service, exitcode);
     }
     service->process_handle = pi.hProcess;
     service->pid = pi.dwProcessId;
@@ -1253,7 +1251,7 @@ int start_service(nssm_service_t *service) {
       CloseHandle(service->job_handle);
       service->job_handle = 0;
       close_output_handles(&si);
-      return stop_service(service, 3, true, true);
+      return stop_service(service, 3);
     }
 
     if (get_process_creation_time(service->process_handle, &service->creation_time)) ZeroMemory(&service->creation_time, sizeof(service->creation_time));
@@ -1299,7 +1297,7 @@ int start_service(nssm_service_t *service) {
       service->pid = 0;
       CloseHandle(service->job_handle);
       service->job_handle = 0;
-      return stop_service(service, 3, true, true);
+      return stop_service(service, 3);
     }
     /* We never use the primary thread handle beyond ResumeThread(). */
     if (pi.hThread) CloseHandle(pi.hThread);
@@ -1330,7 +1328,7 @@ int start_service(nssm_service_t *service) {
     /* Preserve the short process-stability check when no probe is configured. */
     if (await_single_handle(service->status_handle, &service->status,
                             service->process_handle, service->name,
-                            _T("start_service"), service->throttle_delay) == 1) {
+                            _T("start_service"), NSSM_RESET_THROTTLE_RESTART) == 1) {
       service->throttle = 0;
     }
   }
@@ -1346,14 +1344,11 @@ int start_service(nssm_service_t *service) {
   SetServiceStatus(service->status_handle, &service->status);
   publish_status_snapshot(service);
 
-  /* Ensure the restart delay is always applied. */
-  if (service->restart_delay && ! service->throttle) service->throttle++;
-
   return 0;
 }
 
 /* Stop the service */
-int stop_service(nssm_service_t *service, unsigned long exitcode, bool graceful, bool default_action) {
+int stop_service(nssm_service_t *service, unsigned long exitcode) {
   service->allow_restart = false;
   if (service->wait_handle) {
     UnregisterWait(service->wait_handle);
@@ -1362,17 +1357,10 @@ int stop_service(nssm_service_t *service, unsigned long exitcode, bool graceful,
 
   service->rotate_stdout_online = service->rotate_stderr_online = NSSM_ROTATE_OFFLINE;
 
-  if (default_action && ! exitcode && ! graceful) {
-    log_event(EVENTLOG_INFORMATION_TYPE, NSSM_EVENT_GRACEFUL_SUICIDE, service->name, service->exe, exit_action_strings[NSSM_EXIT_UNCLEAN], exit_action_strings[NSSM_EXIT_UNCLEAN], exit_action_strings[NSSM_EXIT_UNCLEAN], exit_action_strings[NSSM_EXIT_REALLY], 0);
-    graceful = true;
-  }
-
   /* Signal we are stopping */
-  if (graceful) {
-    service->status.dwCurrentState = SERVICE_STOP_PENDING;
-    service->status.dwWaitHint = NSSM_WAITHINT_MARGIN;
-    SetServiceStatus(service->status_handle, &service->status);
-  }
+  service->status.dwCurrentState = SERVICE_STOP_PENDING;
+  service->status.dwWaitHint = NSSM_WAITHINT_MARGIN;
+  SetServiceStatus(service->status_handle, &service->status);
 
   /* Nothing to do if service isn't running */
   if (service->pid) {
@@ -1388,19 +1376,16 @@ int stop_service(nssm_service_t *service, unsigned long exitcode, bool graceful,
   end_service((void *) service, true);
 
   /* Signal we stopped */
-  if (graceful) {
-    service->status.dwCurrentState = SERVICE_STOP_PENDING;
-    service->status.dwCurrentState = SERVICE_STOPPED;
-    if (exitcode) {
-      service->status.dwWin32ExitCode = ERROR_SERVICE_SPECIFIC_ERROR;
-      service->status.dwServiceSpecificExitCode = exitcode;
-    }
-    else {
-      service->status.dwWin32ExitCode = NO_ERROR;
-      service->status.dwServiceSpecificExitCode = 0;
-    }
-    SetServiceStatus(service->status_handle, &service->status);
+  service->status.dwCurrentState = SERVICE_STOPPED;
+  if (exitcode) {
+    service->status.dwWin32ExitCode = ERROR_SERVICE_SPECIFIC_ERROR;
+    service->status.dwServiceSpecificExitCode = exitcode;
   }
+  else {
+    service->status.dwWin32ExitCode = NO_ERROR;
+    service->status.dwServiceSpecificExitCode = 0;
+  }
+  SetServiceStatus(service->status_handle, &service->status);
 
   return exitcode;
 }
@@ -1505,12 +1490,12 @@ void CALLBACK end_service(void *arg, unsigned char why) {
                   : EVENTLOG_WARNING_TYPE,
               NSSM_EVENT_RECOVERY_STOPPED,
               service->name, reason, 0);
-    stop_service(service, exitcode, true, true);
+    stop_service(service, exitcode);
     return;
   }
   service->next_restart_delay_ms = decision.delay_ms;
   log_event(EVENTLOG_INFORMATION_TYPE, NSSM_EVENT_EXIT_RESTART,
-            service->name, code, exit_action_strings[NSSM_EXIT_RESTART],
+            service->name, code, _T("Restart"),
             service->exe, 0);
   while (monitor_service(service)) {
     log_event(EVENTLOG_WARNING_TYPE, NSSM_EVENT_RESTART_SERVICE_FAILED,

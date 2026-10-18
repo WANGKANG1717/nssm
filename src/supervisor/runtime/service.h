@@ -15,8 +15,6 @@
 #define VALUE_LENGTH 16383
 #define SERVICE_NAME_LENGTH 257
 
-#define ACTION_LEN 16
-
 #define NSSM_KERNEL_DRIVER _T("SERVICE_KERNEL_DRIVER")
 #define NSSM_FILE_SYSTEM_DRIVER _T("SERVICE_FILE_SYSTEM_DRIVER")
 #define NSSM_WIN32_OWN_PROCESS _T("SERVICE_WIN32_OWN_PROCESS")
@@ -96,9 +94,6 @@ typedef struct nssm_service_t {
   unsigned long rotate_bytes_low;
   unsigned long rotate_bytes_high;
   unsigned long rotate_delay;
-  unsigned long default_exit_action;
-  unsigned long restart_delay;
-  unsigned long throttle_delay;
   unsigned long stop_method;
   unsigned long kill_console_delay;
   unsigned long kill_window_delay;
@@ -173,7 +168,7 @@ int control_service(unsigned long, int, TCHAR **);
 void set_service_recovery(nssm_service_t *);
 int monitor_service(nssm_service_t *);
 int start_service(nssm_service_t *);
-int stop_service(nssm_service_t *, unsigned long, bool, bool);
+int stop_service(nssm_service_t *, unsigned long);
 void CALLBACK end_service(void *, unsigned char);
 void throttle_restart(nssm_service_t *);
 int await_single_handle(SERVICE_STATUS_HANDLE, SERVICE_STATUS *, HANDLE, TCHAR *, TCHAR *, unsigned long);
