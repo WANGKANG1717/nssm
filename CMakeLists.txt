@@ -110,6 +110,8 @@ set(NSSM_SUPERVISOR_SOURCES
   src/supervisor/runtime/service_control.cpp
   src/supervisor/runtime/service_enumeration.cpp
   src/supervisor/runtime/service_operations.cpp
+  src/supervisor/runtime/service_process_wait.cpp
+  src/supervisor/runtime/service_state.cpp
   src/supervisor/runtime/service_wait.cpp
 )
 

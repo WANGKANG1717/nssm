@@ -13,6 +13,7 @@
 #include "service_config.h"
 #include "service_constants.h"
 #include "service_control.h"
+#include "service_process_wait.h"
 #include "service_status.h"
 #include "service_wait.h"
 #include "status_snapshot.h"
@@ -41,40 +42,6 @@ class critical_section_guard {
  private:
   CRITICAL_SECTION *section_;
 };
-
-static void unregister_service_wait(nssm_service_t *service,
-                                    bool wait_for_callbacks) {
-  AcquireSRWLockExclusive(&service->wait_lock);
-  HANDLE wait_handle = static_cast<HANDLE>(InterlockedExchangePointer(
-      reinterpret_cast<void *volatile *>(&service->wait_handle), nullptr));
-  ReleaseSRWLockExclusive(&service->wait_lock);
-  if (! wait_handle) return;
-
-  HANDLE completion_event = wait_for_callbacks ? INVALID_HANDLE_VALUE : nullptr;
-  if (UnregisterWaitEx(wait_handle, completion_event)) return;
-  const unsigned long error = GetLastError();
-  if (! wait_for_callbacks && error == ERROR_IO_PENDING) return;
-  log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_UNREGISTERWAIT_FAILED,
-            service->name, error_string(error), 0);
-}
-
-static bool register_service_wait(nssm_service_t *service) {
-  AcquireSRWLockExclusive(&service->wait_lock);
-  if (! service->process_handle ||
-      WaitForSingleObject(service->stop_event, 0) == WAIT_OBJECT_0) {
-    ReleaseSRWLockExclusive(&service->wait_lock);
-    SetLastError(ERROR_OPERATION_ABORTED);
-    return false;
-  }
-
-  const bool registered = RegisterWaitForSingleObject(
-      &service->wait_handle, service->process_handle, end_service, service,
-      INFINITE, WT_EXECUTEONLYONCE | WT_EXECUTELONGFUNCTION);
-  const unsigned long error = registered ? ERROR_SUCCESS : GetLastError();
-  ReleaseSRWLockExclusive(&service->wait_lock);
-  SetLastError(error);
-  return registered;
-}
 
 template <typename Mutator>
 void update_service_status(nssm_service_t *service, Mutator mutator) {
@@ -300,59 +267,6 @@ static unsigned long WINAPI launch_service(void *arg) {
   return monitor_service((nssm_service_t *) arg);
 }
 
-/* Set default values which aren't zero. */
-void set_nssm_service_defaults(nssm_service_t *service) {
-  if (! service) return;
-
-  InitializeSRWLock(&service->status_snapshot_lock);
-  InitializeSRWLock(&service->status_lock);
-  InitializeSRWLock(&service->wait_lock);
-  service->stdin_sharing = NSSM_STDIN_SHARING;
-  service->stdin_disposition = NSSM_STDIN_DISPOSITION;
-  service->stdin_flags = NSSM_STDIN_FLAGS;
-  service->stdout_sharing = NSSM_STDOUT_SHARING;
-  service->stdout_disposition = NSSM_STDOUT_DISPOSITION;
-  service->stdout_flags = NSSM_STDOUT_FLAGS;
-  service->stderr_sharing = NSSM_STDERR_SHARING;
-  service->stderr_disposition = NSSM_STDERR_DISPOSITION;
-  service->stderr_flags = NSSM_STDERR_FLAGS;
-  service->kill_console_delay = kKillConsoleGracePeriodMs;
-  service->kill_window_delay = kKillWindowGracePeriodMs;
-  service->kill_threads_delay = kKillThreadsGracePeriodMs;
-  service->kill_process_tree = 1;
-}
-
-/* Allocate and zero memory for a service. */
-nssm_service_t *alloc_nssm_service() {
-  nssm_service_t *service = (nssm_service_t *) HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(nssm_service_t));
-  if (! service) log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_OUT_OF_MEMORY, L"service", L"alloc_nssm_service()", 0);
-  return service;
-}
-
-/* Free memory for a service. */
-void cleanup_nssm_service(nssm_service_t *service) {
-  if (! service) return;
-  unregister_service_wait(service, true);
-  stop_resource_monitor(service);
-  stop_health_monitor(service);
-  close_status_snapshot(service);
-  if (service->env) HeapFree(GetProcessHeap(), 0, service->env);
-  if (service->env_extra) HeapFree(GetProcessHeap(), 0, service->env_extra);
-  if (service->process_handle) CloseHandle(service->process_handle);
-  if (service->job_handle) CloseHandle(service->job_handle);
-  if (service->stop_event) CloseHandle(service->stop_event);
-  if (service->lifecycle_section_initialised) {
-    DeleteCriticalSection(&service->lifecycle_section);
-  }
-  if (service->throttle_section_initialised) DeleteCriticalSection(&service->throttle_section);
-  if (service->health_section_initialised) DeleteCriticalSection(&service->health_section);
-  if (service->resource_section_initialised) DeleteCriticalSection(&service->resource_section);
-  if (service->initial_env) HeapFree(GetProcessHeap(), 0, service->initial_env);
-  delete service->config;
-  delete service->recovery_state;
-  HeapFree(GetProcessHeap(), 0, service);
-}
-
 /* About to install the service */
 /* Service initialisation */
 void WINAPI service_main(unsigned long argc, wchar_t **argv) {
@@ -504,7 +418,7 @@ int monitor_service(nssm_service_t *service) {
     return 0;
   }
   /* Monitor service */
-  if (! register_service_wait(service)) {
+  if (! register_service_process_wait(service)) {
     const unsigned long error = GetLastError();
     if (error == ERROR_OPERATION_ABORTED) return 0;
     log_event(EVENTLOG_ERROR_TYPE,
@@ -692,7 +606,7 @@ int start_service(nssm_service_t *service) {
 int stop_service(nssm_service_t *service, unsigned long exitcode) {
   set_restart_allowed(service, false);
   if (service->stop_event) SetEvent(service->stop_event);
-  unregister_service_wait(service, true);
+  unregister_service_process_wait(service, true);
   critical_section_guard lifecycle(&service->lifecycle_section);
 
   service->rotate_stdout_online = service->rotate_stderr_online = NSSM_ROTATE_OFFLINE;
@@ -806,7 +720,7 @@ void CALLBACK end_service(void *arg, unsigned char why) {
 
   /* Exit logging threads. */
   cleanup_loggers(service);
-  unregister_service_wait(service, false);
+  unregister_service_process_wait(service, false);
 
   /*
     The why argument is true if our wait timed out or false otherwise.
