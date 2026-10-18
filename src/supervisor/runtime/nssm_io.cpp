@@ -223,7 +223,7 @@ int get_output_handles(nssm_service_t *service, STARTUPINFO *si) {
   bool inherit_handles = false;
 
   /* Allocate a new console so we get a fresh stdin, stdout and stderr. */
-  alloc_console(service);
+  allocate_console(! service->no_console);
 
   /* stdin */
   if (service->stdin_path[0]) {

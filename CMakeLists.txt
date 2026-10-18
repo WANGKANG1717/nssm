@@ -71,7 +71,6 @@ set(NSSM_APP_SOURCES
 )
 
 set(NSSM_CLI_SOURCES
-  src/cli/console.cpp
   src/cli/output.cpp
   src/cli/service_commands.cpp
   src/cli/status.cpp
@@ -104,6 +103,7 @@ set(NSSM_SUPERVISOR_SOURCES
 )
 
 set(NSSM_PLATFORM_SOURCES
+  src/platform/console.cpp
   src/platform/env.cpp
   src/platform/event.cpp
   src/platform/registry.cpp

@@ -89,7 +89,7 @@ const TCHAR *nssm_imagepath() {
 }
 
 int _tmain(int argc, TCHAR **argv) {
-  if (check_console()) setup_utf8();
+  if (console_attached()) setup_utf8();
 
   const bool is_admin = is_process_administrator();
 

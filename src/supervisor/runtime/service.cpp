@@ -1,7 +1,6 @@
 #include "nssm.h"
 #include "child_process.h"
 #include "config.h"
-#include "console.h"
 #include "env.h"
 #include "event.h"
 #include "job_object.h"
