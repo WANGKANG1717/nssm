@@ -31,11 +31,13 @@ still requiring later decomposition are `get_output_handles`, `log_and_rotate`,
 |---|---|---|---|---|---|---|
 | `application_paths()` immutable cache | app startup; process lifetime | function-local immutable static | Low | Retain. | P3 | Version/CLI tests |
 | event error buffer | first use on each thread | `thread_local` vector, runtime-managed | Low; memory retained until thread exit | Retain; it prevents cross-thread formatting races. | P3 | Unit tests |
-| `nssm_service_t` | `service_main`; service runtime | `service_state.cpp`; lifecycle, health and resource locks | Normal service-process teardown is difficult to exercise without SCM integration. | Add an administrator CI lifecycle/chaos test. | P1 | Missing locally |
+| `nssm_service_t` | `service_main`; service runtime | `service_state.cpp`; lifecycle, health and resource locks | Normal service-process teardown requires SCM integration. | Retain the administrator CI lifecycle test and extend it with fault injection. | P2 | GitHub SCM test |
 | child process/job/wait handles | service launch/runtime | lifecycle lock plus `service_process_wait.cpp` | Ownership is now explicit; callback unregistration must remain outside lifecycle-lock waits. | Retain ordering and document it in tests. | P1 | GitHub SCM test |
 | health/resource threads and events | monitor start functions | monitor stop functions under dedicated locks | Manual handles are long-lived fields, but failure rollback and join-before-close are present. | Convert only if the runtime object itself becomes RAII-owned. | P2 | Partial |
 | status mapping/view | status publisher | `close_status_snapshot`; snapshot SRW lock | Reader consistency uses an odd/even sequence protocol. | Add multi-process stress coverage. | P2 | Unit coverage only |
-| online rotation state | control handler/logger/shutdown | shared scalar fields | Concurrent reads/writes are not synchronized; this is the only known open P1 race. | Replace with an interlocked/atomic state protocol and stress rotation during stop. | P1 | Required |
+| online rotation state | control handler/logger/shutdown | shared scalar fields | Concurrent reads/writes are not synchronized. | Replace with an interlocked/atomic state protocol and stress rotation during stop. | P1 | Required |
+| logger retry delays | logger thread/service shutdown | ordinary `Sleep` followed by cleanup's infinite join | Cancelling synchronous I/O cannot wake a disk-full/quota retry sleep, so stop can be delayed for tens of seconds. | Make retry backoff observe the service stop event. | P1 | Required |
+| debug privilege | process-tree query scope | `debug_privilege_guard` enables the privilege on the active thread token and restores both privilege and impersonation state. | Retain the scoped platform RAII implementation. | Done | Unit and SCM tests |
 
 No mutable process-wide global variable was found. Win32 transient handles in
 SCM, registry, process query, mapping and configuration code use the wrappers in
@@ -68,8 +70,8 @@ SCM, registry, process query, mapping and configuration code use the wrappers in
 
 Debug and Release builds each pass the five current tests, and GCC `-fanalyzer`
 builds without diagnostics. Local SCM integration requires elevation and remains
-a GitHub Actions gate. A release tag must not be created while the online log
-rotation state race above is open.
+a GitHub Actions gate. A release tag must not be created while either the online
+rotation race or the non-interruptible logger retry delay above is open.
 
 ## Product gaps after the audit
 
