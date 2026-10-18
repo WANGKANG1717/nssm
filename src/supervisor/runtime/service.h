@@ -21,6 +21,10 @@
 #define NSSM_FILE_SYSTEM_DRIVER _T("SERVICE_FILE_SYSTEM_DRIVER")
 #define NSSM_WIN32_OWN_PROCESS _T("SERVICE_WIN32_OWN_PROCESS")
 #define NSSM_WIN32_SHARE_PROCESS _T("SERVICE_WIN32_SHARE_PROCESS")
+
+#define DEPENDENCY_SERVICES (1 << 0)
+#define DEPENDENCY_GROUPS (1 << 1)
+#define DEPENDENCY_ALL (DEPENDENCY_SERVICES | DEPENDENCY_GROUPS)
 #define NSSM_INTERACTIVE_PROCESS _T("SERVICE_INTERACTIVE_PROCESS")
 #define NSSM_SHARE_INTERACTIVE_PROCESS NSSM_WIN32_SHARE_PROCESS _T("|") NSSM_INTERACTIVE_PROCESS
 #define NSSM_UNKNOWN _T("?")
@@ -170,12 +174,8 @@ int set_service_description(const TCHAR *, SC_HANDLE, TCHAR *);
 int get_service_description(const TCHAR *, SC_HANDLE, unsigned long, TCHAR *);
 int get_service_startup(const TCHAR *, SC_HANDLE, const QUERY_SERVICE_CONFIG *, unsigned long *);
 int get_service_username(const TCHAR *, const QUERY_SERVICE_CONFIG *, TCHAR **, size_t *);
-int pre_install_service(int, TCHAR **);
 int pre_remove_service(int, TCHAR **);
-int pre_edit_service(int, TCHAR **);
-int install_service(nssm_service_t *);
 int remove_service(nssm_service_t *);
-int edit_service(nssm_service_t *, bool);
 int control_service(unsigned long, int, TCHAR **, bool);
 int control_service(unsigned long, int, TCHAR **);
 void set_service_recovery(nssm_service_t *);

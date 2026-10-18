@@ -62,7 +62,6 @@
 #include "process.h"
 #include "process_options.h"
 #include "registry.h"
-#include "settings.h"
 #include "nssm_io.h"
 #endif
 
@@ -72,7 +71,6 @@ int quote(const TCHAR *, TCHAR *, size_t);
 void strip_basename(TCHAR *);
 int str_number(const TCHAR *, unsigned long *, TCHAR **);
 int str_number(const TCHAR *, unsigned long *);
-int num_cpus();
 int usage(int);
 const TCHAR *nssm_unquoted_imagepath();
 const TCHAR *nssm_imagepath();

@@ -104,7 +104,6 @@ set(NSSM_PLATFORM_SOURCES
   src/platform/imports.cpp
   src/platform/registry.cpp
   src/platform/security.cpp
-  src/platform/settings.cpp
   src/platform/utf8.cpp
 )
 
