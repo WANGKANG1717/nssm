@@ -387,6 +387,10 @@ int monitor_service(nssm_service_t *service) {
               service->exe, service->name, code, 0);
     return ret;
   }
+  if (! service->process_handle ||
+      WaitForSingleObject(service->stop_event, 0) == WAIT_OBJECT_0) {
+    return 0;
+  }
   log_event(EVENTLOG_INFORMATION_TYPE, NSSM_EVENT_STARTED_SERVICE, service->exe, service->flags, service->name, service->dir, 0);
 
   /* Monitor service */
@@ -719,9 +723,12 @@ void CALLBACK end_service(void *arg, unsigned char why) {
             service->name, code, _T("Restart"),
             service->exe, 0);
   while (monitor_service(service)) {
+    if (WaitForSingleObject(service->stop_event, 0) == WAIT_OBJECT_0) break;
     log_event(EVENTLOG_WARNING_TYPE, NSSM_EVENT_RESTART_SERVICE_FAILED,
               service->exe, service->name, 0);
-    Sleep(30000);
+    if (WaitForSingleObject(service->stop_event, 30000) == WAIT_OBJECT_0) {
+      break;
+    }
   }
 }
 
