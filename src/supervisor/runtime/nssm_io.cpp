@@ -42,7 +42,18 @@ static HANDLE create_logging_thread(TCHAR *service_name, TCHAR *path, unsigned l
   if (read_handle_ptr && ! *read_handle_ptr) {
     if (pipe_handle_ptr && ! *pipe_handle_ptr) {
       if (CreatePipe(read_handle_ptr, pipe_handle_ptr, 0, 0)) {
-        SetHandleInformation(*pipe_handle_ptr, HANDLE_FLAG_INHERIT, HANDLE_FLAG_INHERIT);
+        if (! SetHandleInformation(*pipe_handle_ptr, HANDLE_FLAG_INHERIT,
+                                   HANDLE_FLAG_INHERIT)) {
+          const unsigned long error = GetLastError();
+          CloseHandle(*read_handle_ptr);
+          CloseHandle(*pipe_handle_ptr);
+          *read_handle_ptr = nullptr;
+          *pipe_handle_ptr = nullptr;
+          log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_CREATEPIPE_FAILED,
+                    service_name, path, error_string(error), 0);
+          SetLastError(error);
+          return nullptr;
+        }
       }
       else {
         log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_CREATEPIPE_FAILED,
