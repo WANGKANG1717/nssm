@@ -1,0 +1,64 @@
+#include "status_query.h"
+
+#include "win32_handle.h"
+
+bool query_service_runtime_status(const std::wstring &name,
+                                  service_status_query_t *result) {
+  if (! result) {
+    SetLastError(ERROR_INVALID_PARAMETER);
+    return false;
+  }
+  *result = {};
+
+  unique_service_handle manager(OpenSCManagerW(
+      nullptr, SERVICES_ACTIVE_DATABASE, SC_MANAGER_CONNECT));
+  if (! manager) {
+    result->windows_error = GetLastError();
+    return false;
+  }
+  unique_service_handle service(
+      OpenServiceW(manager.get(), name.c_str(), SERVICE_QUERY_STATUS));
+  if (! service) {
+    result->windows_error = GetLastError();
+    return false;
+  }
+
+  SERVICE_STATUS_PROCESS status = {};
+  unsigned long needed = 0;
+  if (! QueryServiceStatusEx(service.get(), SC_STATUS_PROCESS_INFO,
+                             reinterpret_cast<unsigned char *>(&status),
+                             sizeof(status), &needed)) {
+    result->windows_error = GetLastError();
+    return false;
+  }
+
+  result->state = status.dwCurrentState;
+  result->wrapper_pid = status.dwProcessId;
+  status_snapshot_t snapshot = {};
+  unsigned long snapshot_error = ERROR_SUCCESS;
+  result->runtime_available =
+      read_status_snapshot(name, &snapshot, &snapshot_error);
+  if (result->runtime_available &&
+      (! status.dwProcessId || snapshot.wrapper_pid != status.dwProcessId)) {
+    result->runtime_available = false;
+    snapshot_error = ERROR_INVALID_DATA;
+  }
+  if (result->runtime_available) {
+    result->child_pid = snapshot.child_pid;
+    result->restart_count = snapshot.restart_count;
+    result->cpu_percent = snapshot.cpu_percent;
+    result->memory_bytes = snapshot.memory_bytes;
+    result->process_count = snapshot.process_count;
+    result->health = static_cast<runtime_health_t>(snapshot.health);
+    if (snapshot.child_pid && snapshot.process_started_ms) {
+      const unsigned long long now = GetTickCount64();
+      result->uptime_ms = now >= snapshot.process_started_ms
+                              ? now - snapshot.process_started_ms
+                              : 0;
+    }
+  }
+  result->windows_error = result->runtime_available
+                              ? ERROR_SUCCESS
+                              : snapshot_error;
+  return true;
+}

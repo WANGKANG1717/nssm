@@ -1,10 +1,7 @@
 #include "status.h"
 
 #include "output.h"
-#include "status_snapshot.h"
-#include "win32_handle.h"
-
-#include <windows.h>
+#include "status_query.h"
 
 #include <string>
 
@@ -33,71 +30,35 @@ int inspect_service_status_command(int argc, wchar_t **argv) {
     return static_cast<int>(cli_exit_code::usage);
   }
   std::wstring name = arguments.positional[0];
-  unique_service_handle manager(OpenSCManagerW(nullptr, SERVICES_ACTIVE_DATABASE,
-                                                SC_MANAGER_CONNECT));
-  if (! manager) {
-    unsigned long error = GetLastError();
+  service_status_query_t status;
+  if (! query_service_runtime_status(name, &status)) {
+    const unsigned long error = status.windows_error;
+    const bool not_found = error == ERROR_SERVICE_DOES_NOT_EXIST;
+    const bool permission = error == ERROR_ACCESS_DENIED;
     print_cli_error(arguments.json,
-                    error == ERROR_ACCESS_DENIED ? L"permission" : L"system",
-                    L"Unable to open the Service Control Manager", error);
-    return static_cast<int>(error == ERROR_ACCESS_DENIED
-                                ? cli_exit_code::permission
-                                : cli_exit_code::system);
-  }
-  unique_service_handle service(
-      OpenServiceW(manager.get(), name.c_str(), SERVICE_QUERY_STATUS));
-  if (! service) {
-    unsigned long error = GetLastError();
-    print_cli_error(arguments.json,
-                    error == ERROR_SERVICE_DOES_NOT_EXIST ? L"notFound"
-                                                          : L"system",
-                    L"Unable to open the service", error);
-    return static_cast<int>(error == ERROR_SERVICE_DOES_NOT_EXIST
+                    not_found ? L"notFound"
+                              : permission ? L"permission" : L"system",
+                    L"Unable to query the service", error);
+    return static_cast<int>(not_found
                                 ? cli_exit_code::conflict
-                                : cli_exit_code::system);
+                                : permission ? cli_exit_code::permission
+                                             : cli_exit_code::system);
   }
-  SERVICE_STATUS_PROCESS status = {};
-  unsigned long needed = 0;
-  if (! QueryServiceStatusEx(service.get(), SC_STATUS_PROCESS_INFO,
-                             reinterpret_cast<unsigned char *>(&status),
-                             sizeof(status), &needed)) {
-    unsigned long error = GetLastError();
-    print_cli_error(arguments.json, L"system",
-                    L"Unable to query service status", error);
-    return static_cast<int>(cli_exit_code::system);
-  }
-  status_snapshot_t snapshot = {};
-  unsigned long snapshot_error = ERROR_SUCCESS;
-  bool has_snapshot = read_status_snapshot(name, &snapshot, &snapshot_error);
-  if (has_snapshot &&
-      (! status.dwProcessId || snapshot.wrapper_pid != status.dwProcessId)) {
-    has_snapshot = false;
-    snapshot_error = ERROR_INVALID_DATA;
-  }
-  unsigned long long uptime_ms =
-      has_snapshot && snapshot.child_pid && snapshot.process_started_ms
-          ? GetTickCount64() - snapshot.process_started_ms
-          : 0;
-  const wchar_t *state = service_state_text(status.dwCurrentState);
-  const wchar_t *health =
-      has_snapshot
-          ? runtime_health_text(static_cast<runtime_health_t>(snapshot.health))
-          : L"unknown";
+  const wchar_t *state = service_state_text(status.state);
+  const wchar_t *health = runtime_health_text(status.health);
 
   if (! arguments.json) {
     fwprintf(stdout, L"Service: %ls\nState: %ls\nWrapper PID: %lu\n",
-             name.c_str(), state, status.dwProcessId);
+             name.c_str(), state, status.wrapper_pid);
     fwprintf(stdout, L"Child PID: %lu\nUptime: %llu ms\nHealth: %ls\n",
-             has_snapshot ? snapshot.child_pid : 0, uptime_ms, health);
+             status.child_pid, status.uptime_ms, health);
     fwprintf(stdout,
              L"Restarts: %lu\nCPU: %lu%%\nMemory: %llu bytes\nProcesses: %lu\n",
-             has_snapshot ? snapshot.restart_count : 0,
-             has_snapshot ? snapshot.cpu_percent : 0,
-             has_snapshot ? snapshot.memory_bytes : 0,
-             has_snapshot ? snapshot.process_count : 0);
-    if (! has_snapshot && status.dwCurrentState != SERVICE_STOPPED) {
+             status.restart_count, status.cpu_percent, status.memory_bytes,
+             status.process_count);
+    if (! status.runtime_available && status.state != SERVICE_STOPPED) {
       fwprintf(stdout, L"Runtime snapshot: unavailable (Windows error %lu)\n",
-               snapshot_error);
+               status.windows_error);
     }
   }
   else {
@@ -107,17 +68,14 @@ int inspect_service_status_command(int argc, wchar_t **argv) {
     write_json_string(stdout, state);
     fwprintf(stdout,
              L",\"wrapperPid\":%lu,\"childPid\":%lu,\"uptimeMs\":%llu",
-             status.dwProcessId, has_snapshot ? snapshot.child_pid : 0,
-             uptime_ms);
+             status.wrapper_pid, status.child_pid, status.uptime_ms);
     fputws(L",\"health\":", stdout);
     write_json_string(stdout, health);
     fwprintf(stdout,
              L",\"restartCount\":%lu,\"cpuPercent\":%lu,\"memoryBytes\":%llu,\"processCount\":%lu,\"runtimeAvailable\":%ls}\n",
-             has_snapshot ? snapshot.restart_count : 0,
-             has_snapshot ? snapshot.cpu_percent : 0,
-             has_snapshot ? snapshot.memory_bytes : 0,
-             has_snapshot ? snapshot.process_count : 0,
-             has_snapshot ? L"true" : L"false");
+             status.restart_count, status.cpu_percent, status.memory_bytes,
+             status.process_count,
+             status.runtime_available ? L"true" : L"false");
   }
   return static_cast<int>(cli_exit_code::success);
 }
