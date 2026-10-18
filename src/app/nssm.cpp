@@ -290,17 +290,6 @@ int _tmain(int argc, TCHAR **argv) {
     }
     if (str_equiv(argv[1], _T("statuscode"))) nssm_exit(control_service(SERVICE_CONTROL_INTERROGATE, argc - 2, argv + 2, true));
     if (str_equiv(argv[1], _T("rotate"))) nssm_exit(control_service(NSSM_SERVICE_CONTROL_ROTATE, argc - 2, argv + 2));
-    if (str_equiv(argv[1], _T("edit")) || str_equiv(argv[1], _T("get")) || str_equiv(argv[1], _T("set")) || str_equiv(argv[1], _T("reset")) || str_equiv(argv[1], _T("unset")) || str_equiv(argv[1], _T("dump"))) {
-      fwprintf(stderr,
-               L"error: registry-based configuration commands were removed; "
-               L"edit the JSON file and run 'nssm apply <config.json>'\n");
-      nssm_exit(2);
-    }
-    if (str_equiv(argv[1], _T("install"))) {
-      fwprintf(stderr,
-               L"error: 'install' was replaced by 'nssm apply <config.json>'\n");
-      nssm_exit(2);
-    }
     if (str_equiv(argv[1], _T("list"))) nssm_exit(list_nssm_services(argc - 2, argv + 2));
     if (str_equiv(argv[1], _T("processes"))) nssm_exit(service_process_tree(argc - 2, argv + 2));
     if (str_equiv(argv[1], _T("remove"))) {
