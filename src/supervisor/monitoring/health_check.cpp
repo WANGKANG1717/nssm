@@ -1,18 +1,20 @@
 #include <winsock2.h>
 #include <ws2tcpip.h>
+#include <winhttp.h>
 
 #include "health_check.h"
 #include "child_process.h"
 #include "job_object.h"
 #include "win32_handle.h"
 
-#include <winhttp.h>
-
 #include <algorithm>
 #include <string>
 #include <vector>
 
 namespace {
+
+using unique_winhttp_handle =
+    unique_win32_resource<HINTERNET, WinHttpCloseHandle>;
 
 health_probe_result_t failure(unsigned long error, std::wstring detail) {
   return {false, error, std::move(detail)};
@@ -128,51 +130,41 @@ health_probe_result_t check_http(const health_check_config_t &config) {
   }
   if (target.empty()) target = L"/";
 
-  HINTERNET session = WinHttpOpen(L"NSSM/3 health-check",
-                                  WINHTTP_ACCESS_TYPE_NO_PROXY,
-                                  WINHTTP_NO_PROXY_NAME,
-                                  WINHTTP_NO_PROXY_BYPASS, 0);
+  unique_winhttp_handle session(WinHttpOpen(
+      L"NSSM/3 health-check", WINHTTP_ACCESS_TYPE_NO_PROXY,
+      WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0));
   if (! session) return failure(GetLastError(), L"WinHttpOpen failed");
-  WinHttpSetTimeouts(session, config.timeout_ms, config.timeout_ms,
-                     config.timeout_ms, config.timeout_ms);
-  HINTERNET connection = WinHttpConnect(session, host.c_str(),
-                                        components.nPort, 0);
+  if (! WinHttpSetTimeouts(session.get(), config.timeout_ms,
+                           config.timeout_ms, config.timeout_ms,
+                           config.timeout_ms)) {
+    return failure(GetLastError(), L"WinHttpSetTimeouts failed");
+  }
+  unique_winhttp_handle connection(
+      WinHttpConnect(session.get(), host.c_str(), components.nPort, 0));
   if (! connection) {
-    unsigned long error = GetLastError();
-    WinHttpCloseHandle(session);
-    return failure(error, L"WinHttpConnect failed");
+    return failure(GetLastError(), L"WinHttpConnect failed");
   }
   unsigned long flags = components.nScheme == INTERNET_SCHEME_HTTPS
                             ? WINHTTP_FLAG_SECURE
                             : 0;
-  HINTERNET request = WinHttpOpenRequest(
-      connection, L"GET", target.c_str(), nullptr, WINHTTP_NO_REFERER,
-      WINHTTP_DEFAULT_ACCEPT_TYPES, flags);
+  unique_winhttp_handle request(WinHttpOpenRequest(
+      connection.get(), L"GET", target.c_str(), nullptr, WINHTTP_NO_REFERER,
+      WINHTTP_DEFAULT_ACCEPT_TYPES, flags));
   if (! request) {
-    unsigned long error = GetLastError();
-    WinHttpCloseHandle(connection);
-    WinHttpCloseHandle(session);
-    return failure(error, L"WinHttpOpenRequest failed");
+    return failure(GetLastError(), L"WinHttpOpenRequest failed");
   }
-  bool sent = WinHttpSendRequest(request, WINHTTP_NO_ADDITIONAL_HEADERS, 0,
+  bool sent = WinHttpSendRequest(request.get(), WINHTTP_NO_ADDITIONAL_HEADERS, 0,
                                  WINHTTP_NO_REQUEST_DATA, 0, 0, 0) &&
-              WinHttpReceiveResponse(request, nullptr);
+              WinHttpReceiveResponse(request.get(), nullptr);
   if (! sent) {
-    unsigned long error = GetLastError();
-    WinHttpCloseHandle(request);
-    WinHttpCloseHandle(connection);
-    WinHttpCloseHandle(session);
-    return failure(error, L"HTTP request failed");
+    return failure(GetLastError(), L"HTTP request failed");
   }
   unsigned long status = 0;
   unsigned long size = sizeof(status);
   bool queried = WinHttpQueryHeaders(
-      request, WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER,
+      request.get(), WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER,
       WINHTTP_HEADER_NAME_BY_INDEX, &status, &size, WINHTTP_NO_HEADER_INDEX);
   unsigned long error = queried ? ERROR_SUCCESS : GetLastError();
-  WinHttpCloseHandle(request);
-  WinHttpCloseHandle(connection);
-  WinHttpCloseHandle(session);
   if (! queried) return failure(error, L"reading HTTP status failed");
   if (status < config.minimum_status || status > config.maximum_status) {
     return failure(ERROR_BAD_NET_RESP,
