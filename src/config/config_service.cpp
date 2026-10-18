@@ -406,6 +406,16 @@ bool atomic_copy_file(const std::wstring &source,
 
 }  // namespace
 
+bool registered_service_config_path(const wchar_t *service_name,
+                                    std::wstring *path,
+                                    unsigned long *error) {
+  if (! service_name || ! service_name[0] || ! path) {
+    if (error) *error = ERROR_INVALID_PARAMETER;
+    return false;
+  }
+  return read_config_path(service_name, path, error);
+}
+
 int export_service_config_command(int argc, wchar_t **argv) {
   cli_arguments_t arguments = parse_cli_arguments(argc, argv);
   if (arguments.verbose || arguments.positional.size() != 2 ||

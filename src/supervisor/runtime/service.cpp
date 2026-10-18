@@ -2381,20 +2381,13 @@ int list_nssm_services(int argc, TCHAR **argv) {
     }
 
     for (i = 0; i < count; i++) {
-      /* Try to get the service parameters. */
-      nssm_service_t *service = alloc_nssm_service();
-      if (! service) {
-        HeapFree(GetProcessHeap(), 0, status);
-        print_message(stderr, NSSM_MESSAGE_OUT_OF_MEMORY, _T("nssm_service_t"), _T("list_nssm_services()"));
-        return 5;
+      std::wstring config_path;
+      unsigned long config_error = ERROR_SUCCESS;
+      bool managed = registered_service_config_path(
+          status[i].lpServiceName, &config_path, &config_error);
+      if (including_native || managed) {
+        _tprintf(_T("%s\n"), status[i].lpServiceName);
       }
-      _sntprintf_s(service->name, _countof(service->name), _TRUNCATE, _T("%s"), status[i].lpServiceName);
-
-      get_parameters(service, 0);
-      /* We manage the service if we have an Application. */
-      if (including_native || service->exe[0]) _tprintf(_T("%s\n"), service->name);
-
-      cleanup_nssm_service(service);
     }
 
     if (ret) break;

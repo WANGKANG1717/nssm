@@ -73,6 +73,10 @@ try {
 
   $applied = Invoke-NssmJson @('apply', '--json', $configPath)
   if (-not $applied.ok) { throw 'apply did not report success' }
+  $managedServices = @(& $executablePath list)
+  if ($LASTEXITCODE -ne 0 -or $managedServices -notcontains $serviceName) {
+    throw 'declaratively managed service was missing from nssm list'
+  }
   & $executablePath start $serviceName | Out-Null
   if ($LASTEXITCODE -ne 0) { throw 'service start failed' }
 

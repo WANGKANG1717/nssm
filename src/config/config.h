@@ -196,6 +196,9 @@ int validate_service_config_command(int argc, wchar_t **argv);
 int apply_service_config_command(int argc, wchar_t **argv);
 int plan_service_config_command(int argc, wchar_t **argv);
 int export_service_config_command(int argc, wchar_t **argv);
+bool registered_service_config_path(const wchar_t *service_name,
+                                    std::wstring *path,
+                                    unsigned long *error);
 bool load_registered_service_config(nssm_service_t *service,
                                     config_validation_t *validation);
 
