@@ -68,6 +68,13 @@ jobs:
             exit 1
           fi
 
+      - name: SCM lifecycle integration test
+        if: matrix.preset == 'release'
+        shell: powershell
+        run: >-
+          .\tests\integration\service_lifecycle.ps1
+          -Executable .\out\Release\win64\nssm.exe
+
       - name: Upload executable
         uses: actions/upload-artifact@v4
         with:

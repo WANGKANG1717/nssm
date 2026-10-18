@@ -363,4 +363,7 @@ CPU、内存和进程数。运行时数据通过带只读用户 ACL 的共享内
 ### 测试与验证现状
 - CTest 覆盖纯逻辑与本地 Win32 API 测试，不依赖外网。
 - 真实 SCM 安装、启停和账户权限场景仍需在管理员环境执行集成测试。
+- `tests/integration/service_lifecycle.ps1` 在管理员环境执行完整 SCM 生命周期：
+  apply、start、运行时 JSON 状态、原子 export、stop 和 remove。GitHub Actions 的
+  Release 作业会运行该脚本，并通过唯一服务名和 `finally` 清理避免污染运行器。
 
