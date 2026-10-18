@@ -314,9 +314,10 @@ bool atomic_copy_file(const std::wstring &source,
   }
   bool flushed = FlushFileBuffers(file.get()) != FALSE;
   unsigned long flush_error = flushed ? ERROR_SUCCESS : GetLastError();
-  if (! flushed || ! MoveFileExW(temporary.c_str(), destination.c_str(),
-                                  MOVEFILE_REPLACE_EXISTING |
-                                      MOVEFILE_WRITE_THROUGH)) {
+  file.reset();
+  if (! flushed ||
+      ! MoveFileExW(temporary.c_str(), destination.c_str(),
+                    MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) {
     if (error) *error = flushed ? GetLastError() : flush_error;
     DeleteFileW(temporary.c_str());
     return false;
