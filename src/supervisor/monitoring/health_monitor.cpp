@@ -3,6 +3,7 @@
 #include "config.h"
 #include "health_check.h"
 #include "job_object.h"
+#include "status_snapshot.h"
 
 #include <string>
 #include <vector>
@@ -69,6 +70,7 @@ unsigned long WINAPI health_monitor_thread(void *argument) {
                   service->name, detail.c_str(), count, 0);
       }
       if (service->health_failures >= config.failure_threshold) {
+        publish_status_snapshot(service);
         log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_HEALTH_WATCHDOG,
                   service->name, detail.c_str(), 0);
         unsigned long error = ERROR_SUCCESS;
@@ -81,6 +83,7 @@ unsigned long WINAPI health_monitor_thread(void *argument) {
         return kHealthWatchdogExitCode;
       }
     }
+    publish_status_snapshot(service);
 
     if (WaitForSingleObject(stop_event, config.interval_ms) == WAIT_OBJECT_0) {
       return 0;

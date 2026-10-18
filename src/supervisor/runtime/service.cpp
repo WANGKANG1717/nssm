@@ -4,6 +4,7 @@
 #include "job_object.h"
 #include "health_monitor.h"
 #include "readiness.h"
+#include "status_snapshot.h"
 #include "recovery.h"
 #include "resource_monitor.h"
 
@@ -816,6 +817,7 @@ void cleanup_nssm_service(nssm_service_t *service) {
   if (! service) return;
   stop_resource_monitor(service);
   stop_health_monitor(service);
+  close_status_snapshot(service);
   if (service->username) HeapFree(GetProcessHeap(), 0, service->username);
   if (service->password) {
     SecureZeroMemory(service->password, service->passwordlen * sizeof(TCHAR));
@@ -1641,6 +1643,10 @@ void WINAPI service_main(unsigned long argc, TCHAR **argv) {
     stop_service(service, 2, true, true);
     return;
   }
+  if (! create_status_snapshot(service)) {
+    log_event(EVENTLOG_WARNING_TYPE, NSSM_EVENT_STATUS_SNAPSHOT_FAILED,
+              service->name, error_string(GetLastError()), 0);
+  }
 
   /* Remember our creation time. */
   if (get_process_creation_time(GetCurrentProcess(), &service->nssm_creation_time)) ZeroMemory(&service->nssm_creation_time, sizeof(service->nssm_creation_time));
@@ -1987,6 +1993,7 @@ int start_service(nssm_service_t *service) {
     service->process_handle = pi.hProcess;
     service->pid = pi.dwProcessId;
     service->process_started_ms = GetTickCount64();
+    publish_status_snapshot(service);
 
     if (! assign_process_to_service_job(service->job_handle,
                                         service->process_handle, &job_error)) {
@@ -2092,6 +2099,7 @@ int start_service(nssm_service_t *service) {
   service->status.dwWaitHint = 0;
   service->status.dwControlsAccepted &= ~SERVICE_ACCEPT_PAUSE_CONTINUE;
   SetServiceStatus(service->status_handle, &service->status);
+  publish_status_snapshot(service);
 
   /* Post-start hook. */
   if (! service->throttle) {
@@ -2222,6 +2230,7 @@ void CALLBACK end_service(void *arg, unsigned char why) {
     kill_process_tree(&k, service->pid);
   }
   service->pid = 0;
+  publish_status_snapshot(service);
 
   /* Exit hook. */
   service->exit_count++;
@@ -2250,6 +2259,7 @@ void CALLBACK end_service(void *arg, unsigned char why) {
     recovery_decision_t decision = evaluate_recovery(
         service->config->recovery, service->recovery_state, exitcode, now_ms,
         run_duration_ms, static_cast<unsigned long>(counter.QuadPart));
+    publish_status_snapshot(service);
     if (! decision.should_restart()) {
       const TCHAR *reason = decision.result == recovery_result_t::clean_exit
                                 ? _T("clean exit")

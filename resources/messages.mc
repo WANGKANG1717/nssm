@@ -36,7 +36,7 @@ To manage a service:
 
         nssm restart <servicename>
 
-        nssm status <servicename>
+        nssm status [--verbose] [--json] <servicename>
 
         nssm statuscode <servicename>
 
@@ -59,7 +59,8 @@ NSSM：稳定可靠的服务管理器
 
   管理：
     nssm start|stop|restart <服务名>
-    nssm status|statuscode <服务名>
+    nssm status [--verbose] [--json] <服务名>
+    nssm statuscode <服务名>
     nssm rotate|processes <服务名>
 .
 
@@ -2249,6 +2250,16 @@ Service %1 failed its readiness check: %2.
 .
 Language = Chinese
 服务 %1 未通过就绪检查：%2。
+.
+
+MessageId = +1
+SymbolicName = NSSM_EVENT_STATUS_SNAPSHOT_FAILED
+Severity = Warning
+Language = English
+Failed to create the runtime status snapshot for service %1: %2.
+.
+Language = Chinese
+无法为服务 %1 创建运行时状态快照：%2。
 .
 
 MessageId = +1

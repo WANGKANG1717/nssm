@@ -8,6 +8,9 @@ cli_arguments_t parse_cli_arguments(int argc, wchar_t **argv) {
     if (argv[index] && ! _wcsicmp(argv[index], L"--json")) {
       parsed.json = true;
     }
+    else if (argv[index] && ! _wcsicmp(argv[index], L"--verbose")) {
+      parsed.verbose = true;
+    }
     else {
       parsed.positional.push_back(argv[index]);
     }

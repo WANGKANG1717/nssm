@@ -17,6 +17,7 @@ enum class cli_exit_code : int {
 
 struct cli_arguments_t {
   bool json = false;
+  bool verbose = false;
   std::vector<wchar_t *> positional;
 };
 

@@ -1,6 +1,7 @@
 #include "nssm.h"
 #include "config.h"
 #include "job_object.h"
+#include "status_snapshot.h"
 
 #include <string>
 
@@ -31,10 +32,13 @@ unsigned long WINAPI resource_monitor_thread(void *argument) {
   job_accounting_t previous = {};
   unsigned long error = ERROR_SUCCESS;
   if (! query_service_job(service->job_handle, &previous, &error)) {
-    terminate_for_resource(service, L"monitor failure",
-                           L"initial Job Object query failed with error " +
-                               std::to_wstring(error));
-    return kResourceWatchdogExitCode;
+    if (config.enabled()) {
+      terminate_for_resource(service, L"monitor failure",
+                             L"initial Job Object query failed with error " +
+                                 std::to_wstring(error));
+      return kResourceWatchdogExitCode;
+    }
+    return 0;
   }
   unsigned long long previous_tick = GetTickCount64();
   unsigned long query_failures = 0;
@@ -45,10 +49,13 @@ unsigned long WINAPI resource_monitor_thread(void *argument) {
     unsigned long long now = GetTickCount64();
     if (! query_service_job(service->job_handle, &current, &error)) {
       if (++query_failures >= 3) {
-        terminate_for_resource(service, L"monitor failure",
-                               L"Job Object query failed with error " +
-                                   std::to_wstring(error));
-        return kResourceWatchdogExitCode;
+        if (config.enabled()) {
+          terminate_for_resource(service, L"monitor failure",
+                                 L"Job Object query failed with error " +
+                                     std::to_wstring(error));
+          return kResourceWatchdogExitCode;
+        }
+        return 0;
       }
       continue;
     }
@@ -64,9 +71,15 @@ unsigned long WINAPI resource_monitor_thread(void *argument) {
     }
 
     unsigned long long elapsed_ms = now > previous_tick ? now - previous_tick : 0;
+    unsigned long percent = elapsed_ms
+                                ? calculate_job_cpu_percent(
+                                      previous, current, elapsed_ms, processors)
+                                : 0;
+    service->resource_cpu_percent = percent;
+    service->resource_memory_bytes = current.job_memory;
+    service->resource_processes = current.active_processes;
+    publish_status_snapshot(service);
     if (config.maximum_cpu_percent && elapsed_ms) {
-      unsigned long percent = calculate_job_cpu_percent(
-          previous, current, elapsed_ms, processors);
       if (percent > config.maximum_cpu_percent) {
         ++service->resource_cpu_violations;
         if (service->resource_cpu_violations >=
@@ -89,7 +102,7 @@ unsigned long WINAPI resource_monitor_thread(void *argument) {
 }  // namespace
 
 bool start_resource_monitor(nssm_service_t *service) {
-  if (! service || ! service->config || ! service->config->resources.enabled()) {
+  if (! service || ! service->config) {
     return true;
   }
   EnterCriticalSection(&service->health_section);

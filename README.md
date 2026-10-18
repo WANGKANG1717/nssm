@@ -191,6 +191,12 @@ TrustedInstaller 控制，且不能向其他主体授予修改权限；不安全
   - 控制：`nssm pause <ServiceName>` / `nssm continue <ServiceName>` / `nssm rotate <ServiceName>`（按需轮转需启用在线轮转）
   - 进程树：`nssm processes <ServiceName>`
 
+详细状态可使用 `nssm status --verbose <ServiceName>`；自动化程序使用
+`nssm status --json <ServiceName>`。除了 SCM 状态和包装进程 PID，还会返回
+实际子进程 PID、运行时长、健康状态、恢复重启次数，以及整个 Job Object 的
+CPU、内存和进程数。运行时数据通过带只读用户 ACL 的共享内存快照发布，不会
+高频写入注册表；服务停止或旧版本服务没有快照时，`runtimeAvailable` 为 `false`。
+
 - 账户与登录（Log on）
   - 本地系统账户：`nssm set <ServiceName> ObjectName LocalSystem`
   - 指定账户+密码：`nssm set <ServiceName> ObjectName <username> "<password>"`（空密码可用 `""`）

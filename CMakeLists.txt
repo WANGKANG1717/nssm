@@ -73,6 +73,7 @@ set(NSSM_APP_SOURCES
 set(NSSM_CLI_SOURCES
   src/cli/console.cpp
   src/cli/output.cpp
+  src/cli/status.cpp
 )
 
 set(NSSM_CONFIG_SOURCES
@@ -88,6 +89,7 @@ set(NSSM_SUPERVISOR_SOURCES
   src/supervisor/monitoring/health_monitor.cpp
   src/supervisor/monitoring/readiness.cpp
   src/supervisor/monitoring/resource_monitor.cpp
+  src/supervisor/monitoring/status_snapshot.cpp
   src/supervisor/runtime/account.cpp
   src/supervisor/runtime/hook.cpp
   src/supervisor/runtime/nssm_io.cpp

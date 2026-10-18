@@ -919,7 +919,8 @@ bool load_service_config(const wchar_t *path, service_config_t *config,
 
 int validate_service_config_command(int argc, wchar_t **argv) {
   cli_arguments_t arguments = parse_cli_arguments(argc, argv);
-  if (arguments.positional.size() != 1 || ! arguments.positional[0]) {
+  if (arguments.verbose || arguments.positional.size() != 1 ||
+      ! arguments.positional[0]) {
     print_cli_error(arguments.json, L"usage",
                     L"Usage: nssm validate [--json] <config.json>");
     return static_cast<int>(cli_exit_code::usage);

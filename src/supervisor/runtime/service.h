@@ -31,6 +31,7 @@
 
 struct service_config_t;
 struct recovery_state_t;
+struct status_snapshot_t;
 
 typedef struct nssm_service_t {
   bool native;
@@ -127,6 +128,11 @@ typedef struct nssm_service_t {
   HANDLE resource_stop_event;
   HANDLE resource_thread;
   unsigned long resource_cpu_violations;
+  unsigned long resource_cpu_percent;
+  unsigned long resource_processes;
+  unsigned long long resource_memory_bytes;
+  HANDLE status_mapping;
+  status_snapshot_t *status_snapshot;
   CONDITION_VARIABLE throttle_condition;
   HANDLE throttle_timer;
   LARGE_INTEGER throttle_duetime;

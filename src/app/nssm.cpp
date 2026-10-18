@@ -1,5 +1,6 @@
 #include "nssm.h"
 #include "output.h"
+#include "status.h"
 #include "config.h"
 
 extern unsigned long tls_index;
@@ -297,7 +298,13 @@ int _tmain(int argc, TCHAR **argv) {
     }
     if (str_equiv(argv[1], _T("pause"))) nssm_exit(control_service(SERVICE_CONTROL_PAUSE, argc - 2, argv + 2));
     if (str_equiv(argv[1], _T("continue"))) nssm_exit(control_service(SERVICE_CONTROL_CONTINUE, argc - 2, argv + 2));
-    if (str_equiv(argv[1], _T("status"))) nssm_exit(control_service(SERVICE_CONTROL_INTERROGATE, argc - 2, argv + 2));
+    if (str_equiv(argv[1], _T("status"))) {
+      cli_arguments_t arguments = parse_cli_arguments(argc - 2, argv + 2);
+      if (arguments.verbose || arguments.json) {
+        nssm_exit(inspect_service_status_command(argc - 2, argv + 2));
+      }
+      nssm_exit(control_service(SERVICE_CONTROL_INTERROGATE, argc - 2, argv + 2));
+    }
     if (str_equiv(argv[1], _T("statuscode"))) nssm_exit(control_service(SERVICE_CONTROL_INTERROGATE, argc - 2, argv + 2, true));
     if (str_equiv(argv[1], _T("rotate"))) nssm_exit(control_service(NSSM_SERVICE_CONTROL_ROTATE, argc - 2, argv + 2));
     if (str_equiv(argv[1], _T("edit")) || str_equiv(argv[1], _T("get")) || str_equiv(argv[1], _T("set")) || str_equiv(argv[1], _T("reset")) || str_equiv(argv[1], _T("unset")) || str_equiv(argv[1], _T("dump"))) {
