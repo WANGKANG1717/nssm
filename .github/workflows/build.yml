@@ -75,9 +75,45 @@ jobs:
           .\tests\integration\service_lifecycle.ps1
           -Executable .\out\Release\win64\nssm.exe
 
+      - name: Sign release executable
+        if: matrix.preset == 'release'
+        shell: powershell
+        env:
+          SIGNING_CERTIFICATE: ${{ secrets.WINDOWS_SIGNING_CERT_BASE64 }}
+          SIGNING_PASSWORD: ${{ secrets.WINDOWS_SIGNING_CERT_PASSWORD }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:SIGNING_CERTIFICATE)) {
+            Write-Host 'Signing certificate is not configured; producing an unsigned release.'
+            exit 0
+          }
+          .\cmake\SignWindowsBinary.ps1 `
+            -Executable .\out\Release\win64\nssm.exe `
+            -CertificateBase64 $env:SIGNING_CERTIFICATE `
+            -CertificatePassword $env:SIGNING_PASSWORD
+
+      - name: Package release
+        if: matrix.preset == 'release'
+        shell: powershell
+        run: >-
+          .\cmake\PackageRelease.ps1
+          -Executable .\out\Release\win64\nssm.exe
+          -OutputDirectory .\out\package
+          -Version 3.0.0
+          -SourceDirectory .
+
       - name: Upload executable
         uses: actions/upload-artifact@v4
         with:
           name: nssm-win64-${{ matrix.configuration }}
           path: out/${{ matrix.configuration }}/win64/nssm.exe
+          if-no-files-found: error
+
+      - name: Upload release bundle
+        if: matrix.preset == 'release'
+        uses: actions/upload-artifact@v4
+        with:
+          name: nssm-win64-release-bundle
+          path: |
+            out/package/nssm-3.0.0-win64.zip
+            out/package/nssm-3.0.0-win64.zip.sha256
           if-no-files-found: error

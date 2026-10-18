@@ -75,6 +75,11 @@ $env:PATH = "$toolBin;$env:PATH"
 
 `.github/workflows/build.yml` 会在 push、pull request 或手动触发时，使用 MSYS2 UCRT64 分别构建和测试 Debug、Release。工作流还会验证产物是 x64 PE，并检查其没有动态依赖 `libgcc`、`libstdc++` 或 `libwinpthread`，最后上传 `nssm-win64-Debug` 和 `nssm-win64-Release` 工件。
 
+Release 作业还会生成版本化 ZIP、SHA-256 校验文件和 SPDX 2.3 SBOM。仓库配置
+`WINDOWS_SIGNING_CERT_BASE64` 与 `WINDOWS_SIGNING_CERT_PASSWORD` secrets 后，会先
+使用 SHA-256 和可信时间戳签名、验证 `nssm.exe`，再进行打包；未配置证书时明确
+产出未签名构件。
+
 ## 构建与资源说明
 
 - `CMakeLists.txt`：唯一受支持的构建入口；旧 VS2008 工程已删除。
