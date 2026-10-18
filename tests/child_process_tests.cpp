@@ -9,6 +9,7 @@
 #include "process_options.h"
 #include "readiness.h"
 #include "recovery.h"
+#include "win32_handle.h"
 
 #include <aclapi.h>
 
@@ -686,6 +687,16 @@ void readiness_tests() {
   expect(result.state == readiness_state_t::timed_out &&
              result.error == ERROR_TIMEOUT,
          L"readiness should fail when its startup deadline expires");
+
+  unique_handle cancellation(CreateEventW(nullptr, TRUE, TRUE, nullptr));
+  config = {};
+  config.probe.type = health_check_type_t::process;
+  config.startup_timeout_ms = 1000;
+  result = wait_for_readiness(config, GetCurrentProcess(), nullptr, nullptr,
+                              cancellation.get());
+  expect(result.state == readiness_state_t::cancelled &&
+             result.error == ERROR_CANCELLED,
+         L"readiness should stop when service cancellation is signalled");
 }
 
 void path_security_tests() {

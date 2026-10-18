@@ -26,12 +26,21 @@ void report_start_pending(SERVICE_STATUS_HANDLE status_handle,
   SetServiceStatus(status_handle, status);
 }
 
-bool wait_interval(HANDLE process, unsigned long milliseconds,
+bool wait_interval(HANDLE process, HANDLE cancellation_event,
+                   unsigned long milliseconds,
                    readiness_result_t *failure) {
-  unsigned long result = WaitForSingleObject(process, milliseconds);
+  HANDLE handles[] = {process, cancellation_event};
+  unsigned long result = cancellation_event
+                             ? WaitForMultipleObjects(2, handles, FALSE,
+                                                      milliseconds)
+                             : WaitForSingleObject(process, milliseconds);
   if (result == WAIT_TIMEOUT) return true;
   if (result == WAIT_OBJECT_0) {
     *failure = process_exited(process);
+  }
+  else if (cancellation_event && result == WAIT_OBJECT_0 + 1) {
+    *failure = {readiness_state_t::cancelled, ERROR_CANCELLED,
+                L"service stop was requested"};
   }
   else {
     *failure = {readiness_state_t::error, GetLastError(),
@@ -45,6 +54,7 @@ bool wait_interval(HANDLE process, unsigned long milliseconds,
 readiness_result_t wait_for_readiness(
     const readiness_config_t &config, HANDLE application_process,
     const wchar_t *environment, const wchar_t *working_directory,
+    HANDLE cancellation_event,
     SERVICE_STATUS_HANDLE status_handle, SERVICE_STATUS *service_status) {
   if (! config.enabled()) {
     return {readiness_state_t::ready, ERROR_SUCCESS,
@@ -61,8 +71,8 @@ readiness_result_t wait_for_readiness(
     report_start_pending(status_handle, service_status,
                          config.probe.initial_delay_ms);
     readiness_result_t failure;
-    if (! wait_interval(application_process, config.probe.initial_delay_ms,
-                        &failure)) {
+    if (! wait_interval(application_process, cancellation_event,
+                        config.probe.initial_delay_ms, &failure)) {
       return failure;
     }
   }
@@ -70,6 +80,11 @@ readiness_result_t wait_for_readiness(
   unsigned long consecutive_successes = 0;
   std::wstring last_detail = L"readiness probe did not complete";
   while (true) {
+    if (cancellation_event &&
+        WaitForSingleObject(cancellation_event, 0) == WAIT_OBJECT_0) {
+      return {readiness_state_t::cancelled, ERROR_CANCELLED,
+              L"service stop was requested"};
+    }
     unsigned long long now = GetTickCount64();
     if (now >= deadline) {
       return {readiness_state_t::timed_out, ERROR_TIMEOUT,
@@ -108,7 +123,7 @@ readiness_result_t wait_for_readiness(
     }
     remaining = static_cast<unsigned long>(deadline - now);
     readiness_result_t failure;
-    if (! wait_interval(application_process,
+    if (! wait_interval(application_process, cancellation_event,
                         std::min(config.probe.interval_ms, remaining),
                         &failure)) {
       return failure;

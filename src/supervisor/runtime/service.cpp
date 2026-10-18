@@ -48,8 +48,12 @@ static int finish_service_start(nssm_service_t *service,
   if (service->config->readiness.enabled()) {
     readiness_result_t readiness = wait_for_readiness(
         service->config->readiness, service->process_handle, environment,
-        service->dir, service->status_handle, &service->status);
+        service->dir, service->stop_event, service->status_handle,
+        &service->status);
     if (! readiness.ready()) {
+      if (readiness.state == readiness_state_t::cancelled) {
+        return kStartHandledByRecovery;
+      }
       log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_READINESS_FAILED,
                 service->name, readiness.detail.c_str(), 0);
       if (readiness.state != readiness_state_t::process_exited &&
@@ -256,6 +260,7 @@ void cleanup_nssm_service(nssm_service_t *service) {
   if (service->process_handle) CloseHandle(service->process_handle);
   if (service->job_handle) CloseHandle(service->job_handle);
   if (service->wait_handle) UnregisterWait(service->wait_handle);
+  if (service->stop_event) CloseHandle(service->stop_event);
   if (service->throttle_section_initialised) DeleteCriticalSection(&service->throttle_section);
   if (service->health_section_initialised) DeleteCriticalSection(&service->health_section);
   if (service->resource_section_initialised) DeleteCriticalSection(&service->resource_section);
@@ -297,6 +302,23 @@ void WINAPI service_main(unsigned long argc, TCHAR **argv) {
   service->process_handle = 0;
   service->pid = 0;
 
+  /* Initialise all state which can be reached by the control handler. */
+  InitializeCriticalSection(&service->throttle_section);
+  InitializeConditionVariable(&service->throttle_condition);
+  service->throttle_section_initialised = true;
+  InitializeCriticalSection(&service->health_section);
+  service->health_section_initialised = true;
+  InitializeCriticalSection(&service->resource_section);
+  service->resource_section_initialised = true;
+  service->stop_event = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+  if (! service->stop_event) {
+    log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_CREATEEVENT_FAILED,
+              service->name, error_string(GetLastError()), 0);
+    cleanup_nssm_service(service);
+    return;
+  }
+  service->allow_restart = true;
+
   /* Register control handler */
   service->status_handle = RegisterServiceCtrlHandlerEx(NSSM, service_control_handler, (void *) service);
   if (! service->status_handle) {
@@ -324,17 +346,6 @@ void WINAPI service_main(unsigned long argc, TCHAR **argv) {
       CloseServiceHandle(services);
     }
   }
-
-  /* Used for signalling a resume if the service pauses when throttled. */
-  InitializeCriticalSection(&service->throttle_section);
-  InitializeConditionVariable(&service->throttle_condition);
-  service->throttle_section_initialised = true;
-
-  /* Serialise health monitor startup and shutdown with process exit. */
-  InitializeCriticalSection(&service->health_section);
-  service->health_section_initialised = true;
-  InitializeCriticalSection(&service->resource_section);
-  service->resource_section_initialised = true;
 
   /* Remember our initial environment. */
   service->initial_env = copy_environment();
@@ -368,7 +379,7 @@ void WINAPI service_main(unsigned long argc, TCHAR **argv) {
   /* Remember our creation time. */
   if (get_process_creation_time(GetCurrentProcess(), &service->nssm_creation_time)) ZeroMemory(&service->nssm_creation_time, sizeof(service->nssm_creation_time));
 
-  service->allow_restart = true;
+  if (WaitForSingleObject(service->stop_event, 0) == WAIT_OBJECT_0) return;
   if (! start_detached_thread(launch_service, service)) {
     log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_CREATETHREAD_FAILED, error_string(GetLastError()), 0);
     stop_service(service, 0);
@@ -450,6 +461,7 @@ unsigned long WINAPI service_control_handler(unsigned long control, unsigned lon
       /* Immediately block further controls. */
       service->allow_restart = false;
       WakeConditionVariable(&service->throttle_condition);
+      SetEvent(service->stop_event);
       service->status.dwCurrentState = SERVICE_STOP_PENDING;
       service->status.dwControlsAccepted = 0;
       SetServiceStatus(service->status_handle, &service->status);
@@ -534,6 +546,10 @@ int start_service(nssm_service_t *service) {
 
   throttle_restart(service);
 
+  if (WaitForSingleObject(service->stop_event, 0) == WAIT_OBJECT_0) {
+    return kStartHandledByRecovery;
+  }
+
   service->status.dwCurrentState = SERVICE_START_PENDING;
   service->status.dwControlsAccepted = SERVICE_ACCEPT_SHUTDOWN | SERVICE_ACCEPT_STOP;
   SetServiceStatus(service->status_handle, &service->status);
@@ -580,6 +596,7 @@ int start_service(nssm_service_t *service) {
 /* Stop the service */
 int stop_service(nssm_service_t *service, unsigned long exitcode) {
   service->allow_restart = false;
+  if (service->stop_event) SetEvent(service->stop_event);
   if (service->wait_handle) {
     UnregisterWait(service->wait_handle);
     service->wait_handle = 0;

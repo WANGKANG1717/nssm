@@ -79,6 +79,7 @@ typedef struct nssm_service_t {
   HANDLE job_handle;
   unsigned long pid;
   HANDLE wait_handle;
+  HANDLE stop_event;
   unsigned long exitcode;
   bool stopping;
   bool allow_restart;

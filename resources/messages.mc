@@ -1665,3 +1665,15 @@ Language = Chinese
 %1 已等待 %3/%5 毫秒以等待句柄 %2。
 下一次更新在 %4 毫秒后。
 .
+
+MessageId = +1
+SymbolicName = NSSM_EVENT_CREATEEVENT_FAILED
+Severity = Error
+Language = English
+Failed to create the stop event for service %1:
+%2
+.
+Language = Chinese
+为服务 %1 创建停止事件失败：
+%2
+.

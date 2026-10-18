@@ -11,6 +11,7 @@ enum class readiness_state_t {
   ready,
   timed_out,
   process_exited,
+  cancelled,
   error,
 };
 
@@ -25,6 +26,7 @@ struct readiness_result_t {
 readiness_result_t wait_for_readiness(
     const readiness_config_t &config, HANDLE application_process,
     const wchar_t *environment, const wchar_t *working_directory,
+    HANDLE cancellation_event = nullptr,
     SERVICE_STATUS_HANDLE status_handle = nullptr,
     SERVICE_STATUS *service_status = nullptr);
 
