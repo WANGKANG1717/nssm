@@ -760,16 +760,9 @@ int control_service(unsigned long control, int argc, TCHAR **argv, bool return_s
     CloseServiceHandle(services);
 
     if (ret) {
-      unsigned long cutoff = 0;
-
-      /* If we manage the service, respect the throttle time. */
-      HKEY key = open_registry(service_name, 0, KEY_READ, false);
-      if (key) {
-        if (get_number(key, NSSM_REG_THROTTLE, &cutoff, false) != 1) cutoff = NSSM_RESET_THROTTLE_RESTART;
-        RegCloseKey(key);
-      }
-
-      int response = await_service_control_response(control, service_handle, &service_status, initial_status, cutoff);
+      int response = await_service_control_response(
+          control, service_handle, &service_status, initial_status,
+          NSSM_RESET_THROTTLE_RESTART);
       CloseServiceHandle(service_handle);
 
       if (response) {
@@ -933,9 +926,6 @@ void WINAPI service_main(unsigned long argc, TCHAR **argv) {
   SetServiceStatus(service->status_handle, &service->status);
 
   if (is_admin) {
-    /* Try to create the exit action parameters; we don't care if it fails */
-    create_exit_action(service->name, exit_action_strings[0], false);
-
     SC_HANDLE services = open_service_manager(SC_MANAGER_CONNECT);
     if (services) {
       service->handle = open_service(services, service->name, SERVICE_CHANGE_CONFIG, 0, 0);
@@ -1222,13 +1212,6 @@ int start_service(nssm_service_t *service) {
   PROCESS_INFORMATION pi;
   ZeroMemory(&pi, sizeof(pi));
 
-  /* Get startup parameters */
-  int ret = service->config ? 0 : get_parameters(service, &si);
-  if (ret) {
-    log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_GET_PARAMETERS_FAILED, service->name, 0);
-    return stop_service(service, 2, true, true);
-  }
-
   std::wstring launch_error;
   std::wstring command_line;
   if (! build_child_command_line(service->exe, service->flags, &command_line,
@@ -1289,7 +1272,7 @@ int start_service(nssm_service_t *service) {
       close_output_handles(&si);
       return stop_service(service, 3, true, true);
     }
-    if (service->config && service->config->resources.enabled() &&
+    if (service->config->resources.enabled() &&
         ! configure_service_job_limits(
             service->job_handle,
             service->config->resources.maximum_processes,
@@ -1383,7 +1366,7 @@ int start_service(nssm_service_t *service) {
     if (pi.hThread) CloseHandle(pi.hThread);
   }
 
-  if (service->config && service->config->readiness.enabled()) {
+  if (service->config->readiness.enabled()) {
     readiness_result_t readiness = wait_for_readiness(
         service->config->readiness, service->process_handle,
         child_environment.data(), service->dir, service->status_handle,
@@ -1571,130 +1554,51 @@ void CALLBACK end_service(void *arg, unsigned char why) {
   if (why) return;
   if (! service->allow_restart) return;
 
-  if (service->config) {
-    unsigned long long now_ms = GetTickCount64();
-    unsigned long long run_duration_ms =
-        now_ms >= service->process_started_ms
-            ? now_ms - service->process_started_ms
-            : 0;
-    LARGE_INTEGER counter = {};
-    QueryPerformanceCounter(&counter);
-    recovery_decision_t decision = evaluate_recovery(
-        service->config->recovery, service->recovery_state, exitcode, now_ms,
-        run_duration_ms, static_cast<unsigned long>(counter.QuadPart));
-    publish_status_snapshot(service);
-    if (! decision.should_restart()) {
-      const TCHAR *reason = decision.result == recovery_result_t::clean_exit
-                                ? _T("clean exit")
-                            : decision.result == recovery_result_t::rate_limited
-                                ? _T("restart rate limit reached")
-                                : _T("recovery disabled");
-      log_event(decision.result == recovery_result_t::clean_exit
-                    ? EVENTLOG_INFORMATION_TYPE
-                    : EVENTLOG_WARNING_TYPE,
-                NSSM_EVENT_RECOVERY_STOPPED,
-                service->name, reason, 0);
-      stop_service(service, exitcode, true, true);
-      return;
-    }
-    service->next_restart_delay_ms = decision.delay_ms;
-    log_event(EVENTLOG_INFORMATION_TYPE, NSSM_EVENT_EXIT_RESTART,
-              service->name, code, exit_action_strings[NSSM_EXIT_RESTART],
-              service->exe, 0);
-    while (monitor_service(service)) {
-      log_event(EVENTLOG_WARNING_TYPE, NSSM_EVENT_RESTART_SERVICE_FAILED,
-                service->exe, service->name, 0);
-      Sleep(30000);
-    }
+  unsigned long long now_ms = GetTickCount64();
+  unsigned long long run_duration_ms =
+      now_ms >= service->process_started_ms
+          ? now_ms - service->process_started_ms
+          : 0;
+  LARGE_INTEGER counter = {};
+  QueryPerformanceCounter(&counter);
+  recovery_decision_t decision = evaluate_recovery(
+      service->config->recovery, service->recovery_state, exitcode, now_ms,
+      run_duration_ms, static_cast<unsigned long>(counter.QuadPart));
+  publish_status_snapshot(service);
+  if (! decision.should_restart()) {
+    const TCHAR *reason = decision.result == recovery_result_t::clean_exit
+                              ? _T("clean exit")
+                          : decision.result == recovery_result_t::rate_limited
+                              ? _T("restart rate limit reached")
+                              : _T("recovery disabled");
+    log_event(decision.result == recovery_result_t::clean_exit
+                  ? EVENTLOG_INFORMATION_TYPE
+                  : EVENTLOG_WARNING_TYPE,
+              NSSM_EVENT_RECOVERY_STOPPED,
+              service->name, reason, 0);
+    stop_service(service, exitcode, true, true);
     return;
   }
-
-  /* What action should we take? */
-  int action = NSSM_EXIT_RESTART;
-  TCHAR action_string[ACTION_LEN];
-  bool default_action;
-  if (! get_exit_action(service->name, &exitcode, action_string, &default_action)) {
-    for (int i = 0; exit_action_strings[i]; i++) {
-      if (! _tcsnicmp((const TCHAR *) action_string, exit_action_strings[i], ACTION_LEN)) {
-        action = i;
-        break;
-      }
-    }
-  }
-
-  switch (action) {
-    /* Try to restart the service or return failure code to service manager */
-    case NSSM_EXIT_RESTART:
-      log_event(EVENTLOG_INFORMATION_TYPE, NSSM_EVENT_EXIT_RESTART, service->name, code, exit_action_strings[action], service->exe, 0);
-      while (monitor_service(service)) {
-        log_event(EVENTLOG_WARNING_TYPE, NSSM_EVENT_RESTART_SERVICE_FAILED, service->exe, service->name, 0);
-        Sleep(30000);
-      }
-    break;
-
-    /* Do nothing, just like srvany would */
-    case NSSM_EXIT_IGNORE:
-      log_event(EVENTLOG_INFORMATION_TYPE, NSSM_EVENT_EXIT_IGNORE, service->name, code, exit_action_strings[action], service->exe, 0);
-      wait_for_hooks(service, false);
-      Sleep(INFINITE);
-    break;
-
-    /* Tell the service manager we are finished */
-    case NSSM_EXIT_REALLY:
-      log_event(EVENTLOG_INFORMATION_TYPE, NSSM_EVENT_EXIT_REALLY, service->name, code, exit_action_strings[action], 0);
-      stop_service(service, exitcode, true, default_action);
-    break;
-
-    /* Fake a crash so pre-Vista service managers will run recovery actions. */
-    case NSSM_EXIT_UNCLEAN:
-      log_event(EVENTLOG_INFORMATION_TYPE, NSSM_EVENT_EXIT_UNCLEAN, service->name, code, exit_action_strings[action], 0);
-      stop_service(service, exitcode, false, default_action);
-      wait_for_hooks(service, false);
-      nssm_exit(exitcode);
+  service->next_restart_delay_ms = decision.delay_ms;
+  log_event(EVENTLOG_INFORMATION_TYPE, NSSM_EVENT_EXIT_RESTART,
+            service->name, code, exit_action_strings[NSSM_EXIT_RESTART],
+            service->exe, 0);
+  while (monitor_service(service)) {
+    log_event(EVENTLOG_WARNING_TYPE, NSSM_EVENT_RESTART_SERVICE_FAILED,
+              service->exe, service->name, 0);
+    Sleep(30000);
   }
 }
 
 void throttle_restart(nssm_service_t *service) {
-  if (service->config) {
-    unsigned long ms = service->next_restart_delay_ms;
-    service->next_restart_delay_ms = 0;
-    if (! ms) return;
-    ++service->throttle;
-
-    EnterCriticalSection(&service->throttle_section);
-    service->status.dwCurrentState = SERVICE_PAUSED;
-    service->status.dwControlsAccepted |= SERVICE_ACCEPT_PAUSE_CONTINUE;
-    SetServiceStatus(service->status_handle, &service->status);
-    SleepConditionVariableCS(&service->throttle_condition,
-                             &service->throttle_section, ms);
-    LeaveCriticalSection(&service->throttle_section);
-    return;
-  }
-
-  /* This can't be a restart if the service is already running. */
-  if (! service->throttle++) return;
-
-  unsigned long ms;
-  unsigned long throttle_ms = throttle_milliseconds(service->throttle);
-  TCHAR threshold[8], milliseconds[8];
-
-  if (service->restart_delay > throttle_ms) ms = service->restart_delay;
-  else ms = throttle_ms;
-
-  _sntprintf_s(milliseconds, _countof(milliseconds), _TRUNCATE, _T("%lu"), ms);
-
-  if (service->throttle == 1 && service->restart_delay > throttle_ms) log_event(EVENTLOG_INFORMATION_TYPE, NSSM_EVENT_RESTART_DELAY, service->name, milliseconds, 0);
-  else {
-    _sntprintf_s(threshold, _countof(threshold), _TRUNCATE, _T("%lu"), service->throttle_delay);
-    log_event(EVENTLOG_WARNING_TYPE, NSSM_EVENT_THROTTLED, service->name, threshold, milliseconds, 0);
-  }
-
+  unsigned long ms = service->next_restart_delay_ms;
+  service->next_restart_delay_ms = 0;
+  if (! ms) return;
+  ++service->throttle;
   EnterCriticalSection(&service->throttle_section);
-
   service->status.dwCurrentState = SERVICE_PAUSED;
   service->status.dwControlsAccepted |= SERVICE_ACCEPT_PAUSE_CONTINUE;
   SetServiceStatus(service->status_handle, &service->status);
-
   SleepConditionVariableCS(&service->throttle_condition,
                            &service->throttle_section, ms);
   LeaveCriticalSection(&service->throttle_section);

@@ -29,9 +29,6 @@ typedef struct {
 } logger_t;
 
 void close_handle(HANDLE *);
-int get_createfile_parameters(HKEY, TCHAR *, TCHAR *, unsigned long *, unsigned long, unsigned long *, unsigned long, unsigned long *, unsigned long, bool *);
-int set_createfile_parameter(HKEY, TCHAR *, TCHAR *, unsigned long);
-int delete_createfile_parameter(HKEY, TCHAR *, TCHAR *);
 HANDLE write_to_file(TCHAR *, unsigned long, SECURITY_ATTRIBUTES *, unsigned long, unsigned long);
 void rotate_file(TCHAR *, TCHAR *, unsigned long, unsigned long, unsigned long, unsigned long, bool);
 int get_output_handles(nssm_service_t *, STARTUPINFO *);
