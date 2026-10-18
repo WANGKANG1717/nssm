@@ -1310,9 +1310,9 @@ int set_setting(const TCHAR *service_name, HKEY key, settings_t *setting, value_
   if (setting->set) ret = setting->set(service_name, (void *) key, setting->name, setting->default_value, value, additional);
   else ret = -1;
 
-  if (! ret) print_message(stdout, NSSM_MESSAGE_RESET_SETTING, setting->name, service_name);
-  else if (ret > 0) print_message(stdout, NSSM_MESSAGE_SET_SETTING, setting->name, service_name);
-  else print_message(stderr, NSSM_MESSAGE_SET_SETTING_FAILED, setting->name, service_name);
+  if (! ret) print_message(stdout, NSSM_MESSAGE_RESET_SETTING, service_name, setting->name);
+  else if (ret > 0) print_message(stdout, NSSM_MESSAGE_SET_SETTING, service_name, setting->name);
+  else print_message(stderr, NSSM_MESSAGE_SET_SETTING_FAILED, service_name, setting->name);
 
   return ret;
 }
@@ -1324,9 +1324,9 @@ int set_setting(const TCHAR *service_name, SC_HANDLE service_handle, settings_t 
   if (setting->set) ret = setting->set(service_name, service_handle, setting->name, setting->default_value, value, additional);
   else ret = -1;
 
-  if (! ret) print_message(stdout, NSSM_MESSAGE_RESET_SETTING, setting->name, service_name);
-  else if (ret > 0) print_message(stdout, NSSM_MESSAGE_SET_SETTING, setting->name, service_name);
-  else print_message(stderr, NSSM_MESSAGE_SET_SETTING_FAILED, setting->name, service_name);
+  if (! ret) print_message(stdout, NSSM_MESSAGE_RESET_SETTING, service_name, setting->name);
+  else if (ret > 0) print_message(stdout, NSSM_MESSAGE_SET_SETTING, service_name, setting->name);
+  else print_message(stderr, NSSM_MESSAGE_SET_SETTING_FAILED, service_name, setting->name);
 
   return ret;
 }
@@ -1352,7 +1352,7 @@ int get_setting(const TCHAR *service_name, HKEY key, settings_t *setting, value_
   }
   else ret = -1;
 
-  if (ret < 0) print_message(stderr, NSSM_MESSAGE_GET_SETTING_FAILED, setting->name, service_name);
+  if (ret < 0) print_message(stderr, NSSM_MESSAGE_GET_SETTING_FAILED, service_name, setting->name);
 
   return ret;
 }

@@ -387,27 +387,27 @@ MessageId = +1
 SymbolicName = NSSM_MESSAGE_GET_SETTING_FAILED
 Severity = Informational
 Language = English
-Error getting parameter "%s" for service "%s"!
+Error getting service "%s" parameter "%s"!
 .
 Language = Chinese
-获取服务"%s"的参数"%s"失败！
+获取服务“%s”的参数“%s”失败！
 .
 
 MessageId = +1
 SymbolicName = NSSM_MESSAGE_SET_SETTING_FAILED
 Severity = Informational
 Language = English
-Error setting parameter "%s" for service "%s"!
+Error setting service "%s" parameter "%s"!
 .
 Language = Chinese
-为服务"%s"设置参数"%s"失败！
+为服务“%s”设置参数“%s”失败！
 .
 
 MessageId = +1
 SymbolicName = NSSM_MESSAGE_SET_SETTING
 Severity = Informational
 Language = English
-Set parameter "%s" for service "%s".
+Set service "%s" parameter "%s".
 .
 Language = Chinese
 为服务“%s”设置参数“%s”。
@@ -417,7 +417,7 @@ MessageId = +1
 SymbolicName = NSSM_MESSAGE_RESET_SETTING
 Severity = Informational
 Language = English
-Reset parameter "%s" for service "%s" to its default.
+Reset service "%s" parameter "%s" to its default.
 .
 Language = Chinese
 将服务“%s”的参数“%s”重置为其默认值。
