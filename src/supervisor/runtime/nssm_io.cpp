@@ -82,23 +82,18 @@ static inline unsigned long guess_charsize(void *address, unsigned long bufsize)
 }
 
 static inline void write_bom(logger_t *logger, unsigned long *out) {
+  *out = 0;
   wchar_t bom = L'\ufeff';
   if (! WriteFile(logger->write_handle, (void *) &bom, sizeof(bom), out, 0)) {
     log_event(EVENTLOG_WARNING_TYPE, NSSM_EVENT_SOMEBODY_SET_UP_US_THE_BOM, logger->service_name, logger->path, error_string(GetLastError()), 0);
   }
 }
 
-void close_handle(HANDLE *handle, HANDLE *remember) {
-  if (remember) *remember = INVALID_HANDLE_VALUE;
+void close_handle(HANDLE *handle) {
   if (! handle) return;
   if (! *handle) return;
   CloseHandle(*handle);
-  if (remember) *remember = *handle;
   *handle = 0;
-}
-
-void close_handle(HANDLE *handle) {
-  close_handle(handle, NULL);
 }
 
 /* Get path, share mode, creation disposition and flags for a stream. */
@@ -226,7 +221,7 @@ void rotate_file(TCHAR *service_name, TCHAR *path, unsigned long seconds, unsign
   SYSTEMTIME st;
   GetSystemTime(&st);
 
-  BY_HANDLE_FILE_INFORMATION info;
+  BY_HANDLE_FILE_INFORMATION info = {};
 
   /* Try to open the file to check if it exists and to get attributes. */
   HANDLE file = CreateFile(path, 0, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0);
@@ -282,10 +277,13 @@ void rotate_file(TCHAR *service_name, TCHAR *path, unsigned long seconds, unsign
     function = _T("CopyFile()");
     if (CopyFile(path, rotated, TRUE)) {
       file = write_to_file(path, NSSM_STDOUT_SHARING, 0, NSSM_STDOUT_DISPOSITION, NSSM_STDOUT_FLAGS);
-      Sleep(delay);
-      SetFilePointer(file, 0, 0, FILE_BEGIN);
-      SetEndOfFile(file);
-      CloseHandle(file);
+      if (file == INVALID_HANDLE_VALUE) ok = false;
+      else {
+        Sleep(delay);
+        SetFilePointer(file, 0, 0, FILE_BEGIN);
+        SetEndOfFile(file);
+        CloseHandle(file);
+      }
     }
     else ok = false;
   }
@@ -335,6 +333,8 @@ int get_output_handles(nssm_service_t *service, STARTUPINFO *si) {
       if (! service->stdout_thread) {
         CloseHandle(service->stdout_pipe);
         CloseHandle(service->stdout_si);
+        service->stdout_pipe = nullptr;
+        service->stdout_si = nullptr;
       }
     }
     else service->stdout_thread = 0;
@@ -374,6 +374,8 @@ int get_output_handles(nssm_service_t *service, STARTUPINFO *si) {
         if (! service->stderr_thread) {
           CloseHandle(service->stderr_pipe);
           CloseHandle(service->stderr_si);
+          service->stderr_pipe = nullptr;
+          service->stderr_si = nullptr;
         }
       }
       else service->stderr_thread = 0;
@@ -429,20 +431,33 @@ void close_output_handles(STARTUPINFO *si) {
 
 void cleanup_loggers(nssm_service_t *service) {
   unsigned long interval = NSSM_CLEANUP_LOGGERS_DEADLINE;
-  HANDLE thread_handle = INVALID_HANDLE_VALUE;
-
-  close_handle(&service->stdout_thread, &thread_handle);
+  HANDLE thread_handle = service->stdout_thread;
+  service->stdout_thread = nullptr;
   /* Close write end of the data pipe so logging thread can finalise read. */
   close_handle(&service->stdout_si);
-  /* Await logging thread then close read end. */
-  if (thread_handle != INVALID_HANDLE_VALUE) WaitForSingleObject(thread_handle, interval);
-  close_handle(&service->stdout_pipe);
+  if (thread_handle) {
+    if (WaitForSingleObject(thread_handle, interval) == WAIT_TIMEOUT) {
+      CancelSynchronousIo(thread_handle);
+      WaitForSingleObject(thread_handle, INFINITE);
+    }
+    CloseHandle(thread_handle);
+    /* The logging thread owns and closes the read end. */
+    service->stdout_pipe = nullptr;
+  }
+  else close_handle(&service->stdout_pipe);
 
-  thread_handle = INVALID_HANDLE_VALUE;
-  close_handle(&service->stderr_thread, &thread_handle);
+  thread_handle = service->stderr_thread;
+  service->stderr_thread = nullptr;
   close_handle(&service->stderr_si);
-  if (thread_handle != INVALID_HANDLE_VALUE) WaitForSingleObject(thread_handle, interval);
-  close_handle(&service->stderr_pipe);
+  if (thread_handle) {
+    if (WaitForSingleObject(thread_handle, interval) == WAIT_TIMEOUT) {
+      CancelSynchronousIo(thread_handle);
+      WaitForSingleObject(thread_handle, INFINITE);
+    }
+    CloseHandle(thread_handle);
+    service->stderr_pipe = nullptr;
+  }
+  else close_handle(&service->stderr_pipe);
 }
 
 /*
@@ -668,10 +683,13 @@ unsigned long WINAPI log_and_rotate(void *arg) {
             function = _T("CopyFile()");
             if (CopyFile(logger->path, rotated, TRUE)) {
               HANDLE file = write_to_file(logger->path, NSSM_STDOUT_SHARING, 0, NSSM_STDOUT_DISPOSITION, NSSM_STDOUT_FLAGS);
-              Sleep(logger->rotate_delay);
-              SetFilePointer(file, 0, 0, FILE_BEGIN);
-              SetEndOfFile(file);
-              CloseHandle(file);
+              if (file == INVALID_HANDLE_VALUE) ok = false;
+              else {
+                Sleep(logger->rotate_delay);
+                SetFilePointer(file, 0, 0, FILE_BEGIN);
+                SetEndOfFile(file);
+                CloseHandle(file);
+              }
             }
             else ok = false;
           }

@@ -28,7 +28,6 @@ typedef struct {
   unsigned long rotate_delay;
 } logger_t;
 
-void close_handle(HANDLE *, HANDLE *);
 void close_handle(HANDLE *);
 int get_createfile_parameters(HKEY, TCHAR *, TCHAR *, unsigned long *, unsigned long, unsigned long *, unsigned long, unsigned long *, unsigned long, bool *);
 int set_createfile_parameter(HKEY, TCHAR *, TCHAR *, unsigned long);
