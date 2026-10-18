@@ -1,7 +1,18 @@
 param(
   [Parameter(Mandatory = $true)]
-  [string]$Executable
+  [string]$Executable,
+
+  [Parameter(Mandatory = $true)]
+  [version]$ExpectedVersion
 )
+
+$versionInfo = [Diagnostics.FileVersionInfo]::GetVersionInfo($Executable)
+if ($versionInfo.FileMajorPart -ne $ExpectedVersion.Major -or
+    $versionInfo.FileMinorPart -ne $ExpectedVersion.Minor -or
+    $versionInfo.FileBuildPart -ne $ExpectedVersion.Build -or
+    $versionInfo.FilePrivatePart -ne 0) {
+  throw "Compiled file version $($versionInfo.FileMajorPart).$($versionInfo.FileMinorPart).$($versionInfo.FileBuildPart).$($versionInfo.FilePrivatePart) does not match $ExpectedVersion.0"
+}
 
 $bytes = [System.IO.File]::ReadAllBytes($Executable)
 $utf16 = [System.Text.Encoding]::Unicode.GetString($bytes)

@@ -130,7 +130,7 @@ add_dependencies(nssm nssm_messages)
 set_property(
   SOURCE "${NSSM_RESOURCE_SOURCE}"
   APPEND PROPERTY OBJECT_DEPENDS
-    "${NSSM_MESSAGES_HEADER};${NSSM_MESSAGES_RESOURCE};${NSSM_MESSAGES_BINARIES}"
+    "${NSSM_MESSAGES_HEADER};${NSSM_MESSAGES_RESOURCE};${NSSM_MESSAGES_BINARIES};${CMAKE_CURRENT_SOURCE_DIR}/src/app/nssm.h;${CMAKE_CURRENT_SOURCE_DIR}/src/app/version.h;${CMAKE_CURRENT_SOURCE_DIR}/resources/resource.h;${CMAKE_CURRENT_SOURCE_DIR}/resources/nssm.ico;${CMAKE_CURRENT_SOURCE_DIR}/resources/nssm.manifest"
 )
 
 # The generated script is ASCII-only and contains explicit Unicode escapes,
@@ -199,6 +199,7 @@ if(BUILD_TESTING)
             -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass
             -File "${CMAKE_CURRENT_SOURCE_DIR}/cmake/VerifyResources.ps1"
             -Executable $<TARGET_FILE:nssm>
+            -ExpectedVersion "${PROJECT_VERSION}"
   )
 
   add_executable(nssm_unit_tests
