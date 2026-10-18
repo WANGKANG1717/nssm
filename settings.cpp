@@ -156,7 +156,7 @@ static int setting_dump_string(const TCHAR *service_name, void *param, const TCH
 
 static int setting_set_exit_action(const TCHAR *service_name, void *param, const TCHAR *name, void *default_value, value_t *value, const TCHAR *additional) {
   unsigned long exitcode;
-  TCHAR *code;
+  const TCHAR *code = 0;
   TCHAR action_string[ACTION_LEN];
 
   if (additional) {
@@ -164,7 +164,7 @@ static int setting_set_exit_action(const TCHAR *service_name, void *param, const
     if (is_default(additional)) code = 0;
     else {
       if (str_number(additional, &exitcode)) return -1;
-      code = (TCHAR *) additional;
+      code = additional;
     }
   }
 

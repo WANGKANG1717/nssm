@@ -203,10 +203,10 @@ HANDLE write_to_file(TCHAR *path, unsigned long sharing, SECURITY_ATTRIBUTES *at
 }
 
 static void rotated_filename(TCHAR *path, TCHAR *rotated, unsigned long rotated_len, SYSTEMTIME *st) {
+  SYSTEMTIME now{};
   if (! st) {
-    SYSTEMTIME now;
+    GetSystemTime(&now);
     st = &now;
-    GetSystemTime(st);
   }
 
   TCHAR buffer[PATH_LENGTH];
@@ -318,7 +318,7 @@ int get_output_handles(nssm_service_t *service, STARTUPINFO *si) {
       return 2;
     }
 
-    inherit_handles = true;
+    inherit_handles = true;
   }
 
   /* stdout */
@@ -345,7 +345,7 @@ int get_output_handles(nssm_service_t *service, STARTUPINFO *si) {
 
     if (dup_handle(service->stdout_si, &si->hStdOutput, _T("stdout_si"), _T("stdout"))) close_handle(&service->stdout_thread);
 
-    inherit_handles = true;
+    inherit_handles = true;
   }
 
   /* stderr */
@@ -385,7 +385,7 @@ int get_output_handles(nssm_service_t *service, STARTUPINFO *si) {
 
     if (dup_handle(service->stderr_si, &si->hStdError, _T("stderr_si"), _T("stderr"))) close_handle(&service->stderr_thread);
 
-    inherit_handles = true;
+    inherit_handles = true;
   }
 
   /*
@@ -544,17 +544,17 @@ static inline int write_timestamp(logger_t *logger, unsigned long charsize, unsi
   wchar_t *utf16;
   unsigned long utf16len;
   if (to_utf16(timestamp, &utf16, &utf16len)) return -1;
-  int ret = try_write(logger, (void *) *utf16, utf16len * sizeof(wchar_t), out, complained);
+  int ret = try_write(logger, utf16, utf16len * sizeof(wchar_t), out, complained);
   HeapFree(GetProcessHeap(), 0, utf16);
   return ret;
 }
 
 static int write_with_timestamp(logger_t *logger, void *address, unsigned long bufsize, unsigned long *out, int *complained, unsigned long charsize) {
   if (logger->timestamp_log) {
-    unsigned long log_out;
-    int log_complained;
+    unsigned long log_out = 0;
+    int log_complained = 0;
     unsigned long timestamp_out = 0;
-    int timestamp_complained;
+    int timestamp_complained = 0;
     if (! logger->line_length) {
       write_timestamp(logger, charsize, &timestamp_out, &timestamp_complained);
       logger->line_length += (__int64) timestamp_out;
@@ -565,7 +565,7 @@ static int write_with_timestamp(logger_t *logger, void *address, unsigned long b
     unsigned long i;
     void *line = address;
     unsigned long offset = 0;
-    int ret;
+    int ret = 0;
     for (i = 0; i < bufsize; i++) {
       if (((char *) address)[i] == '\n') {
         ret = try_write(logger, line, i - offset + 1, &log_out, &log_complained);
@@ -599,11 +599,11 @@ unsigned long WINAPI log_and_rotate(void *arg) {
   logger_t *logger = (logger_t *) arg;
   if (! logger) return 1;
 
-  __int64 size;
+  __int64 size = 0;
   BY_HANDLE_FILE_INFORMATION info;
 
   /* Find initial file size. */
-  if (! GetFileInformationByHandle(logger->write_handle, &info)) logger->size = 0LL;
+  if (! GetFileInformationByHandle(logger->write_handle, &info)) size = 0LL;
   else {
     ULARGE_INTEGER l;
     l.HighPart = info.nFileSizeHigh;

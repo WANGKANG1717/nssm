@@ -925,7 +925,7 @@ int pre_edit_service(int argc, TCHAR **argv) {
 
   const TCHAR *parameter = 0;
   settings_t *setting = 0;
-  TCHAR *additional;
+  TCHAR *additional = 0;
 
   /* Validate the parameter. */
   if (mandatory > 2) {
@@ -1065,7 +1065,7 @@ int pre_edit_service(int argc, TCHAR **argv) {
     return 0;
   }
 
-  HKEY key;
+  HKEY key = 0;
   value_t value;
   int ret;
 
