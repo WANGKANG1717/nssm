@@ -76,13 +76,19 @@ bool create_status_snapshot(nssm_service_t *service) {
   SECURITY_ATTRIBUTES attributes = {sizeof(attributes), descriptor.get(),
                                     FALSE};
   std::wstring name = mapping_name(service->name);
+  SetLastError(ERROR_SUCCESS);
   unique_handle mapping(CreateFileMappingW(
       INVALID_HANDLE_VALUE, &attributes, PAGE_READWRITE, 0,
       sizeof(status_snapshot_t), name.c_str()));
-  unsigned long mapping_error = mapping ? ERROR_SUCCESS : GetLastError();
+  const unsigned long mapping_error = GetLastError();
   descriptor.reset();
   if (! mapping) {
     SetLastError(mapping_error);
+    return false;
+  }
+  if (mapping_error == ERROR_ALREADY_EXISTS) {
+    mapping.reset();
+    SetLastError(ERROR_ALREADY_EXISTS);
     return false;
   }
   unique_mapped_view view(MapViewOfFile(mapping.get(), FILE_MAP_WRITE, 0, 0,
