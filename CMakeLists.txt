@@ -75,6 +75,8 @@ set(NSSM_SOURCES
   env.cpp
   event.cpp
   gui.cpp
+  health_check.cpp
+  health_monitor.cpp
   hook.cpp
   imports.cpp
   job_object.cpp
@@ -132,6 +134,8 @@ target_link_libraries(nssm PRIVATE
   shlwapi
   user32
   uuid
+  winhttp
+  ws2_32
   yyjson
 )
 
@@ -168,6 +172,7 @@ if(BUILD_TESTING)
     tests/child_process_tests.cpp
     child_process.cpp
     config.cpp
+    health_check.cpp
     job_object.cpp
     recovery.cpp
   )
@@ -178,7 +183,7 @@ if(BUILD_TESTING)
     _WIN32_WINNT=0x0A00
   )
   nssm_configure_compiler(nssm_unit_tests)
-  target_link_libraries(nssm_unit_tests PRIVATE shlwapi yyjson)
+  target_link_libraries(nssm_unit_tests PRIVATE shlwapi winhttp ws2_32 yyjson)
   add_test(NAME nssm.unit COMMAND $<TARGET_FILE:nssm_unit_tests>)
 endif()
 

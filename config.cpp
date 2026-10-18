@@ -120,6 +120,20 @@ void read_optional_number(yyjson_val *object, const char *name,
   *destination = static_cast<unsigned long>(yyjson_get_uint(value));
 }
 
+bool read_required_number(yyjson_val *object, const char *name,
+                          const wchar_t *path, unsigned long minimum,
+                          unsigned long maximum, unsigned long *destination,
+                          config_validation_t *validation) {
+  yyjson_val *value = yyjson_obj_get(object, name);
+  if (! yyjson_is_uint(value) || yyjson_get_uint(value) < minimum ||
+      yyjson_get_uint(value) > maximum) {
+    validation->add(std::wstring(path) + L" is required and outside the allowed range");
+    return false;
+  }
+  *destination = static_cast<unsigned long>(yyjson_get_uint(value));
+  return true;
+}
+
 bool valid_service_name(const std::wstring &name) {
   if (name.empty() || name.size() > kMaximumServiceNameCharacters) return false;
   for (wchar_t character : name) {
@@ -252,13 +266,14 @@ void parse_service(yyjson_val *root, service_metadata_config_t *service,
   parse_dependencies(object, &service->dependencies, validation);
 }
 
-void parse_arguments(yyjson_val *application,
-                     std::vector<std::wstring> *arguments,
-                     config_validation_t *validation) {
-  yyjson_val *array = yyjson_obj_get(application, "arguments");
+void parse_string_array(yyjson_val *object, const char *name,
+                        const wchar_t *path,
+                        std::vector<std::wstring> *arguments,
+                        config_validation_t *validation) {
+  yyjson_val *array = yyjson_obj_get(object, name);
   if (! array) return;
   if (! yyjson_is_arr(array)) {
-    validation->add(L"application.arguments must be an array of strings");
+    validation->add(std::wstring(path) + L" must be an array of strings");
     return;
   }
 
@@ -275,13 +290,20 @@ void parse_arguments(yyjson_val *application,
       std::wstring argument = utf8_to_wide(yyjson_get_str(value),
                                            yyjson_get_len(value), &valid);
       if (! valid || argument.find(L'\0') != std::wstring::npos) {
-        validation->add(L"application.arguments[" + std::to_wstring(index) +
+        validation->add(std::wstring(path) + L"[" + std::to_wstring(index) +
                         L"] must be valid UTF-8 without U+0000");
       }
       else arguments->push_back(std::move(argument));
     }
     ++index;
   }
+}
+
+void parse_arguments(yyjson_val *application,
+                     std::vector<std::wstring> *arguments,
+                     config_validation_t *validation) {
+  parse_string_array(application, "arguments", L"application.arguments",
+                     arguments, validation);
 }
 
 void parse_environment(yyjson_val *application,
@@ -432,6 +454,128 @@ void parse_recovery(yyjson_val *root, recovery_config_t *recovery,
   }
 }
 
+void parse_health(yyjson_val *root, health_check_config_t *health,
+                  config_validation_t *validation) {
+  yyjson_val *object = yyjson_obj_get(root, "health");
+  if (! object) return;
+  if (! yyjson_is_obj(object)) {
+    validation->add(L"health must be an object");
+    return;
+  }
+  reject_unknown_fields(
+      object, L"health",
+      {"type", "initialDelayMs", "intervalMs", "timeoutMs",
+       "failureThreshold", "successThreshold", "tcp", "http", "command",
+       "file"},
+      validation);
+
+  std::wstring type;
+  if (! read_required_string(object, "type", L"health.type", &type,
+                             validation)) return;
+  if (type == L"process") health->type = health_check_type_t::process;
+  else if (type == L"tcp") health->type = health_check_type_t::tcp;
+  else if (type == L"http") health->type = health_check_type_t::http;
+  else if (type == L"command") health->type = health_check_type_t::command;
+  else if (type == L"file") health->type = health_check_type_t::file;
+  else {
+    validation->add(L"health.type has an unsupported value");
+    return;
+  }
+
+  constexpr unsigned long kDayMs = 24UL * 60UL * 60UL * 1000UL;
+  read_optional_number(object, "initialDelayMs", L"health.initialDelayMs", 0,
+                       kDayMs, &health->initial_delay_ms, validation);
+  read_optional_number(object, "intervalMs", L"health.intervalMs", 100,
+                       kDayMs, &health->interval_ms, validation);
+  read_optional_number(object, "timeoutMs", L"health.timeoutMs", 100,
+                       10000, &health->timeout_ms, validation);
+  read_optional_number(object, "failureThreshold", L"health.failureThreshold",
+                       1, 1000, &health->failure_threshold, validation);
+  read_optional_number(object, "successThreshold", L"health.successThreshold",
+                       1, 1000, &health->success_threshold, validation);
+
+  const char *selected = nullptr;
+  switch (health->type) {
+    case health_check_type_t::tcp: selected = "tcp"; break;
+    case health_check_type_t::http: selected = "http"; break;
+    case health_check_type_t::command: selected = "command"; break;
+    case health_check_type_t::file: selected = "file"; break;
+    default: break;
+  }
+  for (const char *name : {"tcp", "http", "command", "file"}) {
+    if (yyjson_obj_get(object, name) && (! selected || strcmp(name, selected))) {
+      validation->add(L"health contains settings for a probe other than health.type");
+    }
+  }
+  if (! selected) return;
+  yyjson_val *probe = yyjson_obj_get(object, selected);
+  if (! yyjson_is_obj(probe)) {
+    validation->add(L"health is missing the settings object selected by health.type");
+    return;
+  }
+
+  if (health->type == health_check_type_t::tcp) {
+    reject_unknown_fields(probe, L"health.tcp", {"host", "port"}, validation);
+    read_required_string(probe, "host", L"health.tcp.host", &health->host,
+                         validation);
+    if (health->host.empty()) {
+      validation->add(L"health.tcp.host must not be empty");
+    }
+    unsigned long port = 0;
+    if (read_required_number(probe, "port", L"health.tcp.port", 1, 65535,
+                             &port, validation)) {
+      health->port = static_cast<unsigned short>(port);
+    }
+  }
+  else if (health->type == health_check_type_t::http) {
+    reject_unknown_fields(probe, L"health.http",
+                          {"url", "minimumStatus", "maximumStatus"}, validation);
+    read_required_string(probe, "url", L"health.http.url", &health->url,
+                         validation);
+    read_optional_number(probe, "minimumStatus", L"health.http.minimumStatus",
+                         100, 599, &health->minimum_status, validation);
+    read_optional_number(probe, "maximumStatus", L"health.http.maximumStatus",
+                         100, 599, &health->maximum_status, validation);
+    if (! health->url.starts_with(L"http://") &&
+        ! health->url.starts_with(L"https://")) {
+      validation->add(L"health.http.url must use http:// or https://");
+    }
+    if (health->maximum_status < health->minimum_status) {
+      validation->add(L"health.http.maximumStatus must be at least minimumStatus");
+    }
+  }
+  else if (health->type == health_check_type_t::command) {
+    reject_unknown_fields(probe, L"health.command", {"path", "arguments"},
+                          validation);
+    read_required_string(probe, "path", L"health.command.path",
+                         &health->command_path, validation);
+    if (health->command_path.empty() || PathIsRelativeW(health->command_path.c_str())) {
+      validation->add(L"health.command.path must be an absolute path");
+    }
+    parse_string_array(probe, "arguments", L"health.command.arguments",
+                       &health->command_arguments, validation);
+    std::wstring command_line;
+    std::wstring command_error;
+    if (! health->command_path.empty() &&
+        ! build_child_command_line(health->command_path,
+                                  health->command_arguments, &command_line,
+                                  &command_error)) {
+      validation->add(L"health command line is invalid: " + command_error);
+    }
+  }
+  else if (health->type == health_check_type_t::file) {
+    reject_unknown_fields(probe, L"health.file", {"path", "maximumAgeMs"},
+                          validation);
+    read_required_string(probe, "path", L"health.file.path",
+                         &health->file_path, validation);
+    if (health->file_path.empty() || PathIsRelativeW(health->file_path.c_str())) {
+      validation->add(L"health.file.path must be an absolute path");
+    }
+    read_optional_number(probe, "maximumAgeMs", L"health.file.maximumAgeMs",
+                         1, kDayMs, &health->maximum_age_ms, validation);
+  }
+}
+
 std::wstring read_error_message(unsigned long error) {
   return L"Unable to read configuration file (Windows error " +
          std::to_wstring(error) + L")";
@@ -468,7 +612,8 @@ bool parse_service_config(const char *json, size_t length,
     return false;
   }
   reject_unknown_fields(root, L"root",
-                        {"schema", "service", "application", "recovery"},
+                        {"schema", "service", "application", "recovery",
+                         "health"},
                         validation);
 
   yyjson_val *schema = yyjson_obj_get(root, "schema");
@@ -480,6 +625,7 @@ bool parse_service_config(const char *json, size_t length,
   parse_service(root, &config->service, validation);
   parse_application(root, &config->application, validation);
   parse_recovery(root, &config->recovery, validation);
+  parse_health(root, &config->health, validation);
   yyjson_doc_free(document);
   return validation->ok();
 }

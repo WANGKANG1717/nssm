@@ -30,5 +30,13 @@
     "windowMs": 60000,
     "maximumRestarts": 5,
     "resetAfterMs": 60000
+  },
+  "health": {
+    "type": "process",
+    "initialDelayMs": 10000,
+    "intervalMs": 10000,
+    "timeoutMs": 5000,
+    "failureThreshold": 3,
+    "successThreshold": 1
   }
 }

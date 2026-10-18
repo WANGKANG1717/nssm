@@ -1,10 +1,15 @@
+#include <winsock2.h>
+#include <ws2tcpip.h>
+
 #include "../child_process.h"
 #include "../config.h"
+#include "../health_check.h"
 #include "../job_object.h"
 #include "../recovery.h"
 
 #include <iostream>
 #include <string>
+#include <thread>
 #include <vector>
 
 namespace {
@@ -270,6 +275,36 @@ void configuration_tests() {
                                 &config, &validation),
          L"configuration strings containing U+0000 must be rejected");
 
+  constexpr const char *tcp_health_json = R"json({
+    "schema": 1,
+    "service": { "name": "worker" },
+    "application": { "path": "C:\\Apps\\worker.exe" },
+    "health": {
+      "type": "tcp",
+      "timeoutMs": 2000,
+      "tcp": { "host": "127.0.0.1", "port": 8080 }
+    }
+  })json";
+  expect(parse_service_config(tcp_health_json, strlen(tcp_health_json),
+                              &config, &validation) &&
+             config.health.type == health_check_type_t::tcp &&
+             config.health.port == 8080,
+         L"TCP health configuration should parse strictly");
+
+  constexpr const char *mixed_health_json = R"json({
+    "schema": 1,
+    "service": { "name": "worker" },
+    "application": { "path": "C:\\Apps\\worker.exe" },
+    "health": {
+      "type": "tcp",
+      "tcp": { "host": "127.0.0.1", "port": 8080 },
+      "file": { "path": "C:\\heartbeat", "maximumAgeMs": 1000 }
+    }
+  })json";
+  expect(! parse_service_config(mixed_health_json, strlen(mixed_health_json),
+                                &config, &validation),
+         L"health settings for an unselected probe type must be rejected");
+
   constexpr const char *invalid_json = R"json({
     "schema": 1,
     "unknown": true,
@@ -345,6 +380,140 @@ void recovery_tests() {
          L"jitter must never exceed the configured maximum delay");
 }
 
+SOCKET create_loopback_listener(unsigned short *port) {
+  SOCKET listener = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+  expect(listener != INVALID_SOCKET, L"loopback listener socket should open");
+  if (listener == INVALID_SOCKET) return listener;
+  sockaddr_in address = {};
+  address.sin_family = AF_INET;
+  address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+  address.sin_port = 0;
+  if (bind(listener, reinterpret_cast<sockaddr *>(&address), sizeof(address)) ||
+      listen(listener, 1)) {
+    expect(false, L"loopback listener should bind and listen");
+    closesocket(listener);
+    return INVALID_SOCKET;
+  }
+  int length = sizeof(address);
+  if (getsockname(listener, reinterpret_cast<sockaddr *>(&address), &length)) {
+    expect(false, L"loopback listener should expose its port");
+    closesocket(listener);
+    return INVALID_SOCKET;
+  }
+  *port = ntohs(address.sin_port);
+  return listener;
+}
+
+void health_probe_tests() {
+  health_check_config_t config;
+  config.type = health_check_type_t::process;
+  auto result = run_health_probe(config, GetCurrentProcess(), nullptr, nullptr);
+  expect(result.healthy, L"current process health probe should succeed");
+
+  wchar_t current_directory[MAX_PATH] = {};
+  unsigned long current_length = GetCurrentDirectoryW(
+      static_cast<unsigned long>(std::size(current_directory)),
+      current_directory);
+  expect(current_length > 0 && current_length < std::size(current_directory),
+         L"test working directory should be available");
+  std::wstring heartbeat = std::wstring(current_directory) +
+      L"\\nssm-health-" + std::to_wstring(GetCurrentProcessId()) + L".tmp";
+  HANDLE file = CreateFileW(heartbeat.c_str(), GENERIC_WRITE, 0, nullptr,
+                            CREATE_NEW, FILE_ATTRIBUTE_TEMPORARY, nullptr);
+  expect(file != INVALID_HANDLE_VALUE,
+         L"heartbeat fixture should be created inside the build directory");
+  if (file != INVALID_HANDLE_VALUE) CloseHandle(file);
+  config = {};
+  config.type = health_check_type_t::file;
+  config.file_path = heartbeat;
+  config.maximum_age_ms = 60000;
+  result = run_health_probe(config, nullptr, nullptr, nullptr);
+  expect(result.healthy, L"fresh heartbeat file should be healthy");
+
+  file = CreateFileW(heartbeat.c_str(), FILE_WRITE_ATTRIBUTES, 0, nullptr,
+                     OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+  if (file != INVALID_HANDLE_VALUE) {
+    FILETIME now_file = {};
+    GetSystemTimeAsFileTime(&now_file);
+    ULARGE_INTEGER old = {};
+    old.LowPart = now_file.dwLowDateTime;
+    old.HighPart = now_file.dwHighDateTime;
+    old.QuadPart -= 120000ULL * 10000ULL;
+    FILETIME old_file = {old.LowPart, old.HighPart};
+    SetFileTime(file, nullptr, nullptr, &old_file);
+    CloseHandle(file);
+  }
+  result = run_health_probe(config, nullptr, nullptr, nullptr);
+  expect(! result.healthy, L"stale heartbeat file should fail");
+  DeleteFileW(heartbeat.c_str());
+
+  wchar_t system_directory[MAX_PATH] = {};
+  UINT system_length = GetSystemDirectoryW(
+      system_directory, static_cast<UINT>(std::size(system_directory)));
+  expect(system_length > 0 && system_length < std::size(system_directory),
+         L"system directory should be available for command probe");
+  config = {};
+  config.type = health_check_type_t::command;
+  config.timeout_ms = 5000;
+  config.command_path = std::wstring(system_directory) + L"\\cmd.exe";
+  config.command_arguments = {L"/d", L"/c", L"exit /b 0"};
+  const wchar_t empty_environment[] = {L'\0', L'\0'};
+  result = run_health_probe(config, nullptr, empty_environment,
+                            system_directory);
+  expect(result.healthy, L"zero-exit command probe should succeed");
+
+  WSADATA winsock = {};
+  expect(! WSAStartup(MAKEWORD(2, 2), &winsock),
+         L"Winsock should start for local probe fixtures");
+  unsigned short port = 0;
+  SOCKET listener = create_loopback_listener(&port);
+  if (listener != INVALID_SOCKET) {
+    config = {};
+    config.type = health_check_type_t::tcp;
+    config.host = L"127.0.0.1";
+    config.port = port;
+    config.timeout_ms = 2000;
+    result = run_health_probe(config, nullptr, nullptr, nullptr);
+    expect(result.healthy, L"TCP probe should connect to a loopback listener");
+    closesocket(listener);
+  }
+
+  listener = create_loopback_listener(&port);
+  if (listener != INVALID_SOCKET) {
+    std::thread server([listener]() {
+      fd_set readable;
+      FD_ZERO(&readable);
+      FD_SET(listener, &readable);
+      timeval timeout = {5, 0};
+      if (select(0, &readable, nullptr, nullptr, &timeout) > 0) {
+        SOCKET client = accept(listener, nullptr, nullptr);
+        if (client != INVALID_SOCKET) {
+          unsigned long receive_timeout = 5000;
+          setsockopt(client, SOL_SOCKET, SO_RCVTIMEO,
+                     reinterpret_cast<const char *>(&receive_timeout),
+                     sizeof(receive_timeout));
+          char request[1024];
+          recv(client, request, sizeof(request), 0);
+          constexpr char response[] =
+              "HTTP/1.1 204 No Content\r\nContent-Length: 0\r\nConnection: close\r\n\r\n";
+          send(client, response, static_cast<int>(sizeof(response) - 1), 0);
+          closesocket(client);
+        }
+      }
+      closesocket(listener);
+    });
+    config = {};
+    config.type = health_check_type_t::http;
+    config.url = L"http://127.0.0.1:" + std::to_wstring(port) + L"/health";
+    config.timeout_ms = 2000;
+    result = run_health_probe(config, nullptr, nullptr, nullptr);
+    expect(result.healthy && result.detail == L"HTTP status 204",
+           L"HTTP probe should validate a local 204 response");
+    server.join();
+  }
+  WSACleanup();
+}
+
 }  // namespace
 
 int wmain() {
@@ -356,6 +525,7 @@ int wmain() {
   job_object_tests();
   configuration_tests();
   recovery_tests();
+  health_probe_tests();
 
   if (failures) {
     std::wcerr << failures << L" test assertion(s) failed\n";

@@ -45,6 +45,37 @@ struct recovery_config_t {
   unsigned long reset_after_ms = 60000;
 };
 
+enum class health_check_type_t {
+  disabled,
+  process,
+  tcp,
+  http,
+  command,
+  file,
+};
+
+struct health_check_config_t {
+  health_check_type_t type = health_check_type_t::disabled;
+  unsigned long initial_delay_ms = 10000;
+  unsigned long interval_ms = 10000;
+  unsigned long timeout_ms = 5000;
+  unsigned long failure_threshold = 3;
+  unsigned long success_threshold = 1;
+
+  std::wstring host;
+  unsigned short port = 0;
+
+  std::wstring url;
+  unsigned long minimum_status = 200;
+  unsigned long maximum_status = 399;
+
+  std::wstring command_path;
+  std::vector<std::wstring> command_arguments;
+
+  std::wstring file_path;
+  unsigned long maximum_age_ms = 60000;
+};
+
 struct service_account_config_t {
   service_account_type_t type = service_account_type_t::system;
   std::wstring name;
@@ -72,6 +103,7 @@ struct service_config_t {
   service_metadata_config_t service;
   application_config_t application;
   recovery_config_t recovery;
+  health_check_config_t health;
 };
 
 struct config_validation_t {

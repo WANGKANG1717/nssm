@@ -115,6 +115,13 @@ typedef struct nssm_service_t {
   bool throttle_section_initialised;
   CRITICAL_SECTION hook_section;
   bool hook_section_initialised;
+  CRITICAL_SECTION health_section;
+  bool health_section_initialised;
+  HANDLE health_stop_event;
+  HANDLE health_thread;
+  unsigned long health_failures;
+  unsigned long health_successes;
+  bool health_degraded;
   CONDITION_VARIABLE throttle_condition;
   HANDLE throttle_timer;
   LARGE_INTEGER throttle_duetime;

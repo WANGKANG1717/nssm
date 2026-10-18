@@ -2179,6 +2179,46 @@ Language = Chinese
 .
 
 MessageId = +1
+SymbolicName = NSSM_EVENT_HEALTH_MONITOR_START_FAILED
+Severity = Error
+Language = English
+Failed to start the health monitor for service %1: %2.
+.
+Language = Chinese
+无法启动服务 %1 的健康监控：%2。
+.
+
+MessageId = +1
+SymbolicName = NSSM_EVENT_HEALTH_FAILED
+Severity = Warning
+Language = English
+Health check for service %1 failed: %2 (consecutive failures: %3).
+.
+Language = Chinese
+服务 %1 的健康检查失败：%2（连续失败次数：%3）。
+.
+
+MessageId = +1
+SymbolicName = NSSM_EVENT_HEALTH_RECOVERED
+Severity = Informational
+Language = English
+Health check for service %1 recovered: %2.
+.
+Language = Chinese
+服务 %1 的健康检查已恢复：%2。
+.
+
+MessageId = +1
+SymbolicName = NSSM_EVENT_HEALTH_WATCHDOG
+Severity = Error
+Language = English
+Health watchdog is restarting service %1 after reaching the failure threshold: %2.
+.
+Language = Chinese
+服务 %1 达到健康检查失败阈值，Watchdog 将重启该服务：%2。
+.
+
+MessageId = +1
 SymbolicName = NSSM_EVENT_SERVICE_CONFIG_DESCRIPTION_FAILED
 Severity = Informational
 Language = English

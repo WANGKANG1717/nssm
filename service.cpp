@@ -2,6 +2,7 @@
 #include "child_process.h"
 #include "config.h"
 #include "job_object.h"
+#include "health_monitor.h"
 #include "recovery.h"
 
 bool is_admin;
@@ -810,6 +811,7 @@ nssm_service_t *alloc_nssm_service() {
 /* Free memory for a service. */
 void cleanup_nssm_service(nssm_service_t *service) {
   if (! service) return;
+  stop_health_monitor(service);
   if (service->username) HeapFree(GetProcessHeap(), 0, service->username);
   if (service->password) {
     SecureZeroMemory(service->password, service->passwordlen * sizeof(TCHAR));
@@ -825,6 +827,7 @@ void cleanup_nssm_service(nssm_service_t *service) {
   if (service->throttle_section_initialised) DeleteCriticalSection(&service->throttle_section);
   if (service->throttle_timer) CloseHandle(service->throttle_timer);
   if (service->hook_section_initialised) DeleteCriticalSection(&service->hook_section);
+  if (service->health_section_initialised) DeleteCriticalSection(&service->health_section);
   if (service->initial_env) HeapFree(GetProcessHeap(), 0, service->initial_env);
   delete service->config;
   delete service->recovery_state;
@@ -1612,6 +1615,10 @@ void WINAPI service_main(unsigned long argc, TCHAR **argv) {
   InitializeCriticalSection(&service->hook_section);
   service->hook_section_initialised = true;
 
+  /* Serialise health monitor startup and shutdown with process exit. */
+  InitializeCriticalSection(&service->health_section);
+  service->health_section_initialised = true;
+
   /* Remember our initial environment. */
   service->initial_env = copy_environment();
 
@@ -1668,6 +1675,13 @@ int monitor_service(nssm_service_t *service) {
   /* Monitor service */
   if (! RegisterWaitForSingleObject(&service->wait_handle, service->process_handle, end_service, (void *) service, INFINITE, WT_EXECUTEONLYONCE | WT_EXECUTELONGFUNCTION)) {
     log_event(EVENTLOG_WARNING_TYPE, NSSM_EVENT_REGISTERWAITFORSINGLEOBJECT_FAILED, service->name, service->exe, error_string(GetLastError()), 0);
+  }
+  else if (! start_health_monitor(service)) {
+    log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_HEALTH_MONITOR_START_FAILED,
+              service->name, error_string(GetLastError()), 0);
+    if (service->job_handle) {
+      terminate_service_job(service->job_handle, ERROR_NOT_READY, nullptr);
+    }
   }
 
   return 0;
@@ -1843,7 +1857,12 @@ unsigned long WINAPI service_control_handler(unsigned long control, unsigned lon
 
 /* Start the service */
 int start_service(nssm_service_t *service) {
-  service->stopping = false;
+  if (service->health_section_initialised) {
+    EnterCriticalSection(&service->health_section);
+    service->stopping = false;
+    LeaveCriticalSection(&service->health_section);
+  }
+  else service->stopping = false;
 
   if (service->process_handle) return 0;
   service->start_requested_count++;
@@ -2089,9 +2108,20 @@ int stop_service(nssm_service_t *service, unsigned long exitcode, bool graceful,
 void CALLBACK end_service(void *arg, unsigned char why) {
   nssm_service_t *service = (nssm_service_t *) arg;
 
-  if (service->stopping) return;
-
-  service->stopping = true;
+  if (service->health_section_initialised) {
+    EnterCriticalSection(&service->health_section);
+    if (service->stopping) {
+      LeaveCriticalSection(&service->health_section);
+      return;
+    }
+    service->stopping = true;
+    LeaveCriticalSection(&service->health_section);
+  }
+  else {
+    if (service->stopping) return;
+    service->stopping = true;
+  }
+  stop_health_monitor(service);
 
   service->rotate_stdout_online = service->rotate_stderr_online = NSSM_ROTATE_OFFLINE;
 
