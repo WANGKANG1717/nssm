@@ -652,8 +652,6 @@ bool load_registered_service_config(nssm_service_t *service,
 
   std::wstring arguments = join_windows_arguments(config->application.arguments);
   bool copied =
-      copy_checked(path, service->config_path, _countof(service->config_path),
-                   L"configuration path", validation) &&
       copy_checked(config->service.display_name, service->displayname,
                    _countof(service->displayname), L"service.displayName",
                    validation) &&

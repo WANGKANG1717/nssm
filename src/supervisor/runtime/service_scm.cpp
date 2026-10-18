@@ -92,32 +92,3 @@ SC_HANDLE open_service(SC_HANDLE manager, TCHAR *service_name,
 
   return open_service(manager, service_name, access, nullptr, 0);
 }
-
-QUERY_SERVICE_CONFIG *query_service_config(const TCHAR *service_name,
-                                           SC_HANDLE service) {
-  unsigned long bytes = 0;
-  QueryServiceConfig(service, nullptr, 0, &bytes);
-  unsigned long error = GetLastError();
-  if (error != ERROR_INSUFFICIENT_BUFFER || ! bytes) {
-    print_message(stderr, NSSM_MESSAGE_QUERYSERVICECONFIG_FAILED, service_name,
-                  error_string(error), 0);
-    return nullptr;
-  }
-
-  auto *config = static_cast<QUERY_SERVICE_CONFIG *>(
-      HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, bytes));
-  if (! config) {
-    print_message(stderr, NSSM_MESSAGE_OUT_OF_MEMORY,
-                  _T("QUERY_SERVICE_CONFIG"),
-                  _T("query_service_config()"), 0);
-    return nullptr;
-  }
-  if (! QueryServiceConfig(service, config, bytes, &bytes)) {
-    error = GetLastError();
-    HeapFree(GetProcessHeap(), 0, config);
-    print_message(stderr, NSSM_MESSAGE_QUERYSERVICECONFIG_FAILED, service_name,
-                  error_string(error), 0);
-    return nullptr;
-  }
-  return config;
-}

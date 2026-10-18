@@ -10,22 +10,8 @@
   Therefore we limit the service name to accommodate the path under HKLM.
 */
 #define EXE_LENGTH PATH_LENGTH
-#define CMD_LENGTH 32768
-#define KEY_LENGTH 255
 #define VALUE_LENGTH 16383
 #define SERVICE_NAME_LENGTH 257
-
-#define NSSM_KERNEL_DRIVER _T("SERVICE_KERNEL_DRIVER")
-#define NSSM_FILE_SYSTEM_DRIVER _T("SERVICE_FILE_SYSTEM_DRIVER")
-#define NSSM_WIN32_OWN_PROCESS _T("SERVICE_WIN32_OWN_PROCESS")
-#define NSSM_WIN32_SHARE_PROCESS _T("SERVICE_WIN32_SHARE_PROCESS")
-
-#define DEPENDENCY_SERVICES (1 << 0)
-#define DEPENDENCY_GROUPS (1 << 1)
-#define DEPENDENCY_ALL (DEPENDENCY_SERVICES | DEPENDENCY_GROUPS)
-#define NSSM_INTERACTIVE_PROCESS _T("SERVICE_INTERACTIVE_PROCESS")
-#define NSSM_SHARE_INTERACTIVE_PROCESS NSSM_WIN32_SHARE_PROCESS _T("|") NSSM_INTERACTIVE_PROCESS
-#define NSSM_UNKNOWN _T("?")
 
 #define NSSM_ROTATE_OFFLINE 0
 #define NSSM_ROTATE_ONLINE 1
@@ -36,18 +22,8 @@ struct recovery_state_t;
 struct status_snapshot_t;
 
 typedef struct nssm_service_t {
-  bool native;
   TCHAR name[SERVICE_NAME_LENGTH];
   TCHAR displayname[SERVICE_NAME_LENGTH];
-  TCHAR description[VALUE_LENGTH];
-  unsigned long startup;
-  TCHAR *username;
-  size_t usernamelen;
-  TCHAR *password;
-  size_t passwordlen;
-  unsigned long type;
-  TCHAR image[PATH_LENGTH];
-  TCHAR config_path[PATH_LENGTH];
   service_config_t *config;
   recovery_state_t *recovery_state;
   TCHAR exe[EXE_LENGTH];
@@ -55,8 +31,6 @@ typedef struct nssm_service_t {
   TCHAR dir[DIR_LENGTH];
   TCHAR *env;
   __int64 affinity;
-  TCHAR *dependencies;
-  unsigned long dependencieslen;
   unsigned long envlen;
   TCHAR *env_extra;
   unsigned long env_extralen;
@@ -151,16 +125,6 @@ void set_nssm_service_defaults(nssm_service_t *);
 void cleanup_nssm_service(nssm_service_t *);
 SC_HANDLE open_service_manager(unsigned long);
 SC_HANDLE open_service(SC_HANDLE, TCHAR *, unsigned long, TCHAR *, unsigned long);
-QUERY_SERVICE_CONFIG *query_service_config(const TCHAR *, SC_HANDLE);
-int append_to_dependencies(TCHAR *, unsigned long, TCHAR *, TCHAR **, unsigned long *, int);
-int remove_from_dependencies(TCHAR *, unsigned long, TCHAR *, TCHAR **, unsigned long *, int);
-int set_service_dependencies(const TCHAR *, SC_HANDLE, TCHAR *);
-int get_service_dependencies(const TCHAR *, SC_HANDLE, TCHAR **, unsigned long *, int);
-int get_service_dependencies(const TCHAR *, SC_HANDLE, TCHAR **, unsigned long *);
-int set_service_description(const TCHAR *, SC_HANDLE, TCHAR *);
-int get_service_description(const TCHAR *, SC_HANDLE, unsigned long, TCHAR *);
-int get_service_startup(const TCHAR *, SC_HANDLE, const QUERY_SERVICE_CONFIG *, unsigned long *);
-int get_service_username(const TCHAR *, const QUERY_SERVICE_CONFIG *, TCHAR **, size_t *);
 void set_service_recovery(nssm_service_t *);
 int monitor_service(nssm_service_t *);
 int start_service(nssm_service_t *);

@@ -1,5 +1,4 @@
 #include "nssm.h"
-#include "account.h"
 #include "child_process.h"
 #include "config.h"
 #include "console.h"
@@ -19,9 +18,6 @@
 #include "status_snapshot.h"
 #include "recovery.h"
 #include "resource_monitor.h"
-
-const TCHAR *startup_strings[] = { _T("SERVICE_AUTO_START"), _T("SERVICE_DELAYED_AUTO_START"), _T("SERVICE_DEMAND_START"), _T("SERVICE_DISABLED"), 0 };
-const TCHAR *priority_strings[] = { _T("REALTIME_PRIORITY_CLASS"), _T("HIGH_PRIORITY_CLASS"), _T("ABOVE_NORMAL_PRIORITY_CLASS"), _T("NORMAL_PRIORITY_CLASS"), _T("BELOW_NORMAL_PRIORITY_CLASS"), _T("IDLE_PRIORITY_CLASS"), 0 };
 
 static constexpr int kStartHandledByRecovery = -1;
 
@@ -226,7 +222,6 @@ void set_nssm_service_defaults(nssm_service_t *service) {
   if (! service) return;
 
   InitializeSRWLock(&service->status_snapshot_lock);
-  service->type = SERVICE_WIN32_OWN_PROCESS;
   service->priority = NORMAL_PRIORITY_CLASS;
   service->stdin_sharing = NSSM_STDIN_SHARING;
   service->stdin_disposition = NSSM_STDIN_DISPOSITION;
@@ -257,12 +252,6 @@ void cleanup_nssm_service(nssm_service_t *service) {
   stop_resource_monitor(service);
   stop_health_monitor(service);
   close_status_snapshot(service);
-  if (service->username) HeapFree(GetProcessHeap(), 0, service->username);
-  if (service->password) {
-    SecureZeroMemory(service->password, service->passwordlen * sizeof(TCHAR));
-    HeapFree(GetProcessHeap(), 0, service->password);
-  }
-  if (service->dependencies) HeapFree(GetProcessHeap(), 0, service->dependencies);
   if (service->env) HeapFree(GetProcessHeap(), 0, service->env);
   if (service->env_extra) HeapFree(GetProcessHeap(), 0, service->env_extra);
   if (service->handle) CloseServiceHandle(service->handle);
