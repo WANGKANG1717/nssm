@@ -1,4 +1,4 @@
-﻿LanguageNames =
+LanguageNames =
 (
 English=0x0409:MSG00409
 Chinese=0x0804:MSG00804
@@ -100,38 +100,6 @@ Language = Chinese
 .
 
 MessageId = +1
-SymbolicName = NSSM_MESSAGE_OUT_OF_MEMORY
-Severity = Error
-Language = English
-Out of memory for %s in %s!
-.
-Language = Chinese
-在 %s 中为 %s 分配内存失败！
-.
-
-MessageId = +1
-SymbolicName = NSSM_MESSAGE_OPEN_SERVICE_MANAGER_FAILED
-Severity = Informational
-Language = English
-Error opening service manager!
-.
-Language = Chinese
-打开服务管理器失败！
-.
-
-MessageId = +1
-SymbolicName = NSSM_MESSAGE_OPENSERVICE_FAILED
-Severity = Informational
-Language = English
-Can't open service!
-OpenService(): %s
-.
-Language = Chinese
-无法打开服务！
-OpenService()：%s
-.
-
-MessageId = +1
 SymbolicName = NSSM_MESSAGE_ENUMSERVICESSTATUS_FAILED
 Severity = Informational
 Language = English
@@ -141,16 +109,6 @@ EnumServicesStatus(): %s
 Language = Chinese
 无法打开服务！
 EnumServicesStatus()：%s
-.
-
-MessageId = +1
-SymbolicName = NSSM_MESSAGE_DELETESERVICE_FAILED
-Severity = Informational
-Language = English
-Error deleting service!
-.
-Language = Chinese
-删除服务失败！
 .
 
 MessageId = +1
@@ -183,18 +141,6 @@ StartServiceCtrlDispatcher() failed:
 Language = Chinese
 StartServiceCtrlDispatcher() 失败：
 %1
-.
-
-MessageId = +1
-SymbolicName = NSSM_EVENT_OPENSCMANAGER_FAILED
-Severity = Error
-Language = English
-Unable to connect to service manager!
-Perhaps you need to be an administrator...
-.
-Language = Chinese
-无法连接到服务管理器！
-可能需要管理员权限……
 .
 
 MessageId = +1
