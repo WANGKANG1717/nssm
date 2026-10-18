@@ -75,6 +75,7 @@ typedef struct nssm_service_t {
   bool kill_process_tree;
   SC_HANDLE handle;
   SERVICE_STATUS status;
+  SRWLOCK status_lock;
   SERVICE_STATUS_HANDLE status_handle;
   HANDLE process_handle;
   HANDLE job_handle;

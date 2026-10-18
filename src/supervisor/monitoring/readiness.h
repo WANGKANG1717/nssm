@@ -28,6 +28,7 @@ readiness_result_t wait_for_readiness(
     const wchar_t *environment, const wchar_t *working_directory,
     HANDLE cancellation_event = nullptr,
     SERVICE_STATUS_HANDLE status_handle = nullptr,
-    SERVICE_STATUS *service_status = nullptr);
+    SERVICE_STATUS *service_status = nullptr,
+    SRWLOCK *status_lock = nullptr);
 
 #endif

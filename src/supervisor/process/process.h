@@ -16,6 +16,7 @@ typedef struct {
   unsigned long kill_threads_delay;
   SERVICE_STATUS_HANDLE status_handle;
   SERVICE_STATUS *status;
+  SRWLOCK *status_lock;
   FILETIME creation_time;
   FILETIME exit_time;
   int signalled;

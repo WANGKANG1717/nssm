@@ -20,6 +20,14 @@
 static constexpr int kStartHandledByRecovery = -1;
 static constexpr int kStartAwaitingProcessExit = -2;
 
+template <typename Mutator>
+void update_service_status(nssm_service_t *service, Mutator mutator) {
+  AcquireSRWLockExclusive(&service->status_lock);
+  mutator(service->status);
+  SetServiceStatus(service->status_handle, &service->status);
+  ReleaseSRWLockExclusive(&service->status_lock);
+}
+
 static bool start_detached_thread(LPTHREAD_START_ROUTINE function,
                                   void *context) {
   HANDLE thread = CreateThread(nullptr, 0, function, context, 0, nullptr);
@@ -49,7 +57,7 @@ static int finish_service_start(nssm_service_t *service,
     readiness_result_t readiness = wait_for_readiness(
         service->config->readiness, service->process_handle, environment,
         service->dir, service->stop_event, service->status_handle,
-        &service->status);
+        &service->status, &service->status_lock);
     if (! readiness.ready()) {
       if (readiness.state == readiness_state_t::cancelled) {
         return kStartHandledByRecovery;
@@ -71,7 +79,8 @@ static int finish_service_start(nssm_service_t *service,
   else {
     const int stability = await_single_handle(
         service->status_handle, &service->status, service->process_handle,
-        service->name, _T("start_service"), NSSM_RESET_THROTTLE_RESTART);
+        service->name, _T("start_service"), NSSM_RESET_THROTTLE_RESTART,
+        &service->status_lock);
     if (stability == 0) {
       return kStartAwaitingProcessExit;
     }
@@ -86,11 +95,12 @@ static int finish_service_start(nssm_service_t *service,
 
   if (! service->allow_restart) return 0;
 
-  service->status.dwCurrentState = SERVICE_RUNNING;
-  service->status.dwCheckPoint = 0;
-  service->status.dwWaitHint = 0;
-  service->status.dwControlsAccepted &= ~SERVICE_ACCEPT_PAUSE_CONTINUE;
-  SetServiceStatus(service->status_handle, &service->status);
+  update_service_status(service, [](SERVICE_STATUS &status) {
+    status.dwCurrentState = SERVICE_RUNNING;
+    status.dwCheckPoint = 0;
+    status.dwWaitHint = 0;
+    status.dwControlsAccepted &= ~SERVICE_ACCEPT_PAUSE_CONTINUE;
+  });
   publish_status_snapshot(service);
   return 0;
 }
@@ -210,6 +220,7 @@ void set_nssm_service_defaults(nssm_service_t *service) {
   if (! service) return;
 
   InitializeSRWLock(&service->status_snapshot_lock);
+  InitializeSRWLock(&service->status_lock);
   service->stdin_sharing = NSSM_STDIN_SHARING;
   service->stdin_disposition = NSSM_STDIN_DISPOSITION;
   service->stdin_flags = NSSM_STDIN_FLAGS;
@@ -313,9 +324,11 @@ void WINAPI service_main(unsigned long argc, TCHAR **argv) {
 
   log_service_control(service->name, 0, true);
 
-  service->status.dwCurrentState = SERVICE_START_PENDING;
-  service->status.dwWaitHint = NSSM_RESET_THROTTLE_RESTART + NSSM_WAITHINT_MARGIN;
-  SetServiceStatus(service->status_handle, &service->status);
+  update_service_status(service, [](SERVICE_STATUS &status) {
+    status.dwCurrentState = SERVICE_START_PENDING;
+    status.dwWaitHint =
+        NSSM_RESET_THROTTLE_RESTART + NSSM_WAITHINT_MARGIN;
+  });
 
   if (is_process_administrator()) {
     SC_HANDLE services = open_service_manager(SC_MANAGER_CONNECT);
@@ -452,9 +465,10 @@ unsigned long WINAPI service_control_handler(unsigned long control, unsigned lon
       service->allow_restart = false;
       WakeConditionVariable(&service->throttle_condition);
       SetEvent(service->stop_event);
-      service->status.dwCurrentState = SERVICE_STOP_PENDING;
-      service->status.dwControlsAccepted = 0;
-      SetServiceStatus(service->status_handle, &service->status);
+      update_service_status(service, [](SERVICE_STATUS &status) {
+        status.dwCurrentState = SERVICE_STOP_PENDING;
+        status.dwControlsAccepted = 0;
+      });
 
       /*
         We MUST acknowledge the stop request promptly but we're committed to
@@ -476,16 +490,24 @@ unsigned long WINAPI service_control_handler(unsigned long control, unsigned lon
       }
       return NO_ERROR;
 
-    case SERVICE_CONTROL_CONTINUE:
+    case SERVICE_CONTROL_CONTINUE: {
       log_service_control(service->name, control, true);
       service->throttle = 0;
       WakeConditionVariable(&service->throttle_condition);
       /* We can't continue if the application is running! */
-      if (! service->process_handle) service->status.dwCurrentState = SERVICE_CONTINUE_PENDING;
-      service->status.dwWaitHint = throttle_milliseconds(service->throttle) + NSSM_WAITHINT_MARGIN;
+      const bool application_running = service->process_handle != nullptr;
+      const unsigned long wait_hint =
+          throttle_milliseconds(service->throttle) + NSSM_WAITHINT_MARGIN;
       log_event(EVENTLOG_INFORMATION_TYPE, NSSM_EVENT_RESET_THROTTLE, service->name, 0);
-      SetServiceStatus(service->status_handle, &service->status);
+      update_service_status(service, [application_running, wait_hint](
+                                         SERVICE_STATUS &status) {
+        if (! application_running) {
+          status.dwCurrentState = SERVICE_CONTINUE_PENDING;
+        }
+        status.dwWaitHint = wait_hint;
+      });
       return NO_ERROR;
+    }
 
     case SERVICE_CONTROL_PAUSE:
       /*
@@ -538,9 +560,10 @@ int start_service(nssm_service_t *service) {
     return kStartHandledByRecovery;
   }
 
-  service->status.dwCurrentState = SERVICE_START_PENDING;
-  service->status.dwControlsAccepted = SERVICE_ACCEPT_SHUTDOWN | SERVICE_ACCEPT_STOP;
-  SetServiceStatus(service->status_handle, &service->status);
+  update_service_status(service, [](SERVICE_STATUS &status) {
+    status.dwCurrentState = SERVICE_START_PENDING;
+    status.dwControlsAccepted = SERVICE_ACCEPT_SHUTDOWN | SERVICE_ACCEPT_STOP;
+  });
 
   /* Did another thread receive a stop control? */
   if (service->allow_restart) {
@@ -592,9 +615,10 @@ int stop_service(nssm_service_t *service, unsigned long exitcode) {
   service->rotate_stdout_online = service->rotate_stderr_online = NSSM_ROTATE_OFFLINE;
 
   /* Signal we are stopping */
-  service->status.dwCurrentState = SERVICE_STOP_PENDING;
-  service->status.dwWaitHint = NSSM_WAITHINT_MARGIN;
-  SetServiceStatus(service->status_handle, &service->status);
+  update_service_status(service, [](SERVICE_STATUS &status) {
+    status.dwCurrentState = SERVICE_STOP_PENDING;
+    status.dwWaitHint = NSSM_WAITHINT_MARGIN;
+  });
 
   /* Nothing to do if service isn't running */
   if (service->pid) {
@@ -610,16 +634,17 @@ int stop_service(nssm_service_t *service, unsigned long exitcode) {
   end_service((void *) service, true);
 
   /* Signal we stopped */
-  service->status.dwCurrentState = SERVICE_STOPPED;
-  if (exitcode) {
-    service->status.dwWin32ExitCode = ERROR_SERVICE_SPECIFIC_ERROR;
-    service->status.dwServiceSpecificExitCode = exitcode;
-  }
-  else {
-    service->status.dwWin32ExitCode = NO_ERROR;
-    service->status.dwServiceSpecificExitCode = 0;
-  }
-  SetServiceStatus(service->status_handle, &service->status);
+  update_service_status(service, [exitcode](SERVICE_STATUS &status) {
+    status.dwCurrentState = SERVICE_STOPPED;
+    if (exitcode) {
+      status.dwWin32ExitCode = ERROR_SERVICE_SPECIFIC_ERROR;
+      status.dwServiceSpecificExitCode = exitcode;
+    }
+    else {
+      status.dwWin32ExitCode = NO_ERROR;
+      status.dwServiceSpecificExitCode = 0;
+    }
+  });
 
   return exitcode;
 }
@@ -747,9 +772,10 @@ void throttle_restart(nssm_service_t *service) {
   if (! ms) return;
   ++service->throttle;
   EnterCriticalSection(&service->throttle_section);
-  service->status.dwCurrentState = SERVICE_PAUSED;
-  service->status.dwControlsAccepted |= SERVICE_ACCEPT_PAUSE_CONTINUE;
-  SetServiceStatus(service->status_handle, &service->status);
+  update_service_status(service, [](SERVICE_STATUS &status) {
+    status.dwCurrentState = SERVICE_PAUSED;
+    status.dwControlsAccepted |= SERVICE_ACCEPT_PAUSE_CONTINUE;
+  });
   SleepConditionVariableCS(&service->throttle_condition,
                            &service->throttle_section, ms);
   LeaveCriticalSection(&service->throttle_section);

@@ -55,6 +55,7 @@ void service_kill_t(nssm_service_t *service, kill_t *k) {
   k->kill_threads_delay = service->kill_threads_delay;
   k->status_handle = service->status_handle;
   k->status = &service->status;
+  k->status_lock = &service->status_lock;
   k->creation_time = service->creation_time;
   k->exit_time = service->exit_time;
 }
@@ -211,7 +212,9 @@ int kill_process(nssm_service_t *service, kill_t *k) {
   */
   EnumWindows((WNDENUMPROC) kill_window, (LPARAM) k);
   if (k->signalled) {
-    if (! await_single_handle(k->status_handle, k->status, k->process_handle, k->name, _T("kill_process"), k->kill_window_delay)) return 1;
+    if (! await_single_handle(k->status_handle, k->status, k->process_handle,
+                              k->name, _T("kill_process"),
+                              k->kill_window_delay, k->status_lock)) return 1;
     k->signalled = 0;
   }
 
@@ -221,7 +224,9 @@ int kill_process(nssm_service_t *service, kill_t *k) {
     there's still no guarantee of success.
   */
   if (kill_threads(k)) {
-    if (! await_single_handle(k->status_handle, k->status, k->process_handle, k->name, _T("kill_process"), k->kill_threads_delay)) return 1;
+    if (! await_single_handle(k->status_handle, k->status, k->process_handle,
+                              k->name, _T("kill_process"),
+                              k->kill_threads_delay, k->status_lock)) return 1;
   }
 
   /* We tried being nice.  Time for extreme prejudice. */
@@ -282,7 +287,9 @@ int kill_console(nssm_service_t *service, kill_t *k) {
   }
 
   /* Wait for process to exit. */
-  if (await_single_handle(k->status_handle, k->status, k->process_handle, k->name, _T("kill_console"), k->kill_console_delay)) ret = 6;
+  if (await_single_handle(k->status_handle, k->status, k->process_handle,
+                          k->name, _T("kill_console"),
+                          k->kill_console_delay, k->status_lock)) ret = 6;
 
   /* Remove our handler. */
   if (ignored && ! SetConsoleCtrlHandler(0, FALSE)) {

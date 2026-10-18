@@ -7,7 +7,8 @@
 
 int await_single_handle(SERVICE_STATUS_HANDLE status_handle,
                         SERVICE_STATUS *status, HANDLE handle, TCHAR *name,
-                        TCHAR *function_name, unsigned long timeout) {
+                        TCHAR *function_name, unsigned long timeout,
+                        SRWLOCK *status_lock) {
   const std::wstring function = std::wstring(function_name) + _T("()");
   TCHAR timeout_milliseconds[16] = {};
   _sntprintf_s(timeout_milliseconds, _countof(timeout_milliseconds), _TRUNCATE,
@@ -21,9 +22,11 @@ int await_single_handle(SERVICE_STATUS_HANDLE status_handle,
     }
 
     if (status) {
+      if (status_lock) AcquireSRWLockExclusive(status_lock);
       status->dwWaitHint += interval;
       ++status->dwCheckPoint;
       SetServiceStatus(status_handle, status);
+      if (status_lock) ReleaseSRWLockExclusive(status_lock);
     }
 
     if (waited) {
