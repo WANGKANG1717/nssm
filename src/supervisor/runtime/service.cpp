@@ -100,6 +100,13 @@ static void set_restart_allowed(nssm_service_t *service, bool allowed) {
   LeaveCriticalSection(&service->health_section);
 }
 
+static void reset_throttle(nssm_service_t *service, bool wake_waiter) {
+  EnterCriticalSection(&service->throttle_section);
+  service->throttle = 0;
+  if (wake_waiter) WakeConditionVariable(&service->throttle_condition);
+  LeaveCriticalSection(&service->throttle_section);
+}
+
 static bool prepare_child_launch(nssm_service_t *service,
                                  std::wstring *command_line,
                                  std::vector<wchar_t> *environment) {
@@ -136,7 +143,7 @@ static int finish_service_start(nssm_service_t *service,
       }
       return kStartAwaitingProcessExit;
     }
-    service->throttle = 0;
+    reset_throttle(service, false);
     log_event(EVENTLOG_INFORMATION_TYPE, NSSM_EVENT_READINESS_READY,
               service->name, readiness.detail.c_str(), 0);
   }
@@ -154,7 +161,7 @@ static int finish_service_start(nssm_service_t *service,
       }
       return stop_service(service, 3);
     }
-    service->throttle = 0;
+    reset_throttle(service, false);
   }
 
   if (! restart_allowed(service)) return 0;
@@ -554,16 +561,12 @@ unsigned long WINAPI service_control_handler(unsigned long control, unsigned lon
 
     case SERVICE_CONTROL_CONTINUE: {
       log_service_control(service->name, control, true);
-      service->throttle = 0;
-      WakeConditionVariable(&service->throttle_condition);
-      /* We can't continue if the application is running! */
-      const bool application_running = service->process_handle != nullptr;
+      reset_throttle(service, true);
       const unsigned long wait_hint =
-          throttle_milliseconds(service->throttle) + kServiceWaitHintMarginMs;
+          throttle_milliseconds(0) + kServiceWaitHintMarginMs;
       log_event(EVENTLOG_INFORMATION_TYPE, NSSM_EVENT_RESET_THROTTLE, service->name, 0);
-      update_service_status(service, [application_running, wait_hint](
-                                         SERVICE_STATUS &status) {
-        if (! application_running) {
+      update_service_status(service, [wait_hint](SERVICE_STATUS &status) {
+        if (status.dwCurrentState != SERVICE_RUNNING) {
           status.dwCurrentState = SERVICE_CONTINUE_PENDING;
         }
         status.dwWaitHint = wait_hint;
@@ -835,8 +838,8 @@ void throttle_restart(nssm_service_t *service) {
   unsigned long ms = service->next_restart_delay_ms;
   service->next_restart_delay_ms = 0;
   if (! ms) return;
-  ++service->throttle;
   EnterCriticalSection(&service->throttle_section);
+  ++service->throttle;
   update_service_status(service, [](SERVICE_STATUS &status) {
     status.dwCurrentState = SERVICE_PAUSED;
     status.dwControlsAccepted |= SERVICE_ACCEPT_PAUSE_CONTINUE;
