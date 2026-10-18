@@ -2,7 +2,6 @@
 #include "event.h"
 #include "messages.h"
 #include "process.h"
-#include "registry.h"
 #include "service.h"
 #include "service_wait.h"
 #include "win32_handle.h"
@@ -49,7 +48,6 @@ void service_kill_t(nssm_service_t *service, kill_t *k) {
   k->process_handle = service->process_handle;
   k->pid = service->pid;
   k->exitcode = service->exitcode;
-  k->stop_method = service->stop_method;
   k->kill_console_delay = service->kill_console_delay;
   k->kill_window_delay = service->kill_window_delay;
   k->kill_threads_delay = service->kill_threads_delay;
@@ -209,21 +207,17 @@ int kill_process(nssm_service_t *service, kill_t *k) {
   }
 
   /* Try to send a Control-C event to the console. */
-  if (k->stop_method & NSSM_STOP_METHOD_CONSOLE) {
-    if (! kill_console(k)) return 1;
-  }
+  if (! kill_console(k)) return 1;
 
   /*
     Try to post messages to the windows belonging to the given process ID.
     If the process is a console application it won't have any windows so there's
     no guarantee of success.
   */
-  if (k->stop_method & NSSM_STOP_METHOD_WINDOW) {
-    EnumWindows((WNDENUMPROC) kill_window, (LPARAM) k);
-    if (k->signalled) {
-      if (! await_single_handle(k->status_handle, k->status, k->process_handle, k->name, _T("kill_process"), k->kill_window_delay)) return 1;
-      k->signalled = 0;
-    }
+  EnumWindows((WNDENUMPROC) kill_window, (LPARAM) k);
+  if (k->signalled) {
+    if (! await_single_handle(k->status_handle, k->status, k->process_handle, k->name, _T("kill_process"), k->kill_window_delay)) return 1;
+    k->signalled = 0;
   }
 
   /*
@@ -231,18 +225,12 @@ int kill_process(nssm_service_t *service, kill_t *k) {
     process.  Console applications might have them (but probably won't) so
     there's still no guarantee of success.
   */
-  if (k->stop_method & NSSM_STOP_METHOD_THREADS) {
-    if (kill_threads(k)) {
-      if (! await_single_handle(k->status_handle, k->status, k->process_handle, k->name, _T("kill_process"), k->kill_threads_delay)) return 1;
-    }
+  if (kill_threads(k)) {
+    if (! await_single_handle(k->status_handle, k->status, k->process_handle, k->name, _T("kill_process"), k->kill_threads_delay)) return 1;
   }
 
   /* We tried being nice.  Time for extreme prejudice. */
-  if (k->stop_method & NSSM_STOP_METHOD_TERMINATE) {
-    return TerminateProcess(k->process_handle, k->exitcode);
-  }
-
-  return 0;
+  return TerminateProcess(k->process_handle, k->exitcode);
 }
 
 int kill_process(kill_t *k) {
@@ -337,8 +325,8 @@ void walk_process_tree(nssm_service_t *service, walk_function_t fn, kill_t *k, u
       /* Maybe it already died. */
       unsigned long ret;
       if (! GetExitCodeProcess(process_handle, &ret) || ret == STILL_ACTIVE) {
-        if (k->stop_method & NSSM_STOP_METHOD_TERMINATE) log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_TERMINATEPROCESS_FAILED, pid_string, k->name, error_string(GetLastError()), 0);
-        else log_event(EVENTLOG_WARNING_TYPE, NSSM_EVENT_PROCESS_STILL_ACTIVE, k->name, pid_string, NSSM, NSSM_REG_STOP_METHOD_SKIP, 0);
+        log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_TERMINATEPROCESS_FAILED,
+                  pid_string, k->name, error_string(GetLastError()), 0);
       }
     }
 

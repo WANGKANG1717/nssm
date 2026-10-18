@@ -68,7 +68,6 @@ typedef struct nssm_service_t {
   unsigned long rotate_bytes_low;
   unsigned long rotate_bytes_high;
   unsigned long rotate_delay;
-  unsigned long stop_method;
   unsigned long kill_console_delay;
   unsigned long kill_window_delay;
   unsigned long kill_threads_delay;

@@ -12,7 +12,6 @@ typedef struct {
   unsigned long depth;
   unsigned long pid;
   unsigned long exitcode;
-  unsigned long stop_method;
   unsigned long kill_console_delay;
   unsigned long kill_window_delay;
   unsigned long kill_threads_delay;

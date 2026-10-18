@@ -232,7 +232,6 @@ void set_nssm_service_defaults(nssm_service_t *service) {
   service->stderr_sharing = NSSM_STDERR_SHARING;
   service->stderr_disposition = NSSM_STDERR_DISPOSITION;
   service->stderr_flags = NSSM_STDERR_FLAGS;
-  service->stop_method = ~0;
   service->kill_console_delay = NSSM_KILL_CONSOLE_GRACE_PERIOD;
   service->kill_window_delay = NSSM_KILL_WINDOW_GRACE_PERIOD;
   service->kill_threads_delay = NSSM_KILL_THREADS_GRACE_PERIOD;
