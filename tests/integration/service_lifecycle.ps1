@@ -12,6 +12,7 @@ if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administra
 
 $executablePath = (Resolve-Path -LiteralPath $Executable).Path
 $serviceName = "nssm-integration-$PID"
+$unmanagedServiceName = "$serviceName-unmanaged"
 $testRoot = Join-Path $env:ProgramData $serviceName
 $configPath = Join-Path $testRoot 'service.json'
 $exportPath = Join-Path $testRoot 'exported.json'
@@ -52,6 +53,15 @@ try {
   [void](New-Item -ItemType Directory -Path $testRoot -Force)
   Set-SecureTestAcl $testRoot $true
   $systemDirectory = [Environment]::SystemDirectory
+  $unmanagedCommand = '"{0}" /c exit 0' -f (Join-Path $systemDirectory 'cmd.exe')
+  & sc.exe create $unmanagedServiceName 'binPath=' $unmanagedCommand `
+    'start=' 'demand' | Out-Null
+  if ($LASTEXITCODE -ne 0) { throw 'unmanaged test service creation failed' }
+  & $executablePath remove $unmanagedServiceName confirm 2>$null | Out-Null
+  if ($LASTEXITCODE -eq 0) { throw 'nssm removed an unmanaged service' }
+  & sc.exe query $unmanagedServiceName 2>$null | Out-Null
+  if ($LASTEXITCODE -ne 0) { throw 'unmanaged service no longer exists' }
+
   $configuration = @{
     schema = 1
     service = @{
@@ -102,6 +112,8 @@ try {
 finally {
   & sc.exe stop $serviceName 2>$null | Out-Null
   & sc.exe delete $serviceName 2>$null | Out-Null
+  & sc.exe stop $unmanagedServiceName 2>$null | Out-Null
+  & sc.exe delete $unmanagedServiceName 2>$null | Out-Null
   if (Test-Path -LiteralPath $testRoot) {
     Remove-Item -LiteralPath $testRoot -Recurse -Force
   }
