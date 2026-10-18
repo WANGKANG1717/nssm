@@ -84,6 +84,7 @@ set(NSSM_SOURCES
   nssm.cpp
   nssm.manifest
   process.cpp
+  readiness.cpp
   recovery.cpp
   resource_monitor.cpp
   registry.cpp
@@ -175,6 +176,7 @@ if(BUILD_TESTING)
     config.cpp
     health_check.cpp
     job_object.cpp
+    readiness.cpp
     recovery.cpp
   )
   target_compile_definitions(nssm_unit_tests PRIVATE

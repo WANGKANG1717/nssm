@@ -5,6 +5,7 @@
 #include "../config.h"
 #include "../health_check.h"
 #include "../job_object.h"
+#include "../readiness.h"
 #include "../recovery.h"
 
 #include <iostream>
@@ -326,6 +327,24 @@ void configuration_tests() {
                                 &config, &validation),
          L"health settings for an unselected probe type must be rejected");
 
+  constexpr const char *readiness_json = R"json({
+    "schema": 1,
+    "service": { "name": "worker" },
+    "application": { "path": "C:\\Apps\\worker.exe" },
+    "readiness": {
+      "type": "tcp",
+      "startupTimeoutMs": 30000,
+      "successThreshold": 2,
+      "tcp": { "host": "127.0.0.1", "port": 8080 }
+    }
+  })json";
+  expect(parse_service_config(readiness_json, strlen(readiness_json),
+                              &config, &validation) &&
+             config.readiness.probe.type == health_check_type_t::tcp &&
+             config.readiness.probe.success_threshold == 2 &&
+             config.readiness.startup_timeout_ms == 30000,
+         L"readiness configuration should parse independently from health");
+
   constexpr const char *resource_json = R"json({
     "schema": 1,
     "service": { "name": "worker" },
@@ -553,6 +572,29 @@ void health_probe_tests() {
   WSACleanup();
 }
 
+void readiness_tests() {
+  readiness_config_t config;
+  config.probe.type = health_check_type_t::process;
+  config.probe.interval_ms = 100;
+  config.probe.success_threshold = 2;
+  config.startup_timeout_ms = 1000;
+  readiness_result_t result = wait_for_readiness(
+      config, GetCurrentProcess(), nullptr, nullptr);
+  expect(result.ready(),
+         L"readiness should require the configured consecutive successes");
+
+  config = {};
+  config.probe.type = health_check_type_t::file;
+  config.probe.file_path = L"nssm-readiness-missing-" +
+      std::to_wstring(GetCurrentProcessId());
+  config.probe.interval_ms = 100;
+  config.startup_timeout_ms = 250;
+  result = wait_for_readiness(config, GetCurrentProcess(), nullptr, nullptr);
+  expect(result.state == readiness_state_t::timed_out &&
+             result.error == ERROR_TIMEOUT,
+         L"readiness should fail when its startup deadline expires");
+}
+
 }  // namespace
 
 int wmain() {
@@ -565,6 +607,7 @@ int wmain() {
   configuration_tests();
   recovery_tests();
   health_probe_tests();
+  readiness_tests();
 
   if (failures) {
     std::wcerr << failures << L" test assertion(s) failed\n";

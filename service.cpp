@@ -3,6 +3,7 @@
 #include "config.h"
 #include "job_object.h"
 #include "health_monitor.h"
+#include "readiness.h"
 #include "recovery.h"
 #include "resource_monitor.h"
 
@@ -17,6 +18,7 @@ const TCHAR *startup_strings[] = { _T("SERVICE_AUTO_START"), _T("SERVICE_DELAYED
 const TCHAR *priority_strings[] = { _T("REALTIME_PRIORITY_CLASS"), _T("HIGH_PRIORITY_CLASS"), _T("ABOVE_NORMAL_PRIORITY_CLASS"), _T("NORMAL_PRIORITY_CLASS"), _T("BELOW_NORMAL_PRIORITY_CLASS"), _T("IDLE_PRIORITY_CLASS"), 0 };
 
 static hook_thread_t hook_threads = { NULL, 0 };
+static constexpr int kStartHandledByRecovery = -1;
 
 typedef struct {
   int first;
@@ -1669,6 +1671,7 @@ void set_service_recovery(nssm_service_t *service) {
 int monitor_service(nssm_service_t *service) {
   /* Set service status to started */
   int ret = start_service(service);
+  if (ret == kStartHandledByRecovery) return 0;
   if (ret) {
     TCHAR code[16];
     _sntprintf_s(code, _countof(code), _TRUNCATE, _T("%d"), ret);
@@ -2050,18 +2053,43 @@ int start_service(nssm_service_t *service) {
     if (pi.hThread) CloseHandle(pi.hThread);
   }
 
-  /*
-    Wait for a clean startup before changing the service status to RUNNING
-    but be mindful of the fact that we are blocking the service control manager
-    so abandon the wait before too much time has elapsed.
-  */
-  if (await_single_handle(service->status_handle, &service->status, service->process_handle, service->name, _T("start_service"), service->throttle_delay) == 1) service->throttle = 0;
+  if (service->config && service->config->readiness.enabled()) {
+    readiness_result_t readiness = wait_for_readiness(
+        service->config->readiness, service->process_handle,
+        child_environment.data(), service->dir, service->status_handle,
+        &service->status);
+    if (! readiness.ready()) {
+      log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_READINESS_FAILED,
+                service->name, readiness.detail.c_str(), 0);
+      if (readiness.state != readiness_state_t::process_exited &&
+          service->job_handle) {
+        terminate_service_job(service->job_handle, ERROR_NOT_READY, nullptr);
+        WaitForSingleObject(service->process_handle,
+                            NSSM_SERVICE_STATUS_DEADLINE);
+      }
+      end_service(service, false);
+      return kStartHandledByRecovery;
+    }
+    service->throttle = 0;
+    log_event(EVENTLOG_INFORMATION_TYPE, NSSM_EVENT_READINESS_READY,
+              service->name, readiness.detail.c_str(), 0);
+  }
+  else {
+    /* Preserve the short process-stability check when no probe is configured. */
+    if (await_single_handle(service->status_handle, &service->status,
+                            service->process_handle, service->name,
+                            _T("start_service"), service->throttle_delay) == 1) {
+      service->throttle = 0;
+    }
+  }
 
   /* Did another thread receive a stop control? */
   if (! service->allow_restart) return 0;
 
   /* Signal successful start */
   service->status.dwCurrentState = SERVICE_RUNNING;
+  service->status.dwCheckPoint = 0;
+  service->status.dwWaitHint = 0;
   service->status.dwControlsAccepted &= ~SERVICE_ACCEPT_PAUSE_CONTINUE;
   SetServiceStatus(service->status_handle, &service->status);
 

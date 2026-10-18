@@ -31,6 +31,11 @@
     "maximumRestarts": 5,
     "resetAfterMs": 60000
   },
+  "readiness": {
+    "type": "process",
+    "startupTimeoutMs": 30000,
+    "successThreshold": 1
+  },
   "health": {
     "type": "process",
     "initialDelayMs": 10000,

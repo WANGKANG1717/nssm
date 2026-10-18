@@ -2229,6 +2229,26 @@ Language = Chinese
 .
 
 MessageId = +1
+SymbolicName = NSSM_EVENT_READINESS_READY
+Severity = Informational
+Language = English
+Service %1 is ready: %2.
+.
+Language = Chinese
+服务 %1 已就绪：%2。
+.
+
+MessageId = +1
+SymbolicName = NSSM_EVENT_READINESS_FAILED
+Severity = Error
+Language = English
+Service %1 failed its readiness check: %2.
+.
+Language = Chinese
+服务 %1 未通过就绪检查：%2。
+.
+
+MessageId = +1
 SymbolicName = NSSM_EVENT_CONFIGURE_JOB_FAILED
 Severity = Error
 Language = English

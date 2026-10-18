@@ -76,6 +76,23 @@ struct health_check_config_t {
   unsigned long maximum_age_ms = 60000;
 };
 
+struct readiness_config_t {
+  health_check_config_t probe;
+  unsigned long startup_timeout_ms = 60000;
+
+  readiness_config_t() {
+    probe.initial_delay_ms = 0;
+    probe.interval_ms = 1000;
+    probe.timeout_ms = 1000;
+    probe.failure_threshold = 1;
+    probe.success_threshold = 1;
+  }
+
+  bool enabled() const {
+    return probe.type != health_check_type_t::disabled;
+  }
+};
+
 struct resource_limit_config_t {
   unsigned long monitor_interval_ms = 1000;
   unsigned long long memory_limit_bytes = 0;
@@ -115,6 +132,7 @@ struct service_config_t {
   service_metadata_config_t service;
   application_config_t application;
   recovery_config_t recovery;
+  readiness_config_t readiness;
   health_check_config_t health;
   resource_limit_config_t resources;
 };
