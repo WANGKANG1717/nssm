@@ -2,6 +2,13 @@ cmake_minimum_required(VERSION 3.25)
 
 project(nssm VERSION 3.1.3 LANGUAGES C CXX RC)
 
+file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/generated")
+configure_file(
+  "${CMAKE_CURRENT_SOURCE_DIR}/src/app/version.h.in"
+  "${CMAKE_CURRENT_BINARY_DIR}/generated/version.h"
+  @ONLY
+)
+
 set(NSSM_BUILD_LABEL "release" CACHE STRING
     "Stable label shown by 'nssm version' (avoid timestamps for reproducible builds)")
 
@@ -131,7 +138,7 @@ add_dependencies(nssm nssm_messages)
 set_property(
   SOURCE "${NSSM_RESOURCE_SOURCE}"
   APPEND PROPERTY OBJECT_DEPENDS
-    "${NSSM_MESSAGES_HEADER};${NSSM_MESSAGES_RESOURCE};${NSSM_MESSAGES_BINARIES};${CMAKE_CURRENT_SOURCE_DIR}/src/app/version.h;${CMAKE_CURRENT_SOURCE_DIR}/resources/resource.h;${CMAKE_CURRENT_SOURCE_DIR}/resources/nssm.ico;${CMAKE_CURRENT_SOURCE_DIR}/resources/nssm.manifest"
+    "${NSSM_MESSAGES_HEADER};${NSSM_MESSAGES_RESOURCE};${NSSM_MESSAGES_BINARIES};${CMAKE_CURRENT_BINARY_DIR}/generated/version.h;${CMAKE_CURRENT_SOURCE_DIR}/resources/resource.h;${CMAKE_CURRENT_SOURCE_DIR}/resources/nssm.ico;${CMAKE_CURRENT_SOURCE_DIR}/resources/nssm.manifest"
 )
 
 # The generated script is ASCII-only and contains explicit Unicode escapes,
