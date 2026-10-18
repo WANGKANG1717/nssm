@@ -298,6 +298,27 @@ config_operation_result_t validation_failure(
   return result;
 }
 
+config_operation_status_t registration_error_status(unsigned long error) {
+  switch (error) {
+    case ERROR_ACCESS_DENIED:
+      return config_operation_status_t::permission;
+    case ERROR_FILE_NOT_FOUND:
+    case ERROR_PATH_NOT_FOUND:
+      return config_operation_status_t::not_found;
+    case ERROR_INVALID_DATA:
+      return config_operation_status_t::conflict;
+    default:
+      return config_operation_status_t::system;
+  }
+}
+
+config_operation_status_t managed_state_error_status(unsigned long error) {
+  const config_operation_status_t status = registration_error_status(error);
+  return status == config_operation_status_t::not_found
+             ? config_operation_status_t::conflict
+             : status;
+}
+
 }  // namespace
 
 config_operation_result_t export_service_config(
@@ -306,8 +327,7 @@ config_operation_result_t export_service_config(
   unsigned long error = ERROR_SUCCESS;
   if (! read_config_path(service_name, &source, &error)) {
     return operation_failure(
-        error == ERROR_ACCESS_DENIED ? config_operation_status_t::permission
-                                     : config_operation_status_t::not_found,
+        registration_error_status(error),
         L"Unable to read the registered configuration path", error);
   }
   service_config_t config;
@@ -384,9 +404,14 @@ config_operation_result_t plan_service_config(
   unsigned long query_error = ERROR_SUCCESS;
   if (! read_existing_service_state(service.get(), desired.service.name, &state,
                                     &query_error)) {
+    const config_operation_status_t status =
+        managed_state_error_status(query_error);
     return operation_failure(
-        config_operation_status_t::conflict,
-        L"The existing service is not managed by declarative NSSM", query_error);
+        status,
+        status == config_operation_status_t::conflict
+            ? L"The existing service is not managed by declarative NSSM"
+            : L"Unable to read the existing service configuration",
+        query_error);
   }
 
   service_config_t current;
@@ -478,9 +503,13 @@ config_operation_result_t apply_service_config(
     unsigned long query_error = ERROR_SUCCESS;
     if (! read_existing_service_state(service.get(), config.service.name, &previous,
                                       &query_error)) {
+      const config_operation_status_t status =
+          managed_state_error_status(query_error);
       return operation_failure(
-          config_operation_status_t::conflict,
-          L"Refusing to update a service not previously managed by this declarative NSSM",
+          status,
+          status == config_operation_status_t::conflict
+              ? L"Refusing to update a service not previously managed by this declarative NSSM"
+              : L"Unable to read the existing service configuration",
           query_error);
     }
     if (! passwordless_service_account(previous.account)) {
