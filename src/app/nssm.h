@@ -25,11 +25,7 @@
 
   So that's that cleared up, then.
 */
-#ifdef UNICODE
 #define PATH_LENGTH 32767
-#else
-#define PATH_LENGTH MAX_PATH
-#endif
 #define DIR_LENGTH PATH_LENGTH - 12
 
 #ifndef WINVER
@@ -50,6 +46,7 @@
 #include <shlwapi.h>
 #include <stdarg.h>
 #include <stdio.h>
+static_assert(sizeof(TCHAR) == sizeof(wchar_t));
 #include "utf8.h"
 #include "service.h"
 #include "account.h"
@@ -76,11 +73,7 @@ const TCHAR *nssm_imagepath();
 const TCHAR *nssm_exe();
 
 #define NSSM _T("NSSM")
-#ifdef _WIN64
 #define NSSM_ARCHITECTURE _T("64-bit")
-#else
-#define NSSM_ARCHITECTURE _T("32-bit")
-#endif
 #ifdef _DEBUG
 #define NSSM_DEBUG _T(" debug")
 #else

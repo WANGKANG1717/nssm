@@ -339,10 +339,7 @@ int nssm_hook(hook_thread_t *hook_threads, nssm_service_t *service, TCHAR *hook_
   if (service->hook_share_output_handles) (void) use_output_handles(service, &si);
   bool inherit_handles = false;
   if (si.dwFlags & STARTF_USESTDHANDLES) inherit_handles = true;
-  unsigned long flags = 0;
-#ifdef UNICODE
-  flags |= CREATE_UNICODE_ENVIRONMENT;
-#endif
+  unsigned long flags = CREATE_UNICODE_ENVIRONMENT;
   ret = NSSM_HOOK_STATUS_NOTRUN;
   if (CreateProcess(0, cmd, 0, 0, inherit_handles, flags,
                     hook_environment.data(), service->dir, &si, &pi)) {

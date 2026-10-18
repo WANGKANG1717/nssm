@@ -95,10 +95,7 @@ int test_environment(TCHAR *env) {
   si.cb = sizeof(si);
   PROCESS_INFORMATION pi;
   ZeroMemory(&pi, sizeof(pi));
-  unsigned long flags = CREATE_SUSPENDED;
-#ifdef UNICODE
-  flags |= CREATE_UNICODE_ENVIRONMENT;
-#endif
+  unsigned long flags = CREATE_SUSPENDED | CREATE_UNICODE_ENVIRONMENT;
 
   /*
     Try to relaunch ourselves but with the candidate environment set.
