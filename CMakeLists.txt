@@ -79,6 +79,7 @@ set(NSSM_CLI_SOURCES
 
 set(NSSM_CONFIG_SOURCES
   src/config/config.cpp
+  src/config/config_loader.cpp
   src/config/config_registration.cpp
   src/config/config_service.cpp
 )
