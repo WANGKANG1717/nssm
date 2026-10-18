@@ -315,7 +315,8 @@ int kill_console(kill_t *k) {
 void walk_process_tree(nssm_service_t *service, walk_function_t fn, kill_t *k, unsigned long ppid) {
   if (! k) return;
   /* Shouldn't happen unless the service failed to start. */
-  if (! k->pid) return; /* XXX: needed? */
+  /* PID 0 is the System Idle Process and must never enter the stop pipeline. */
+  if (! k->pid) return;
   unsigned long pid = k->pid;
   unsigned long depth = k->depth;
 

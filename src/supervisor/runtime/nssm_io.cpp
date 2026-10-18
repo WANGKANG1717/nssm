@@ -310,8 +310,7 @@ int get_output_handles(nssm_service_t *service, STARTUPINFOW *si) {
       service->stderr_flags = service->stdout_flags;
       service->rotate_stderr_online = NSSM_ROTATE_OFFLINE;
 
-      /* Two handles to the same file will create a race. */
-      /* XXX: Here we assume that either both or neither handle must be a pipe. */
+      /* A shared path derives the same pipe mode from the common log policy. */
       if (dup_handle(service->stdout_si, &service->stderr_si, L"stdout", L"stderr")) return 6;
     }
     else {
