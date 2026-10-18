@@ -98,7 +98,7 @@ jobs:
           .\cmake\PackageRelease.ps1
           -Executable .\out\Release\win64\nssm.exe
           -OutputDirectory .\out\package
-          -Version 3.1.3
+          -Version 3.1.4
           -SourceDirectory .
 
       - name: Upload executable
@@ -114,6 +114,6 @@ jobs:
         with:
           name: nssm-win64-release-bundle
           path: |
-            out/package/nssm-3.1.3-win64.zip
-            out/package/nssm-3.1.3-win64.zip.sha256
+            out/package/nssm-3.1.4-win64.zip
+            out/package/nssm-3.1.4-win64.zip.sha256
           if-no-files-found: error
