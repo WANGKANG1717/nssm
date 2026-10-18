@@ -73,9 +73,9 @@ void update_service_status(nssm_service_t *service, Mutator mutator) {
 
 static bool start_detached_thread(LPTHREAD_START_ROUTINE function,
                                   void *context) {
-  HANDLE thread = CreateThread(nullptr, 0, function, context, 0, nullptr);
+  unique_handle thread(CreateThread(nullptr, 0, function, context, 0,
+                                    nullptr));
   if (! thread) return false;
-  CloseHandle(thread);
   return true;
 }
 

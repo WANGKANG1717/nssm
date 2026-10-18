@@ -1,4 +1,5 @@
 #include "job_object.h"
+#include "win32_handle.h"
 
 namespace {
 
@@ -22,7 +23,7 @@ void save_error(unsigned long *error, unsigned long value) {
 }  // namespace
 
 HANDLE create_service_job(unsigned long *error) {
-  HANDLE job = CreateJobObjectW(nullptr, nullptr);
+  unique_handle job(CreateJobObjectW(nullptr, nullptr));
   if (! job) {
     save_error(error, GetLastError());
     return nullptr;
@@ -30,15 +31,14 @@ HANDLE create_service_job(unsigned long *error) {
 
   JOBOBJECT_EXTENDED_LIMIT_INFORMATION limits = {};
   limits.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
-  if (! SetInformationJobObject(job, JobObjectExtendedLimitInformation, &limits,
-                                sizeof(limits))) {
+  if (! SetInformationJobObject(job.get(), JobObjectExtendedLimitInformation,
+                                &limits, sizeof(limits))) {
     save_error(error, GetLastError());
-    CloseHandle(job);
     return nullptr;
   }
 
   save_error(error, ERROR_SUCCESS);
-  return job;
+  return job.release();
 }
 
 bool configure_service_job_limits(HANDLE job,
