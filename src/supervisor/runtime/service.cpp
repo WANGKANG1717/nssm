@@ -11,7 +11,6 @@
 #include "process.h"
 #include "process_options.h"
 #include "readiness.h"
-#include "registry.h"
 #include "security.h"
 #include "service.h"
 #include "service_wait.h"

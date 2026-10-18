@@ -2,7 +2,6 @@
 #include "console.h"
 #include "event.h"
 #include "messages.h"
-#include "registry.h"
 #include "service.h"
 #include "nssm_io.h"
 #include "utf8.h"
@@ -257,7 +256,9 @@ int get_output_handles(nssm_service_t *service, STARTUPINFO *si) {
     else service->stdout_thread = 0;
 
     if (! service->stdout_thread) {
-      if (dup_handle(stdout_handle, &service->stdout_si, NSSM_REG_STDOUT, _T("stdout"), DUPLICATE_CLOSE_SOURCE | DUPLICATE_SAME_ACCESS)) return 4;
+      if (dup_handle(stdout_handle, &service->stdout_si, _T("stdout file"),
+                     _T("stdout"),
+                     DUPLICATE_CLOSE_SOURCE | DUPLICATE_SAME_ACCESS)) return 4;
       service->rotate_stdout_online = NSSM_ROTATE_OFFLINE;
     }
 
@@ -298,7 +299,9 @@ int get_output_handles(nssm_service_t *service, STARTUPINFO *si) {
       else service->stderr_thread = 0;
 
       if (! service->stderr_thread) {
-        if (dup_handle(stderr_handle, &service->stderr_si, NSSM_REG_STDERR, _T("stderr"), DUPLICATE_CLOSE_SOURCE | DUPLICATE_SAME_ACCESS)) return 7;
+        if (dup_handle(stderr_handle, &service->stderr_si,
+                       _T("stderr file"), _T("stderr"),
+                       DUPLICATE_CLOSE_SOURCE | DUPLICATE_SAME_ACCESS)) return 7;
         service->rotate_stderr_online = NSSM_ROTATE_OFFLINE;
       }
     }
