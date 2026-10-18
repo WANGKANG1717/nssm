@@ -32,12 +32,23 @@ int create_messages() {
   const TCHAR *path = nssm_unquoted_imagepath();
   const unsigned long bytes =
       static_cast<unsigned long>((_tcslen(path) + 1) * sizeof(TCHAR));
-  RegSetValueEx(key.get(), _T("EventMessageFile"), 0, REG_SZ,
-                reinterpret_cast<const unsigned char *>(path), bytes);
+  long result = RegSetValueEx(
+      key.get(), _T("EventMessageFile"), 0, REG_SZ,
+      reinterpret_cast<const unsigned char *>(path), bytes);
+  if (result != ERROR_SUCCESS) {
+    log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_SETVALUE_FAILED,
+              _T("EventMessageFile"), error_string(result), 0);
+    return 3;
+  }
   const unsigned long types =
       EVENTLOG_ERROR_TYPE | EVENTLOG_WARNING_TYPE | EVENTLOG_INFORMATION_TYPE;
-  RegSetValueEx(key.get(), _T("TypesSupported"), 0, REG_DWORD,
-                reinterpret_cast<const unsigned char *>(&types),
-                sizeof(types));
+  result = RegSetValueEx(key.get(), _T("TypesSupported"), 0, REG_DWORD,
+                         reinterpret_cast<const unsigned char *>(&types),
+                         sizeof(types));
+  if (result != ERROR_SUCCESS) {
+    log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_SETVALUE_FAILED,
+              _T("TypesSupported"), error_string(result), 0);
+    return 4;
+  }
   return 0;
 }
