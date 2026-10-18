@@ -1,16 +1,15 @@
 #include "nssm.h"
 #include "event.h"
 #include "messages.h"
+#include "security.h"
 #include "service.h"
 
 #include <vector>
 
-extern bool is_admin;
-
 SC_HANDLE open_service_manager(unsigned long access) {
   SC_HANDLE manager =
       OpenSCManager(nullptr, SERVICES_ACTIVE_DATABASE, access);
-  if (! manager && is_admin) {
+  if (! manager && is_process_administrator()) {
     log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_OPENSCMANAGER_FAILED, 0);
   }
   return manager;

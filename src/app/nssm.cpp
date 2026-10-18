@@ -4,13 +4,13 @@
 #include "messages.h"
 #include "output.h"
 #include "registry.h"
+#include "security.h"
 #include "service.h"
 #include "service_commands.h"
 #include "status.h"
 #include "config.h"
 #include "utf8.h"
 
-extern bool is_admin;
 static TCHAR unquoted_imagepath[PATH_LENGTH];
 static TCHAR imagepath[PATH_LENGTH];
 static TCHAR imageargv0[PATH_LENGTH];
@@ -183,18 +183,6 @@ int usage(int ret) {
   return(ret);
 }
 
-void check_admin() {
-  is_admin = false;
-
-  /* Lifted from MSDN examples */
-  PSID AdministratorsGroup;
-  SID_IDENTIFIER_AUTHORITY NtAuthority = SECURITY_NT_AUTHORITY;
-  if (! AllocateAndInitializeSid(&NtAuthority, 2, SECURITY_BUILTIN_DOMAIN_RID, DOMAIN_ALIAS_RID_ADMINS, 0, 0, 0, 0, 0, 0, &AdministratorsGroup)) return;
-  BOOL admin = FALSE;
-  if (CheckTokenMembership(0, AdministratorsGroup, &admin)) is_admin = (admin != FALSE);
-  FreeSid(AdministratorsGroup);
-}
-
 static int elevate(int argc, TCHAR **argv, unsigned long message) {
   (void) argc;
   print_message(stderr, message);
@@ -242,8 +230,7 @@ const TCHAR *nssm_exe() {
 int _tmain(int argc, TCHAR **argv) {
   if (check_console()) setup_utf8();
 
-  /* Remember if we are admin */
-  check_admin();
+  const bool is_admin = is_process_administrator();
 
   /* Remember our path for later. */
   _sntprintf_s(imageargv0, _countof(imageargv0), _TRUNCATE, _T("%s"), argv[0]);

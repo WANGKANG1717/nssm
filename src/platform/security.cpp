@@ -140,6 +140,16 @@ bool audit_existing_object(const std::wstring &path, std::wstring *reason) {
 
 }  // namespace
 
+bool is_process_administrator() {
+  std::vector<unsigned char> administrators;
+  if (! make_well_known_sid(WinBuiltinAdministratorsSid, &administrators)) {
+    return false;
+  }
+  BOOL member = FALSE;
+  return CheckTokenMembership(nullptr, administrators.data(), &member) &&
+         member != FALSE;
+}
+
 bool check_secure_path(const std::wstring &path, bool must_exist,
                        std::wstring *reason) {
   if (! reason || path.empty()) return false;

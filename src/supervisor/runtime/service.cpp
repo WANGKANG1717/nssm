@@ -13,13 +13,13 @@
 #include "process_options.h"
 #include "readiness.h"
 #include "registry.h"
+#include "security.h"
 #include "service.h"
 #include "service_wait.h"
 #include "status_snapshot.h"
 #include "recovery.h"
 #include "resource_monitor.h"
 
-bool is_admin;
 const TCHAR *startup_strings[] = { _T("SERVICE_AUTO_START"), _T("SERVICE_DELAYED_AUTO_START"), _T("SERVICE_DEMAND_START"), _T("SERVICE_DISABLED"), 0 };
 const TCHAR *priority_strings[] = { _T("REALTIME_PRIORITY_CLASS"), _T("HIGH_PRIORITY_CLASS"), _T("ABOVE_NORMAL_PRIORITY_CLASS"), _T("NORMAL_PRIORITY_CLASS"), _T("BELOW_NORMAL_PRIORITY_CLASS"), _T("IDLE_PRIORITY_CLASS"), 0 };
 
@@ -315,7 +315,7 @@ void WINAPI service_main(unsigned long argc, TCHAR **argv) {
   service->status.dwWaitHint = NSSM_RESET_THROTTLE_RESTART + NSSM_WAITHINT_MARGIN;
   SetServiceStatus(service->status_handle, &service->status);
 
-  if (is_admin) {
+  if (is_process_administrator()) {
     SC_HANDLE services = open_service_manager(SC_MANAGER_CONNECT);
     if (services) {
       service->handle = open_service(services, service->name, SERVICE_CHANGE_CONFIG, 0, 0);
