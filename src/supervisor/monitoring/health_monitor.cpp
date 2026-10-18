@@ -15,6 +15,23 @@ namespace {
 
 constexpr unsigned long kHealthWatchdogExitCode = 0xE0010001UL;
 
+unsigned long fail_health_monitor(nssm_service_t *service,
+                                  unsigned long error,
+                                  const wchar_t *operation) {
+  std::wstring detail = std::wstring(operation) + L" failed with error " +
+                        std::to_wstring(error);
+  log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_HEALTH_WATCHDOG,
+            service->name, detail.c_str(), 0);
+  unsigned long termination_error = ERROR_SUCCESS;
+  if (service->job_handle &&
+      ! terminate_service_job(service->job_handle, kHealthWatchdogExitCode,
+                              &termination_error)) {
+    log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_TERMINATE_JOB_FAILED,
+              service->name, error_string(termination_error), 0);
+  }
+  return kHealthWatchdogExitCode;
+}
+
 unsigned long WINAPI health_monitor_thread(void *argument) {
   auto *service = static_cast<nssm_service_t *>(argument);
   const health_check_config_t &config = service->config->health;
@@ -28,8 +45,11 @@ unsigned long WINAPI health_monitor_thread(void *argument) {
                               service->env_extra, &environment,
                               &environment_error);
 
-  if (WaitForSingleObject(stop_event, config.initial_delay_ms) == WAIT_OBJECT_0) {
-    return 0;
+  const unsigned long initial_wait =
+      WaitForSingleObject(stop_event, config.initial_delay_ms);
+  if (initial_wait == WAIT_OBJECT_0) return 0;
+  if (initial_wait != WAIT_TIMEOUT) {
+    return fail_health_monitor(service, GetLastError(), L"initial wait");
   }
 
   while (true) {
@@ -102,8 +122,11 @@ unsigned long WINAPI health_monitor_thread(void *argument) {
       return kHealthWatchdogExitCode;
     }
 
-    if (WaitForSingleObject(stop_event, config.interval_ms) == WAIT_OBJECT_0) {
-      return 0;
+    const unsigned long interval_wait =
+        WaitForSingleObject(stop_event, config.interval_ms);
+    if (interval_wait == WAIT_OBJECT_0) return 0;
+    if (interval_wait != WAIT_TIMEOUT) {
+      return fail_health_monitor(service, GetLastError(), L"interval wait");
     }
   }
 }

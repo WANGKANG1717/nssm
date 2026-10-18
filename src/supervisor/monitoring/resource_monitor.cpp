@@ -46,8 +46,18 @@ unsigned long WINAPI resource_monitor_thread(void *argument) {
   unsigned long long previous_tick = GetTickCount64();
   unsigned long query_failures = 0;
 
-  while (WaitForSingleObject(stop_event, config.monitor_interval_ms) ==
-         WAIT_TIMEOUT) {
+  while (true) {
+    const unsigned long wait =
+        WaitForSingleObject(stop_event, config.monitor_interval_ms);
+    if (wait == WAIT_OBJECT_0) return 0;
+    if (wait != WAIT_TIMEOUT) {
+      const unsigned long wait_error = GetLastError();
+      terminate_for_resource(
+          service, L"monitor failure",
+          L"waiting for the monitor stop event failed with error " +
+              std::to_wstring(wait_error));
+      return kResourceWatchdogExitCode;
+    }
     job_accounting_t current = {};
     unsigned long long now = GetTickCount64();
     if (! query_service_job(service->job_handle, &current, &error)) {
@@ -103,7 +113,6 @@ unsigned long WINAPI resource_monitor_thread(void *argument) {
     previous = current;
     previous_tick = now;
   }
-  return 0;
 }
 
 }  // namespace
