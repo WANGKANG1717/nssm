@@ -221,7 +221,7 @@ int pre_remove_service(int argc, TCHAR **argv) {
 
 int control_service(unsigned long control, int argc, TCHAR **argv,
                     bool return_status) {
-  if (argc < 1) return usage(1);
+  if (argc != 1) return usage(1);
   TCHAR *service_name = argv[0];
   TCHAR canonical_name[SERVICE_NAME_LENGTH] = {};
 
@@ -258,8 +258,7 @@ int control_service(unsigned long control, int argc, TCHAR **argv,
   int result = 0;
   unsigned long error = ERROR_SUCCESS;
   if (control == NSSM_SERVICE_CONTROL_START) {
-    result = StartService(service.get(), static_cast<unsigned long>(argc),
-                          const_cast<const TCHAR **>(argv));
+    result = StartService(service.get(), 0, nullptr);
     error = result ? ERROR_SUCCESS : GetLastError();
     if (result) {
       int response = await_service_control_response(
