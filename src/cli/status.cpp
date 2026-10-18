@@ -69,6 +69,11 @@ int inspect_service_status_command(int argc, wchar_t **argv) {
   status_snapshot_t snapshot = {};
   unsigned long snapshot_error = ERROR_SUCCESS;
   bool has_snapshot = read_status_snapshot(name, &snapshot, &snapshot_error);
+  if (has_snapshot &&
+      (! status.dwProcessId || snapshot.wrapper_pid != status.dwProcessId)) {
+    has_snapshot = false;
+    snapshot_error = ERROR_INVALID_DATA;
+  }
   unsigned long long uptime_ms =
       has_snapshot && snapshot.child_pid && snapshot.process_started_ms
           ? GetTickCount64() - snapshot.process_started_ms
