@@ -22,7 +22,14 @@ static HWND dialog(const TCHAR *templ, HWND parent, DLGPROC function, LPARAM l) 
   HGLOBAL ret = LoadResource(0, resource);
   if (! ret) return 0;
 
-  return CreateDialogIndirectParam(0, (DLGTEMPLATE *) ret, parent, function, l);
+  HWND created = CreateDialogIndirectParam(0, (DLGTEMPLATE *) ret, parent, function, l);
+  if (created && parent && (GetWindowLongPtr(created, GWL_STYLE) & WS_CHILD)) {
+    RECT position = { 115, 7, 0, 0 };
+    MapDialogRect(parent, &position);
+    SetWindowPos(created, 0, position.left, position.top, 0, 0,
+                 SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+  }
+  return created;
 }
 
 static HWND dialog(const TCHAR *templ, HWND parent, DLGPROC function) {
@@ -907,14 +914,11 @@ static void combo_insert_message_string(HWND combo, WPARAM index, unsigned long 
 
 static void tab_insert_message_string(HWND tabs, WPARAM index, unsigned long id) {
   if (! tabs) return;
-  TCITEM tab;
-  ZeroMemory(&tab, sizeof(tab));
-  tab.mask = TCIF_TEXT;
-  tab.pszText = message_string(id);
-  if (! tab.pszText) return;
-  tab.cchTextMax = (int) _tcslen(tab.pszText);
-  SendMessage(tabs, TCM_INSERTITEM, index, (LPARAM) &tab);
-  free_message_string(tab.pszText);
+  TCHAR *label = message_string(id);
+  if (! label) return;
+  SendMessage(tabs, LB_INSERTSTRING, index, (LPARAM) label);
+  if (! index) SendMessage(tabs, LB_SETCURSEL, 0, 0);
+  free_message_string(label);
 }
 
 UINT_PTR CALLBACK browse_hook(HWND dlg, UINT message, WPARAM w, LPARAM l) {
@@ -1353,34 +1357,22 @@ INT_PTR CALLBACK nssm_dlg(HWND window, UINT message, WPARAM w, LPARAM l) {
 
       return 1;
 
-    /* Tab change. */
-    case WM_NOTIFY:
-      NMHDR *notification;
-
-      notification = (NMHDR *) l;
-      switch (notification->code) {
-        case TCN_SELCHANGE:
-          HWND tabs;
-          int selection;
-
-          tabs = GetDlgItem(window, IDC_TAB1);
-          if (! tabs) return 0;
-
-          selection = (int) SendMessage(tabs, TCM_GETCURSEL, 0, 0);
-          if (selection != selected_tab) {
-            ShowWindow(tablist[selected_tab], SW_HIDE);
-            ShowWindow(tablist[selection], SW_SHOWDEFAULT);
-            SetFocus(GetDlgItem(window, IDOK));
-            selected_tab = selection;
-          }
-          return 1;
-      }
-
-      return 0;
-
     /* Button was pressed or control was controlled */
     case WM_COMMAND:
       switch (LOWORD(w)) {
+        /* Navigation category changed. */
+        case IDC_TAB1:
+          if (HIWORD(w) == LBN_SELCHANGE) {
+            HWND navigation = GetDlgItem(window, IDC_TAB1);
+            int selection = (int) SendMessage(navigation, LB_GETCURSEL, 0, 0);
+            if (selection >= 0 && selection < NSSM_NUM_TABS && selection != selected_tab) {
+              ShowWindow(tablist[selected_tab], SW_HIDE);
+              ShowWindow(tablist[selection], SW_SHOWDEFAULT);
+              selected_tab = selection;
+            }
+          }
+          break;
+
         /* OK button */
         case IDOK:
           if ((int) GetWindowLongPtr(window, GWLP_USERDATA) == IDD_EDIT) {
