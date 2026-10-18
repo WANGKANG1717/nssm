@@ -5,46 +5,39 @@
 #include "registry.h"
 #include "service.h"
 #include "service_wait.h"
+#include "win32_handle.h"
 
 HANDLE get_debug_token() {
-  long error;
-  HANDLE token;
-  if (! OpenThreadToken(GetCurrentThread(), TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, false, &token)) {
-    error = GetLastError();
-    if (error == ERROR_NO_TOKEN) {
-      (void) ImpersonateSelf(SecurityImpersonation);
-      (void) OpenThreadToken(GetCurrentThread(), TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, false, &token);
+  unique_handle token;
+  const unsigned long access = TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY;
+  if (! OpenThreadToken(GetCurrentThread(), access, FALSE, token.put())) {
+    if (GetLastError() != ERROR_NO_TOKEN ||
+        ! ImpersonateSelf(SecurityImpersonation)) {
+      return INVALID_HANDLE_VALUE;
     }
+    const BOOL opened =
+        OpenThreadToken(GetCurrentThread(), access, FALSE, token.put());
+    const BOOL reverted = RevertToSelf();
+    if (! opened || ! reverted) return INVALID_HANDLE_VALUE;
   }
-  if (! token) return INVALID_HANDLE_VALUE;
 
-  TOKEN_PRIVILEGES privileges, old;
-  unsigned long size = sizeof(TOKEN_PRIVILEGES);
-  LUID luid;
+  LUID luid = {};
   if (! LookupPrivilegeValue(NULL, SE_DEBUG_NAME, &luid)) {
-    CloseHandle(token);
     return INVALID_HANDLE_VALUE;
   }
 
+  TOKEN_PRIVILEGES privileges = {};
   privileges.PrivilegeCount = 1;
   privileges.Privileges[0].Luid = luid;
-  privileges.Privileges[0].Attributes = 0;
-
-  if (! AdjustTokenPrivileges(token, false, &privileges, size, &old, &size)) {
-    CloseHandle(token);
+  privileges.Privileges[0].Attributes = SE_PRIVILEGE_ENABLED;
+  SetLastError(ERROR_SUCCESS);
+  if (! AdjustTokenPrivileges(token.get(), FALSE, &privileges, 0, nullptr,
+                              nullptr) ||
+      GetLastError() == ERROR_NOT_ALL_ASSIGNED) {
     return INVALID_HANDLE_VALUE;
   }
 
-  old.PrivilegeCount = 1;
-  old.Privileges[0].Luid = luid;
-  old.Privileges[0].Attributes |= SE_PRIVILEGE_ENABLED;
-
-  if (! AdjustTokenPrivileges(token, false, &old, size, NULL, NULL)) {
-    CloseHandle(token);
-    return INVALID_HANDLE_VALUE;
-  }
-
-  return token;
+  return token.release();
 }
 
 void service_kill_t(nssm_service_t *service, kill_t *k) {
