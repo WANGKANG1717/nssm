@@ -63,7 +63,10 @@ int get_process_creation_time(HANDLE process_handle, FILETIME *ft) {
   FILETIME creation_time, exit_time, kernel_time, user_time;
 
   if (! GetProcessTimes(process_handle, &creation_time, &exit_time, &kernel_time, &user_time)) {
-    log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_GETPROCESSTIMES_FAILED, error_string(GetLastError()), 0);
+    const unsigned long error = GetLastError();
+    log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_GETPROCESSTIMES_FAILED,
+              error_string(error), 0);
+    SetLastError(error);
     return 1;
   }
 
@@ -76,7 +79,10 @@ int get_process_exit_time(HANDLE process_handle, FILETIME *ft) {
   FILETIME creation_time, exit_time, kernel_time, user_time;
 
   if (! GetProcessTimes(process_handle, &creation_time, &exit_time, &kernel_time, &user_time)) {
-    log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_GETPROCESSTIMES_FAILED, error_string(GetLastError()), 0);
+    const unsigned long error = GetLastError();
+    log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_GETPROCESSTIMES_FAILED,
+              error_string(error), 0);
+    SetLastError(error);
     return 1;
   }
 
