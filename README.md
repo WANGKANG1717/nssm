@@ -1,24 +1,75 @@
-# NSSM (Non-Sucking Service Manager)
+# SvcPilot
 
-NSSM 是一个将普通应用程序作为原生 Windows 服务运行的轻量监督器。本分支以原版 NSSM 为基础进行全新开发，提供声明式 JSON 配置、机器可读输出、进程监督、健康检查、恢复策略、资源治理和日志轮转。
+SvcPilot 是面向现代 Windows 的轻量级服务监督器：它把普通应用程序作为原生
+Windows 服务运行，并通过声明式配置、健康探测、故障恢复、安全审计和机器可读
+接口管理完整生命周期。
 
-项目仅提供 CLI 和 Windows 服务运行时，不包含 Win32 GUI。未来的 Web 或桌面管理端应调用稳定的 JSON CLI，不将界面逻辑并入服务监督核心。
+项目源自 NSSM 的服务包装思路和部分代码，但已经采用新的产品边界与工程基线。
+SvcPilot 不是原版 NSSM 的兼容发行版，也不以恢复旧命令、旧配置或旧 GUI 为目标。
 
-## 平台与工具链
+## 项目现状
 
-- Windows 10 或更高版本。
-- 仅支持 x64 和 Unicode。
+SvcPilot 当前处于积极开发、尚未投入生产的阶段，适合继续进行集成测试和接口收敛，
+暂不建议作为稳定版本部署到关键业务。
+
+已经具备：
+
+- 原生 Windows 服务安装、更新、删除与生命周期控制。
+- 严格的声明式 JSON 配置，以及 `validate`、`plan`、`apply`、`export` 工作流。
+- Readiness、Health Check、Watchdog 式进程监督和可配置恢复策略。
+- Job Object 资源治理、进程树跟踪及 CPU、内存、进程数统计。
+- 标准输出/错误重定向、日志轮转和运行时在线轮转。
+- 配置与运行路径 ACL 审计、Service SID、虚拟账户和安全默认值。
+- 稳定的 JSON 输出和退出码，供脚本、CI/CD 及未来 Web 管理端调用。
+
+当前 Debug 和 Release 构建各有 5 项 CTest 测试通过，GCC `-fanalyzer` 无诊断；
+管理员权限下的 SCM 生命周期测试由 GitHub Actions 承担。当前仍有两个发布阻塞项：
+
+1. 在线日志轮转状态在控制、日志和关闭线程之间尚未完全同步。
+2. 磁盘满或配额错误后的日志重试等待不能被停止事件立即打断，可能延迟服务关闭。
+
+在这两个问题修复并完成压力测试前，不应创建稳定版本标签。详细评估见
+[`docs/repository-audit.md`](docs/repository-audit.md)。
+
+## 产品原则
+
+- **CLI 优先**：核心只提供命令行和 Windows 服务运行时，不内置 Win32 GUI。
+- **声明式管理**：配置文件是期望状态，先校验和预览，再原子应用。
+- **自动化友好**：JSON 输出、稳定退出码和无交互模式是公开接口的一部分。
+- **安全默认**：不保存明文密码，不默认使用 LocalSystem，敏感路径必须通过 ACL 审计。
+- **职责分离**：监督核心不依赖 UI；未来 Web 应用通过受控管理接口调用核心能力。
+- **基线清晰**：只维护 Windows 10+、x64、Unicode 和 MinGW-w64 GCC 这一条路径。
+
+## 支持范围
+
+- Windows 10 或更高版本，仅 x64。
+- Unicode 与显式 Win32 Wide API。
 - C++20。
-- 仅支持 MinGW-w64 GCC 14 或更高版本。
+- MinGW-w64 GCC 14 或更高版本。
 - CMake 3.25+、Ninja、`windmc` 和 `windres`。
-- 不需要 Visual Studio，不支持 MSVC 工程或 32 位构建。
-- 不支持交互式服务（`SERVICE_INTERACTIVE_PROCESS`）。
 
-本项目基于 Iain Patterson 的 NSSM，遵循 Public Domain 许可。本分支不保留原版 GUI、旧工程和注册表式配置命令的兼容性。
+不支持 Visual Studio/MSVC 工程、32 位构建、ANSI/MBCS、交互式服务、原版 NSSM
+GUI，以及旧 `install/edit/get/set/reset/unset/dump` 命令。
+
+## 名称迁移
+
+**SvcPilot** 是新的项目和产品名称。当前源码目标、可执行文件、部分资源和内部 Windows
+标识仍使用 `nssm`，因此下文命令暂时写作 `nssm.exe`。这是开发阶段的临时状态，
+不代表兼容性承诺。
+
+完整改名应作为独立变更完成，并同时迁移：
+
+- CMake 项目、目标、测试和产物名称。
+- CLI 帮助、版本资源、事件源和包名称。
+- 注册表路径、共享内存命名空间及测试夹具。
+- GitHub Actions、发布脚本、仓库地址和文档示例。
+
+项目尚无生产用户，因此迁移时可以直接采用 `svcpilot.exe` 和新的内部标识，无需保留
+旧名称别名或数据迁移层。
 
 ## 构建
 
-使用 MSYS2 UCRT64 可安装所需工具：
+使用 MSYS2 UCRT64 安装工具链：
 
 ```sh
 pacman -S --needed mingw-w64-ucrt-x86_64-gcc \
@@ -39,20 +90,24 @@ cmake --build --preset mingw-release
 ctest --preset mingw-release
 ```
 
-产物位于 `out\Debug\win64\nssm.exe` 和 `out\Release\win64\nssm.exe`。MinGW 运行库静态链接，Windows 系统库仍使用系统 DLL。Release 构建不嵌入时间戳，便于可复现构建。
+当前产物位于 `out\Debug\win64\nssm.exe` 和 `out\Release\win64\nssm.exe`。
+MinGW 运行库静态链接，Windows 系统库仍由操作系统提供。Release 构建不嵌入时间戳，
+便于可复现构建。
 
-本地便携 MSYS2 也可放在已忽略的 `.tools\msys64` 中：
+本地便携 MSYS2 也可以放在已忽略的 `.tools\msys64`：
 
 ```powershell
 $toolBin = (Resolve-Path '.tools\msys64\ucrt64\bin').Path
 $env:PATH = "$toolBin;$env:PATH"
 ```
 
-GitHub Actions 会构建并测试 Debug/Release，验证 x64 PE 和静态 MinGW 运行库，并生成 ZIP、SHA-256 校验文件和 SPDX 2.3 SBOM。配置签名 secrets 后，Release 作业还会签名并验证 `nssm.exe`。
+GitHub Actions 同时构建和测试 Debug/Release，验证 x64 PE 与静态 MinGW 运行库，
+并生成 ZIP、SHA-256 校验文件和 SPDX 2.3 SBOM。配置签名 secrets 后，Release
+作业还会签名并验证 Windows 可执行文件。
 
-## 快速使用
+## 快速开始
 
-先验证并预览配置，再以管理员权限应用：
+先验证并预览配置，再在管理员终端中应用：
 
 ```powershell
 nssm validate --json .\service.json
@@ -60,7 +115,7 @@ nssm plan --json .\service.json
 nssm apply --json .\service.json
 ```
 
-管理服务：
+查询和控制服务：
 
 ```powershell
 nssm start MyService
@@ -70,25 +125,24 @@ nssm export --json MyService .\backup\MyService.json
 nssm remove MyService confirm
 ```
 
-常用命令：
+主要命令：
 
-- `validate <config>`：校验 JSON 和业务规则。
-- `plan <config>`：只读比较期望配置与 SCM 状态。
-- `apply <config>`：创建或原子更新服务配置。
+- `validate <config>`：校验 JSON 结构和业务规则。
+- `plan <config>`：只读比较期望配置与 SCM 当前状态。
+- `apply <config>`：创建服务或原子更新服务配置。
 - `export <service> <path>`：导出已登记的声明式配置。
-- `start|stop|restart|continue <service>`：控制服务。
-- `status [--verbose|--json] <service>`：查询 SCM 与运行时状态。
+- `start|stop|restart|continue <service>`：控制服务生命周期。
+- `status [--verbose|--json] <service>`：查询 SCM 和监督器运行时状态。
 - `rotate <service>`：触发在线日志轮转。
-- `list [all]`：列出 NSSM 管理的服务，或列出全部 Windows 服务。
-- `processes <service>`：列出包装进程树。
+- `list [all]`：列出受管理服务，或列出全部 Windows 服务。
+- `processes <service>`：列出受监督的进程树。
 - `remove <service> confirm`：删除服务，必须显式确认。
-- `version`：显示版本和架构。
-
-旧 `install/edit/get/set/reset/unset/dump` 命令已删除。请修改 JSON 并重新执行 `apply`。
+- `version`：显示版本、构建信息和架构。
 
 ## 声明式配置
 
-最小示例位于 `tests/fixtures/minimal-service.json`。当前 schema 严格固定为 `1`，不猜测或迁移旧 schema。
+最小示例位于 [`tests/fixtures/minimal-service.json`](tests/fixtures/minimal-service.json)。
+当前 schema 严格固定为 `1`，不会猜测或自动迁移其他版本。
 
 ```json
 {
@@ -108,33 +162,74 @@ nssm remove MyService confirm
 }
 ```
 
-声明式命令的统一退出码为：`0` 成功、`1` 配置校验失败、`2` 参数错误、`3` 权限不足、`4` 配置冲突、`5` Windows/SCM 错误、`6` 路径安全审计失败。`--json` 模式不弹出 UAC，方便 CI/CD 确定性处理。
+声明式命令统一使用以下退出码：
 
-`apply` 和服务启动时会审计配置文件、应用程序、工作目录、命令探针与日志目录的 Windows ACL。对象必须由 SYSTEM、Administrators 或 TrustedInstaller 控制，且不能向其他主体授予修改权限。
+| 退出码 | 含义 |
+| ---: | --- |
+| `0` | 成功 |
+| `1` | 配置校验失败 |
+| `2` | 参数错误 |
+| `3` | 权限不足 |
+| `4` | 配置冲突 |
+| `5` | Windows/SCM 错误 |
+| `6` | 路径安全审计失败 |
 
-服务默认建议使用独立虚拟账户和 Service SID，而非 LocalSystem。配置不接受明文密码；需要域身份时优先使用 gMSA。
+`--json` 模式不会弹出 UAC，便于 CI/CD 确定性处理失败。
+
+## 安全模型
+
+`apply` 和服务启动时会审计配置文件、应用程序、工作目录、命令探针及日志目录的
+Windows ACL。受信对象必须由 SYSTEM、Administrators 或 TrustedInstaller 控制，
+且不能向其他主体授予修改权限。
+
+服务默认建议使用独立虚拟账户和 Service SID，而不是 LocalSystem。配置不接受明文
+密码；需要域身份时优先使用 gMSA。涉及 SCM、注册表、进程、令牌和路径的 Win32
+调用集中在平台层，临时句柄使用轻量 RAII 封装。
 
 ## 运行时状态
 
-`nssm status --json <service>` 除了返回 SCM 状态和包装进程 PID，还会返回子进程 PID、运行时长、Readiness、Health Check、恢复重启次数，以及 Job Object 的 CPU、内存和进程数。运行时数据通过只读 ACL 的共享内存快照发布；服务停止或快照不可用时，`runtimeAvailable` 为 `false`。
+`nssm status --json <service>` 返回 SCM 状态、包装进程 PID、子进程 PID、运行时长、
+Readiness、Health Check、恢复重启次数，以及 Job Object 的 CPU、内存和进程数。
+运行时数据通过只读 ACL 的共享内存快照发布；服务停止或快照不可用时，
+`runtimeAvailable` 为 `false`。
 
-## 仓库结构
+## 架构
 
 ```text
 src/
   app/          程序入口、命令分派和版本信息
-  cli/          参数、控制台与 JSON 输出
-  config/       JSON 配置模型、校验、导出与 SCM 应用
+  cli/          参数解析、控制台输出和 JSON 输出
+  config/       配置模型、解析、校验、导出与应用
   supervisor/
     process/     子进程、Job Object 和进程树终止
     monitoring/  Readiness、Health Check、资源监控与快照
     runtime/     服务状态机、恢复和日志
-  platform/     Windows API、注册表、安全、事件日志与编码
-resources/      版本信息、消息目录、图标和 manifest
-tests/          单元测试、样例配置和 SCM 集成测试
-cmake/          构建、资源编译和验证脚本
+  platform/     Windows API、SCM、注册表、安全、事件日志与编码
+resources/      版本信息、消息目录和 manifest
+tests/          单元测试、配置样例和 SCM 集成测试
+cmake/          构建、资源编译、打包和验证脚本
 ```
 
-## 测试
+目标依赖方向为 `app/cli -> config/supervisor -> platform -> Windows API`。核心模块
+不依赖界面，CLI 也不直接操作注册表或 SCM。
 
-CTest 覆盖版本/架构、Unicode 资源、声明式配置、命令行转义、环境隔离、Job Object、探针、恢复与安全校验。`tests/integration/service_lifecycle.ps1` 在管理员环境中执行完整 SCM 生命周期：`apply`、`list`、`start`、运行时 JSON 状态、原子 `export`、`stop` 和 `remove`。
+## 测试与发布
+
+CTest 覆盖版本/架构、Unicode 资源、声明式配置、命令行转义、环境隔离、Job Object、
+探针、恢复和安全校验。管理员环境中的
+[`tests/integration/service_lifecycle.ps1`](tests/integration/service_lifecycle.ps1)
+执行完整 SCM 生命周期：`apply`、`list`、`start`、运行时 JSON 状态、原子 `export`、
+`stop` 和 `remove`。
+
+发布前至少需要满足：
+
+- Debug、Release 和静态分析全部通过。
+- 管理员 SCM 集成测试通过。
+- 日志并发及可中断关闭两个 P1 问题关闭。
+- 产物架构、静态运行库、SBOM、校验和与签名验证通过。
+
+## 来源与许可
+
+SvcPilot 基于 Iain Patterson 创建并贡献到 Public Domain 的 NSSM。项目保留必要的
+来源说明和第三方许可，详见 [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md)。
+新的名称用于明确本项目已经形成独立产品，不暗示原作者对当前实现提供支持或背书。
