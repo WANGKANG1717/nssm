@@ -1,6 +1,6 @@
 ﻿#pragma once
 
-#define NSSM_VERSION _T("3.1.2")
+#define NSSM_VERSION _T("3.1.3")
 #define NSSM_VERSIONINFO 3,1,2,0
 #ifndef NSSM_BUILD_LABEL
 #define NSSM_BUILD_LABEL "release"
