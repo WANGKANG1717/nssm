@@ -312,7 +312,7 @@ config_operation_result_t export_service_config(
   }
   service_config_t config;
   config_validation_t validation;
-  if (! load_service_config(source.c_str(), &config, &validation) ||
+  if (! load_secure_service_config(source.c_str(), &config, &validation) ||
       ! strings_equal_ignore_case(config.service.name.c_str(),
                                   service_name.c_str())) {
     return operation_failure(
@@ -339,7 +339,8 @@ config_operation_result_t plan_service_config(
     const std::wstring &config_path, const std::wstring &wrapper_image_path) {
   service_config_t desired;
   config_validation_t validation;
-  if (! load_service_config(config_path.c_str(), &desired, &validation)) {
+  if (! load_secure_service_config(config_path.c_str(), &desired,
+                                   &validation)) {
     return validation_failure(validation);
   }
   std::wstring desired_path;
@@ -390,7 +391,8 @@ config_operation_result_t plan_service_config(
 
   service_config_t current;
   validation.errors.clear();
-  if (! load_service_config(state.config_path.c_str(), &current, &validation)) {
+  if (! load_secure_service_config(state.config_path.c_str(), &current,
+                                   &validation)) {
     return operation_failure(
         config_operation_status_t::conflict,
         L"The registered service configuration cannot be loaded");
@@ -428,7 +430,8 @@ config_operation_result_t apply_service_config(
     const std::wstring &config_path, const std::wstring &wrapper_image_path) {
   service_config_t config;
   config_validation_t validation;
-  if (! load_service_config(config_path.c_str(), &config, &validation)) {
+  if (! load_secure_service_config(config_path.c_str(), &config,
+                                   &validation)) {
     return validation_failure(validation);
   }
 

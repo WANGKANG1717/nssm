@@ -8,6 +8,7 @@
 #include "job_object.h"
 #include "readiness.h"
 #include "recovery.h"
+#include "security.h"
 #include "string_utils.h"
 #include "utf8.h"
 #include "win32_handle.h"
@@ -707,6 +708,12 @@ void path_security_tests() {
   config_validation_t validation;
   expect(audit_secure_path(cmd_path, L"test.systemBinary", true, &validation),
          L"a protected Windows system binary should pass ACL auditing");
+  unique_handle cmd_file(CreateFileW(
+      cmd_path.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING,
+      FILE_ATTRIBUTE_NORMAL, nullptr));
+  std::wstring handle_reason;
+  expect(cmd_file && check_secure_file_handle(cmd_file.get(), &handle_reason),
+         L"a handle to a protected Windows system binary should pass ACL auditing");
 
   wchar_t temporary_directory[MAX_PATH] = {};
   wchar_t temporary_file[MAX_PATH] = {};
@@ -734,6 +741,13 @@ void path_security_tests() {
   expect(! audit_secure_path(temporary_file, L"test.insecure", true,
                              &validation),
          L"a file writable by Everyone must fail ACL auditing");
+  unique_handle insecure_file(CreateFileW(
+      temporary_file, GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING,
+      FILE_ATTRIBUTE_NORMAL, nullptr));
+  handle_reason.clear();
+  expect(insecure_file &&
+             ! check_secure_file_handle(insecure_file.get(), &handle_reason),
+         L"a handle to a file writable by Everyone must fail ACL auditing");
   if (acl) LocalFree(acl);
   DeleteFileW(temporary_file);
 }

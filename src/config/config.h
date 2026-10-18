@@ -190,4 +190,6 @@ bool parse_service_config(const char *json, size_t length,
                           config_validation_t *validation);
 bool load_service_config(const wchar_t *path, service_config_t *config,
                          config_validation_t *validation);
+bool load_secure_service_config(const wchar_t *path, service_config_t *config,
+                                config_validation_t *validation);
 #endif

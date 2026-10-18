@@ -80,7 +80,7 @@ bool load_registered_service_config(nssm_service_t *service,
     validation->add(L"Out of memory while loading service configuration");
     return false;
   }
-  if (! load_service_config(path.c_str(), config, validation)) {
+  if (! load_secure_service_config(path.c_str(), config, validation)) {
     delete config;
     return false;
   }

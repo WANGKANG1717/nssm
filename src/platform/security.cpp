@@ -102,6 +102,40 @@ ACCESS_MASK allowed_ace_mask(void *ace, unsigned char type) {
   return 0;
 }
 
+bool secure_acl(PSID owner, PACL dacl, ACCESS_MASK unsafe_rights,
+                std::wstring *reason) {
+  if (! trusted_principal(owner)) {
+    *reason = L"is owned by a principal other than SYSTEM, Administrators, or TrustedInstaller";
+    return false;
+  }
+  if (! dacl) {
+    *reason = L"has an unrestricted (null) DACL";
+    return false;
+  }
+
+  GENERIC_MAPPING mapping = {
+      FILE_GENERIC_READ, FILE_GENERIC_WRITE, FILE_GENERIC_EXECUTE,
+      FILE_ALL_ACCESS};
+  for (unsigned long index = 0; index < dacl->AceCount; ++index) {
+    void *ace = nullptr;
+    if (! GetAce(dacl, index, &ace)) {
+      *reason = L"contains an unreadable ACL entry";
+      return false;
+    }
+    auto *header = static_cast<ACE_HEADER *>(ace);
+    if (header->AceFlags & INHERIT_ONLY_ACE) continue;
+    PSID sid = allowed_ace_sid(ace, header->AceType);
+    if (! sid || trusted_principal(sid)) continue;
+    ACCESS_MASK mask = allowed_ace_mask(ace, header->AceType);
+    MapGenericMask(&mask, &mapping);
+    if (mask & unsafe_rights) {
+      *reason = L"grants modification rights to a non-administrative principal";
+      return false;
+    }
+  }
+  return true;
+}
+
 bool secure_descriptor(const std::wstring &path, ACCESS_MASK unsafe_rights,
                        std::wstring *reason) {
   PSID owner = nullptr;
@@ -117,40 +151,7 @@ bool secure_descriptor(const std::wstring &path, ACCESS_MASK unsafe_rights,
     return false;
   }
 
-  bool secure = true;
-  if (! trusted_principal(owner)) {
-    *reason = L"is owned by a principal other than SYSTEM, Administrators, or TrustedInstaller";
-    secure = false;
-  }
-  else if (! dacl) {
-    *reason = L"has an unrestricted (null) DACL";
-    secure = false;
-  }
-  else {
-    GENERIC_MAPPING mapping = {
-        FILE_GENERIC_READ, FILE_GENERIC_WRITE, FILE_GENERIC_EXECUTE,
-        FILE_ALL_ACCESS};
-    for (unsigned long index = 0; index < dacl->AceCount; ++index) {
-      void *ace = nullptr;
-      if (! GetAce(dacl, index, &ace)) {
-        *reason = L"contains an unreadable ACL entry";
-        secure = false;
-        break;
-      }
-      auto *header = static_cast<ACE_HEADER *>(ace);
-      if (header->AceFlags & INHERIT_ONLY_ACE) continue;
-      PSID sid = allowed_ace_sid(ace, header->AceType);
-      if (! sid || trusted_principal(sid)) continue;
-      ACCESS_MASK mask = allowed_ace_mask(ace, header->AceType);
-      MapGenericMask(&mask, &mapping);
-      if (mask & unsafe_rights) {
-        *reason = L"grants modification rights to a non-administrative principal";
-        secure = false;
-        break;
-      }
-    }
-  }
-  return secure;
+  return secure_acl(owner, dacl, unsafe_rights, reason);
 }
 bool audit_existing_object(const std::wstring &path, ACCESS_MASK unsafe_rights,
                            std::wstring *reason) {
@@ -212,4 +213,23 @@ bool check_secure_path(const std::wstring &path, bool must_exist,
   }
 
   return audit_existing_path_chain(target, reason);
+}
+
+bool check_secure_file_handle(HANDLE handle, std::wstring *reason) {
+  if (! reason || ! handle || handle == INVALID_HANDLE_VALUE) return false;
+  reason->clear();
+
+  PSID owner = nullptr;
+  PACL dacl = nullptr;
+  unique_local_memory<void> descriptor;
+  const unsigned long result = GetSecurityInfo(
+      handle, SE_FILE_OBJECT,
+      OWNER_SECURITY_INFORMATION | DACL_SECURITY_INFORMATION, &owner, nullptr,
+      &dacl, nullptr, descriptor.put());
+  if (result != ERROR_SUCCESS) {
+    *reason = L"cannot read its security descriptor (Windows error " +
+              std::to_wstring(result) + L")";
+    return false;
+  }
+  return secure_acl(owner, dacl, kModificationRights, reason);
 }

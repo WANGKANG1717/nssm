@@ -1,4 +1,5 @@
 #include "config.h"
+#include "security.h"
 #include "win32_handle.h"
 
 #include <windows.h>
@@ -17,13 +18,22 @@ std::wstring read_error_message(unsigned long error) {
 
 }  // namespace
 
-bool load_service_config(const wchar_t *path, service_config_t *config,
-                         config_validation_t *validation) {
+static bool load_service_config_impl(const wchar_t *path, bool require_secure,
+                                     service_config_t *config,
+                                     config_validation_t *validation) {
   if (! config || ! validation) return false;
   validation->errors.clear();
   if (! path || ! *path) {
     validation->add(L"Configuration path must not be empty");
     return false;
+  }
+
+  if (require_secure) {
+    std::wstring reason;
+    if (! check_secure_path(path, true, &reason)) {
+      validation->add(L"Configuration path " + reason);
+      return false;
+    }
   }
 
   unique_handle file(CreateFileW(
@@ -32,6 +42,13 @@ bool load_service_config(const wchar_t *path, service_config_t *config,
   if (! file) {
     validation->add(read_error_message(GetLastError()));
     return false;
+  }
+  if (require_secure) {
+    std::wstring reason;
+    if (! check_secure_file_handle(file.get(), &reason)) {
+      validation->add(L"Configuration file is insecure: " + reason);
+      return false;
+    }
   }
 
   LARGE_INTEGER size = {};
@@ -73,4 +90,14 @@ bool load_service_config(const wchar_t *path, service_config_t *config,
           : 0;
   return parse_service_config(content.data() + start, content.size() - start,
                               config, validation);
+}
+
+bool load_service_config(const wchar_t *path, service_config_t *config,
+                         config_validation_t *validation) {
+  return load_service_config_impl(path, false, config, validation);
+}
+
+bool load_secure_service_config(const wchar_t *path, service_config_t *config,
+                                config_validation_t *validation) {
+  return load_service_config_impl(path, true, config, validation);
 }
