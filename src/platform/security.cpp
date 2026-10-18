@@ -74,10 +74,14 @@ bool trusted_principal(PSID sid) {
 }
 
 PSID allowed_ace_sid(void *ace, unsigned char type) {
-  if (type == ACCESS_ALLOWED_ACE_TYPE) {
+  if (type == ACCESS_ALLOWED_ACE_TYPE ||
+      type == ACCESS_ALLOWED_CALLBACK_ACE_TYPE) {
     return &static_cast<ACCESS_ALLOWED_ACE *>(ace)->SidStart;
   }
-  if (type != ACCESS_ALLOWED_OBJECT_ACE_TYPE) return nullptr;
+  if (type != ACCESS_ALLOWED_OBJECT_ACE_TYPE &&
+      type != ACCESS_ALLOWED_CALLBACK_OBJECT_ACE_TYPE) {
+    return nullptr;
+  }
   auto *object = static_cast<ACCESS_ALLOWED_OBJECT_ACE *>(ace);
   auto *cursor = reinterpret_cast<unsigned char *>(&object->ObjectType);
   if (object->Flags & ACE_OBJECT_TYPE_PRESENT) cursor += sizeof(GUID);
@@ -86,10 +90,12 @@ PSID allowed_ace_sid(void *ace, unsigned char type) {
 }
 
 ACCESS_MASK allowed_ace_mask(void *ace, unsigned char type) {
-  if (type == ACCESS_ALLOWED_ACE_TYPE) {
+  if (type == ACCESS_ALLOWED_ACE_TYPE ||
+      type == ACCESS_ALLOWED_CALLBACK_ACE_TYPE) {
     return static_cast<ACCESS_ALLOWED_ACE *>(ace)->Mask;
   }
-  if (type == ACCESS_ALLOWED_OBJECT_ACE_TYPE) {
+  if (type == ACCESS_ALLOWED_OBJECT_ACE_TYPE ||
+      type == ACCESS_ALLOWED_CALLBACK_OBJECT_ACE_TYPE) {
     return static_cast<ACCESS_ALLOWED_OBJECT_ACE *>(ace)->Mask;
   }
   return 0;
