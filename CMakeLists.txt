@@ -99,6 +99,7 @@ set(NSSM_SUPERVISOR_SOURCES
   src/supervisor/runtime/nssm_io.cpp
   src/supervisor/runtime/recovery.cpp
   src/supervisor/runtime/service.cpp
+  src/supervisor/runtime/service_control.cpp
   src/supervisor/runtime/service_scm.cpp
   src/supervisor/runtime/service_wait.cpp
 )
