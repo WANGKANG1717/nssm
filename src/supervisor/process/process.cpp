@@ -326,12 +326,13 @@ void walk_process_tree(nssm_service_t *service, walk_function_t fn, kill_t *k, u
     HANDLE previous_process_handle = k->process_handle;
     k->process_handle = process_handle.get();
     if (! fn(service, k)) {
+      const unsigned long action_error = GetLastError();
       /* Maybe it already died. */
       unsigned long ret;
       if (! GetExitCodeProcess(process_handle.get(), &ret) ||
           ret == STILL_ACTIVE) {
         log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_TERMINATEPROCESS_FAILED,
-                  pid_string, k->name, error_string(GetLastError()), 0);
+                  pid_string, k->name, error_string(action_error), 0);
       }
     }
 
@@ -359,7 +360,7 @@ void walk_process_tree(nssm_service_t *service, walk_function_t fn, kill_t *k, u
   k->depth++;
   if (! check_parent(k, &pe, pid)) {
     k->pid = pe.th32ProcessID;
-    walk_process_tree(service, fn, k, ppid);
+    walk_process_tree(service, fn, k, pid);
   }
   k->pid = pid;
 
@@ -376,7 +377,7 @@ void walk_process_tree(nssm_service_t *service, walk_function_t fn, kill_t *k, u
 
     if (! check_parent(k, &pe, pid)) {
       k->pid = pe.th32ProcessID;
-      walk_process_tree(service, fn, k, ppid);
+      walk_process_tree(service, fn, k, pid);
     }
     k->pid = pid;
   }
