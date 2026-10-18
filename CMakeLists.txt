@@ -87,7 +87,6 @@ set(NSSM_CONFIG_SOURCES
 )
 
 set(NSSM_SUPERVISOR_SOURCES
-  src/supervisor/process/child_process.cpp
   src/supervisor/process/job_object.cpp
   src/supervisor/process/process.cpp
   src/supervisor/monitoring/health_check.cpp
@@ -98,12 +97,14 @@ set(NSSM_SUPERVISOR_SOURCES
   src/supervisor/runtime/nssm_io.cpp
   src/supervisor/runtime/recovery.cpp
   src/supervisor/runtime/service.cpp
+  src/supervisor/runtime/service_config.cpp
   src/supervisor/runtime/service_control.cpp
   src/supervisor/runtime/service_scm.cpp
   src/supervisor/runtime/service_wait.cpp
 )
 
 set(NSSM_PLATFORM_SOURCES
+  src/platform/child_process.cpp
   src/platform/console.cpp
   src/platform/env.cpp
   src/platform/event.cpp
@@ -202,7 +203,7 @@ if(BUILD_TESTING)
   add_executable(nssm_unit_tests
     tests/child_process_tests.cpp
     src/cli/output.cpp
-    src/supervisor/process/child_process.cpp
+    src/platform/child_process.cpp
     src/config/config.cpp
     src/config/config_parse_utils.cpp
     src/config/config_security.cpp
