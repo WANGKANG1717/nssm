@@ -1,6 +1,7 @@
 // NSSM executable resources.
 #define NSSM_COMPILE_RC
-#include "nssm.h"
+#include <windows.h>
+#include "version.h"
 #include "messages.rc"
 #include "resource.h"
 

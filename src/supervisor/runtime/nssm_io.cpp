@@ -1,4 +1,3 @@
-#include "nssm.h"
 #include "console.h"
 #include "event.h"
 #include "messages.h"
@@ -8,6 +7,8 @@
 #include "nssm_io.h"
 #include "utf8.h"
 #include "win32_handle.h"
+
+#include <shlwapi.h>
 
 #define COMPLAINED_READ (1 << 0)
 #define COMPLAINED_WRITE (1 << 1)

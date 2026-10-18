@@ -1,5 +1,10 @@
-#ifndef IO_H
-#define IO_H
+#ifndef NSSM_IO_H
+#define NSSM_IO_H
+
+#include <windows.h>
+#include <tchar.h>
+
+struct nssm_service_t;
 
 #define NSSM_STDIN_SHARING FILE_SHARE_WRITE
 #define NSSM_STDIN_DISPOSITION OPEN_EXISTING

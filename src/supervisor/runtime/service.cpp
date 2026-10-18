@@ -1,4 +1,3 @@
-#include "nssm.h"
 #include "child_process.h"
 #include "config.h"
 #include "env.h"
@@ -17,6 +16,9 @@
 #include "status_snapshot.h"
 #include "recovery.h"
 #include "resource_monitor.h"
+
+#include <string>
+#include <vector>
 
 static constexpr int kStartHandledByRecovery = -1;
 static constexpr int kStartAwaitingProcessExit = -2;

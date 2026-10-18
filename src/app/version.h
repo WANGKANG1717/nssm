@@ -1,5 +1,7 @@
 ﻿#pragma once
 
+#include <tchar.h>
+
 #define NSSM_VERSION _T("3.1.3")
 #define NSSM_VERSIONINFO 3,1,3,0
 #ifndef NSSM_BUILD_LABEL

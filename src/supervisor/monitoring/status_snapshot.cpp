@@ -1,7 +1,6 @@
 #include "status_snapshot.h"
 
 #include "config.h"
-#include "nssm.h"
 #include "recovery.h"
 #include "service.h"
 #include "win32_handle.h"

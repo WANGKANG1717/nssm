@@ -1,4 +1,3 @@
-#include "nssm.h"
 #include "child_process.h"
 #include "config_commands.h"
 #include "console.h"
@@ -15,6 +14,19 @@
 #include "config.h"
 #include "utf8.h"
 #include "usage.h"
+#include "version.h"
+#include "windows_limits.h"
+
+#include <shellapi.h>
+#include <windows.h>
+
+#include <cstdio>
+#include <cstdlib>
+#include <string>
+#include <tchar.h>
+#include <vector>
+
+static_assert(sizeof(TCHAR) == sizeof(wchar_t));
 
 namespace {
 
@@ -47,6 +59,9 @@ const application_paths_t &application_paths() {
 }
 
 }  // namespace
+
+static const TCHAR *nssm_unquoted_imagepath();
+static const TCHAR *nssm_imagepath();
 
 void nssm_exit(int status) {
   exit(status);
@@ -87,11 +102,11 @@ static int elevate(int argc, TCHAR **argv, unsigned long message) {
   return ShellExecuteEx(&sei) ? 0 : 100;
 }
 
-const TCHAR *nssm_unquoted_imagepath() {
+static const TCHAR *nssm_unquoted_imagepath() {
   return application_paths().unquoted.c_str();
 }
 
-const TCHAR *nssm_imagepath() {
+static const TCHAR *nssm_imagepath() {
   return application_paths().quoted.c_str();
 }
 

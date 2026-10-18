@@ -1,4 +1,3 @@
-#include "nssm.h"
 #include "event.h"
 #include "messages.h"
 #include "security.h"

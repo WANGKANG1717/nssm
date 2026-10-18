@@ -3,6 +3,8 @@
 
 typedef struct nssm_service_t nssm_service_t;
 
+#include <windows.h>
+#include <tchar.h>
 #include <tlhelp32.h>
 
 typedef struct {
