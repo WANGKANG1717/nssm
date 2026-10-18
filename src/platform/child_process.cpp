@@ -1,25 +1,12 @@
 #include "child_process.h"
+#include "string_utils.h"
 
-#include <cwctype>
 #include <map>
 
 namespace {
 
-struct environment_name_less {
-  bool operator()(const std::wstring &left, const std::wstring &right) const {
-    size_t common = left.size() < right.size() ? left.size() : right.size();
-    for (size_t i = 0; i < common; ++i) {
-      wchar_t a = static_cast<wchar_t>(std::towupper(left[i]));
-      wchar_t b = static_cast<wchar_t>(std::towupper(right[i]));
-      if (a < b) return true;
-      if (a > b) return false;
-    }
-    return left.size() < right.size();
-  }
-};
-
 using environment_map_t =
-    std::map<std::wstring, std::wstring, environment_name_less>;
+    std::map<std::wstring, std::wstring, ordinal_ignore_case_less>;
 
 bool split_environment_entry(const std::wstring &entry,
                              environment_entry_t *result,

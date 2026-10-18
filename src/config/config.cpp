@@ -1,11 +1,11 @@
 #include "config.h"
 #include "config_parse_utils.h"
 #include "child_process.h"
+#include "string_utils.h"
 
 #include <windows.h>
 #include <shlwapi.h>
 
-#include <cwctype>
 #include <set>
 #include <string>
 #include <vector>
@@ -13,18 +13,6 @@
 #include <yyjson.h>
 
 namespace {
-
-struct case_insensitive_less {
-  bool operator()(const std::wstring &left, const std::wstring &right) const {
-    size_t common = left.size() < right.size() ? left.size() : right.size();
-    for (size_t i = 0; i < common; ++i) {
-      wchar_t a = static_cast<wchar_t>(std::towupper(left[i]));
-      wchar_t b = static_cast<wchar_t>(std::towupper(right[i]));
-      if (a != b) return a < b;
-    }
-    return left.size() < right.size();
-  }
-};
 
 bool valid_service_name(const std::wstring &name) {
   if (name.empty() || name.size() > kMaximumServiceNameCharacters) return false;
@@ -249,7 +237,7 @@ void parse_environment(yyjson_val *application,
     return;
   }
 
-  std::set<std::wstring, case_insensitive_less> names;
+  std::set<std::wstring, ordinal_ignore_case_less> names;
   yyjson_obj_iter iterator = yyjson_obj_iter_with(environment);
   yyjson_val *key = nullptr;
   while ((key = yyjson_obj_iter_next(&iterator))) {

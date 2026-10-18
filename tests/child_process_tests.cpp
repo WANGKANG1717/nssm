@@ -86,6 +86,11 @@ void string_utils_tests() {
          L"two null strings should compare equal");
   expect(! strings_equal_ignore_case(nullptr, L"service"),
          L"a null and non-null string must not compare equal");
+  ordinal_ignore_case_less less;
+  expect(! less(L"Path", L"PATH") && ! less(L"PATH", L"Path"),
+         L"ordinal comparator should treat environment names as equivalent");
+  expect(less(L"alpha", L"beta") && ! less(L"beta", L"alpha"),
+         L"ordinal comparator should provide stable ordering");
 }
 
 void environment_merge_tests() {
