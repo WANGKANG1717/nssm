@@ -17,10 +17,14 @@ NSSM 是一个将任意可执行程序作为 Windows 服务运行并进行管理
 - 清理并修复多处稳定性问题（句柄泄漏、内存释放一致性、边界/指针判断、注册表类型校验等）。
 - 服务类型与现代 Windows 行为对齐：不再使用交互式服务类型，统一按 `SERVICE_WIN32_OWN_PROCESS` 处理。
 - GUI 调整：移除现代 Windows 中无效的“与桌面交互”选项，避免误导。
+- GUI 现代化：使用 Common Controls v6、Segoe UI 与 Per-Monitor DPI v2，采用左侧分类导航，并统一表单控件尺寸与高 DPI 间距。
+- “描述”字段支持多行输入；CPU 亲和性列表按字体、CPU 编号和当前 DPI 动态计算列宽。
 - 中文文案持续校对与统一（GUI 与 `messages.mc`），修复中英混杂和术语不一致问题。
 - 构建链路迁移到 CMake、Ninja 和 MinGW-w64 GCC 14+，统一使用 C++20。
 - Windows 消息与资源分别由 `windmc` 和 `windres` 编译，不依赖 Visual Studio。
+- UTF-8 对话框资源在构建阶段转换为明确的 Unicode 转义，避免受 Windows 系统代码页影响。
 - MinGW 运行库静态链接；Windows 系统库仍使用系统提供的 DLL。
+- Release 链接不写入时间戳；相同源码和工具链可生成一致的二进制文件。
 
 核心功能与命令行参数保持与原版兼容；如需原版发布与英文文档，请参见上游站点。
 
@@ -69,6 +73,37 @@ $env:PATH = "$toolBin;$env:PATH"
 ### 2) GitHub Actions
 
 `.github/workflows/build.yml` 会在 push、pull request 或手动触发时，使用 MSYS2 UCRT64 分别构建和测试 Debug、Release。工作流还会验证产物是 x64 PE，并检查其没有动态依赖 `libgcc`、`libstdc++` 或 `libwinpthread`，最后上传 `nssm-win64-Debug` 和 `nssm-win64-Release` 工件。
+
+## 构建与资源说明
+
+- `CMakeLists.txt`：唯一受支持的构建入口；旧 VS2008 工程已删除。
+- `CMakePresets.json`：提供 Debug、Release 和 RelWithDebInfo 预设。
+- `cmake/CompileMessages.cmake`：调用 `windmc` 编译事件消息资源。
+- `cmake/ConvertMessages.ps1`：把 UTF-8 消息源转换为 `windmc` 所需格式。
+- `cmake/ConvertResource.ps1`：生成不依赖系统代码页的 Unicode 对话框资源。
+- `cmake/VerifyResources.ps1`：检查编译后的 EXE 包含正确中文且不含常见乱码。
+- `cmake/CompilerOptions.cmake`：集中维护 C++20、静态 MinGW 运行库及 PE 安全链接选项。
+
+CTest 当前包含：
+
+- `nssm.version`：验证版本、架构和程序可执行性。
+- `nssm.resources`：验证中文资源的 UTF-16 内容并检测乱码回归。
+
+提交代码前建议至少执行：
+
+```powershell
+cmake --preset mingw-release
+cmake --build --preset mingw-release
+ctest --preset mingw-release
+```
+
+## 图形界面说明
+
+- 左侧分类导航用于切换应用程序、详情、登录、依赖、进程、关闭、退出操作、I/O、日志轮转、环境变量和事件钩子。
+- 界面支持 Windows 10 高 DPI 缩放；CPU 亲和性列表会根据当前 DPI 自动调整列宽。
+- 单行输入框与浏览按钮使用统一的行高和垂直中心线。
+- “描述”、依赖和环境变量为多行输入；“描述”中可直接按 Enter 换行。
+- 中英文对话框资源均以 Unicode 形式写入 EXE，不依赖“非 Unicode 程序的语言”等区域设置。
 
 ## 使用与命令（摘要）
 参考官方命令行文档整理要点，详情见：[nssm commands](https://nssm.cc/commands)。
