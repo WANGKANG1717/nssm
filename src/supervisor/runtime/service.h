@@ -73,7 +73,6 @@ typedef struct nssm_service_t {
   unsigned long kill_window_delay;
   unsigned long kill_threads_delay;
   bool kill_process_tree;
-  SC_HANDLE handle;
   SERVICE_STATUS status;
   SRWLOCK status_lock;
   SERVICE_STATUS_HANDLE status_handle;
@@ -122,9 +121,6 @@ unsigned long WINAPI service_control_handler(unsigned long, unsigned long, void 
 nssm_service_t *alloc_nssm_service();
 void set_nssm_service_defaults(nssm_service_t *);
 void cleanup_nssm_service(nssm_service_t *);
-SC_HANDLE open_service_manager(unsigned long);
-SC_HANDLE open_service(SC_HANDLE, TCHAR *, unsigned long, TCHAR *, unsigned long);
-void set_service_recovery(nssm_service_t *);
 int monitor_service(nssm_service_t *);
 int start_service(nssm_service_t *);
 int stop_service(nssm_service_t *, unsigned long);

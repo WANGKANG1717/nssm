@@ -18,12 +18,15 @@
 #include "status_snapshot.h"
 #include "recovery.h"
 #include "resource_monitor.h"
+#include "win32_handle.h"
 
 #include <string>
 #include <vector>
 
 static constexpr int kStartHandledByRecovery = -1;
 static constexpr int kStartAwaitingProcessExit = -2;
+
+static void set_service_recovery(nssm_service_t *, SC_HANDLE);
 
 static void unregister_service_wait(nssm_service_t *service,
                                     bool wait_for_callbacks) {
@@ -301,7 +304,6 @@ void cleanup_nssm_service(nssm_service_t *service) {
   close_status_snapshot(service);
   if (service->env) HeapFree(GetProcessHeap(), 0, service->env);
   if (service->env_extra) HeapFree(GetProcessHeap(), 0, service->env_extra);
-  if (service->handle) CloseServiceHandle(service->handle);
   if (service->process_handle) CloseHandle(service->process_handle);
   if (service->job_handle) CloseHandle(service->job_handle);
   if (service->stop_event) CloseHandle(service->stop_event);
@@ -381,16 +383,12 @@ void WINAPI service_main(unsigned long argc, TCHAR **argv) {
   });
 
   if (is_process_administrator()) {
-    SC_HANDLE services = open_service_manager(SC_MANAGER_CONNECT);
-    if (services) {
-      service->handle = open_service(services, service->name, SERVICE_CHANGE_CONFIG, 0, 0);
-      set_service_recovery(service);
-
-      /* Remember our display name. */
-      unsigned long displayname_len = _countof(service->displayname);
-      GetServiceDisplayName(services, service->name, service->displayname, &displayname_len);
-
-      CloseServiceHandle(services);
+    unique_service_handle manager(OpenSCManagerW(
+        nullptr, SERVICES_ACTIVE_DATABASE, SC_MANAGER_CONNECT));
+    if (manager) {
+      unique_service_handle own_service(OpenServiceW(
+          manager.get(), service->name, SERVICE_CHANGE_CONFIG));
+      if (own_service) set_service_recovery(service, own_service.get());
     }
   }
 
@@ -435,12 +433,14 @@ void WINAPI service_main(unsigned long argc, TCHAR **argv) {
 }
 
 /* Make sure service recovery actions are taken where necessary */
-void set_service_recovery(nssm_service_t *service) {
+static void set_service_recovery(nssm_service_t *service,
+                                 SC_HANDLE service_handle) {
   SERVICE_FAILURE_ACTIONS_FLAG flag;
   ZeroMemory(&flag, sizeof(flag));
   flag.fFailureActionsOnNonCrashFailures = true;
 
-  if (! ChangeServiceConfig2(service->handle, SERVICE_CONFIG_FAILURE_ACTIONS_FLAG, &flag)) {
+  if (! ChangeServiceConfig2(service_handle,
+                             SERVICE_CONFIG_FAILURE_ACTIONS_FLAG, &flag)) {
     unsigned long error = GetLastError();
     log_event(EVENTLOG_ERROR_TYPE,
               NSSM_EVENT_SERVICE_CONFIG_FAILURE_ACTIONS_FAILED,
