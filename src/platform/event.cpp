@@ -64,12 +64,17 @@ void log_event_strings(unsigned short type, unsigned long id,
 }
 
 void print_message(FILE *file, unsigned long id, ...) {
-  wchar_t *format = message_string(id);
+  unique_local_memory<wchar_t> format(message_string(id));
   if (! format) return;
 
   va_list arguments;
   va_start(arguments, id);
-  vfwprintf(file, format, arguments);
+  try {
+    vfwprintf(file, format.get(), arguments);
+  }
+  catch (...) {
+    va_end(arguments);
+    throw;
+  }
   va_end(arguments);
-  free_message_string(format);
 }
