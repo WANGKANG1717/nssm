@@ -10,6 +10,24 @@ static int selected_tab;
 static void combo_insert_message_string(HWND combo, WPARAM index, unsigned long id);
 static void tab_insert_message_string(HWND tabs, WPARAM index, unsigned long id);
 
+static int cpu_list_column_width(HWND list, int cpu_count) {
+  TCHAR sample[16];
+  _sntprintf_s(sample, _countof(sample), _TRUNCATE, _T("%d"), cpu_count > 0 ? cpu_count - 1 : 0);
+
+  SIZE text_size{};
+  HDC device = GetDC(list);
+  if (device) {
+    HFONT font = (HFONT) SendMessage(list, WM_GETFONT, 0, 0);
+    HGDIOBJ previous = font ? SelectObject(device, font) : 0;
+    GetTextExtentPoint32(device, sample, (int) _tcslen(sample), &text_size);
+    if (previous) SelectObject(device, previous);
+    ReleaseDC(list, device);
+  }
+
+  const int padding = MulDiv(12, (int) GetDpiForWindow(list), 96);
+  return text_size.cx + padding;
+}
+
 static HWND dialog(const TCHAR *templ, HWND parent, DLGPROC function, LPARAM l) {
   /* The caller will deal with GetLastError()... */
   HRSRC resource = FindResourceEx(0, RT_DIALOG, templ, GetUserDefaultLangID());
@@ -1244,30 +1262,13 @@ INT_PTR CALLBACK nssm_dlg(HWND window, UINT message, WPARAM w, LPARAM l) {
 
       list = GetDlgItem(tablist[NSSM_TAB_PROCESS], IDC_AFFINITY);
       n = num_cpus();
-      SendMessage(list, LB_SETCOLUMNWIDTH, 16, 0);
+      SendMessage(list, LB_SETCOLUMNWIDTH, cpu_list_column_width(list, n), 0);
       for (i = 0; i < n; i++) {
         TCHAR buffer[3];
         _sntprintf_s(buffer, _countof(buffer), _TRUNCATE, _T("%d"), i);
         SendMessage(list, LB_ADDSTRING, 0, (LPARAM) buffer);
       }
 
-      /*
-        Size to fit.
-        The box is high enough for four rows.  It is wide enough for eight
-        columns without scrolling.  With scrollbars it shrinks to two rows.
-        Note that the above only holds if we set the column width BEFORE
-        adding the strings.
-      */
-      if (n < 32) {
-        int columns = (n - 1) / 4;
-        RECT rect;
-        GetWindowRect(list, &rect);
-        int width = rect.right - rect.left;
-        width -= (7 - columns) * 16;
-        int height = rect.bottom - rect.top;
-        if (n < 4) height -= (int) SendMessage(list, LB_GETITEMHEIGHT, 0, 0) * (4 - n);
-        SetWindowPos(list, 0, 0, 0, width, height, SWP_NOMOVE | SWP_NOOWNERZORDER);
-      }
       SendMessage(list, LB_SELITEMRANGE, 1, MAKELPARAM(0, n));
 
       SendDlgItemMessage(tablist[NSSM_TAB_PROCESS], IDC_AFFINITY_ALL, BM_SETCHECK, BST_CHECKED, 0);
