@@ -68,10 +68,20 @@ static int finish_service_start(nssm_service_t *service,
     log_event(EVENTLOG_INFORMATION_TYPE, NSSM_EVENT_READINESS_READY,
               service->name, readiness.detail.c_str(), 0);
   }
-  else if (await_single_handle(
-               service->status_handle, &service->status,
-               service->process_handle, service->name, _T("start_service"),
-               NSSM_RESET_THROTTLE_RESTART) == 1) {
+  else {
+    const int stability = await_single_handle(
+        service->status_handle, &service->status, service->process_handle,
+        service->name, _T("start_service"), NSSM_RESET_THROTTLE_RESTART);
+    if (stability == 0) {
+      end_service(service, false);
+      return kStartHandledByRecovery;
+    }
+    if (stability < 0) {
+      if (WaitForSingleObject(service->stop_event, 0) == WAIT_OBJECT_0) {
+        return kStartHandledByRecovery;
+      }
+      return stop_service(service, 3);
+    }
     service->throttle = 0;
   }
 
