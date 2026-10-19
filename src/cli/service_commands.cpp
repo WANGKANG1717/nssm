@@ -1,10 +1,12 @@
 #include "event.h"
 #include "messages.h"
+#include "output.h"
 #include "service_control.h"
 #include "service_constants.h"
 #include "service_commands.h"
 #include "service_enumeration.h"
 #include "service_operations.h"
+#include "status.h"
 #include "string_utils.h"
 #include "usage.h"
 #include "windows_limits.h"
@@ -32,18 +34,57 @@ void print_control_wait_failure(const wchar_t *service_name,
 
 }  // namespace
 
-int list_nssm_services(int argc, wchar_t **argv) {
-  const bool including_native =
-      argc > 0 && strings_equal_ignore_case(argv[0], L"all");
-  std::vector<std::wstring> names;
-  unsigned long error = ERROR_SUCCESS;
-  if (! enumerate_windows_services(including_native, &names, &error)) {
-    print_message(stderr, NSSM_MESSAGE_ENUMSERVICESSTATUS_FAILED,
-                  error_string(error));
-    return 1;
+int list_services(int argc, wchar_t **argv) {
+  cli_arguments_t arguments = parse_cli_arguments(argc, argv);
+  if (arguments.positional.size() > 1 ||
+      (arguments.positional.size() == 1 &&
+       ! strings_equal_ignore_case(arguments.positional[0], L"all")) ||
+      (arguments.json && arguments.verbose)) {
+    print_cli_error(arguments.json, L"usage",
+                    L"Usage: svp list [--verbose|--json] [all]");
+    return static_cast<int>(cli_exit_code::usage);
   }
-  for (const auto &name : names) wprintf(L"%ls\n", name.c_str());
-  return 0;
+  const bool including_native = ! arguments.positional.empty();
+  std::vector<service_enumeration_entry_t> entries;
+  unsigned long error = ERROR_SUCCESS;
+  if (! enumerate_windows_services(including_native, &entries, &error)) {
+    if (arguments.json) {
+      print_cli_error(true, L"system",
+                      L"Unable to enumerate Windows services", error);
+    }
+    else {
+      print_message(stderr, NSSM_MESSAGE_ENUMSERVICESSTATUS_FAILED,
+                    error_string(error));
+    }
+    return static_cast<int>(cli_exit_code::system);
+  }
+  if (arguments.json) {
+    fputws(L"{\"ok\":true,\"operation\":\"list\",\"services\":[", stdout);
+    for (size_t index = 0; index < entries.size(); ++index) {
+      if (index) fputwc(L',', stdout);
+      const auto &entry = entries[index];
+      fputws(L"{\"name\":", stdout);
+      write_json_string(stdout, entry.name);
+      fputws(L",\"displayName\":", stdout);
+      write_json_string(stdout, entry.display_name);
+      fputws(L",\"state\":", stdout);
+      write_json_string(stdout, service_state_text(entry.state));
+      fwprintf(stdout, L",\"pid\":%lu}", entry.process_id);
+    }
+    fputws(L"]}\n", stdout);
+    return static_cast<int>(cli_exit_code::success);
+  }
+  if (arguments.verbose) {
+    fwprintf(stdout, L"%-16ls %8ls %ls\n", L"STATE", L"PID", L"NAME");
+    for (const auto &entry : entries) {
+      fwprintf(stdout, L"%-16ls %8lu %ls\n",
+               service_state_text(entry.state), entry.process_id,
+               entry.name.c_str());
+    }
+    return static_cast<int>(cli_exit_code::success);
+  }
+  for (const auto &entry : entries) wprintf(L"%ls\n", entry.name.c_str());
+  return static_cast<int>(cli_exit_code::success);
 }
 
 int service_process_tree(int argc, wchar_t **argv) {

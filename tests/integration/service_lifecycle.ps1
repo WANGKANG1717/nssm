@@ -118,6 +118,17 @@ try {
   if ($managedServices -contains $unmanagedServiceName) {
     throw 'foreign ConfigPath was misidentified as a SvcPilot registration'
   }
+  $listed = Invoke-SvpJson @('list', '--json')
+  if (-not $listed.ok -or $listed.operation -ne 'list' -or
+      $listed.services.name -notcontains $serviceName) {
+    throw 'JSON service listing did not include the managed service'
+  }
+  $verboseServices = @(& $executablePath list --verbose)
+  if ($LASTEXITCODE -ne 0 -or
+      ($verboseServices -join "`n") -notmatch
+        "stopped\s+0\s+$([regex]::Escape($serviceName))") {
+    throw 'verbose service listing did not expose stopped state and PID'
+  }
   & $executablePath start $serviceName | Out-Null
   if ($LASTEXITCODE -ne 0) { throw 'service start failed' }
 

@@ -44,7 +44,7 @@ To manage a service:
 
         svp processes <servicename>
 
-        svp list [all]
+        svp list [--verbose|--json] [all]
 .
 Language = Chinese
 SvcPilot：Windows 服务监督器
@@ -64,7 +64,7 @@ SvcPilot：Windows 服务监督器
     svp status [--verbose] [--json] <服务名>
     svp statuscode <服务名>
     svp rotate|processes <服务名>
-    svp list [all]
+    svp list [--verbose|--json] [all]
 .
 
 MessageId = +1

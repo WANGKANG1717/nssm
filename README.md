@@ -124,7 +124,7 @@ svp remove MyService confirm
 - `start|stop|restart|continue <service>`：控制服务生命周期。
 - `status [--verbose|--json] <service>`：查询 SCM 和监督器运行时状态。
 - `rotate <service>`：触发在线日志轮转。
-- `list [all]`：列出受管理服务，或列出全部 Windows 服务。
+- `list [--verbose|--json] [all]`：列出服务；详细模式同时返回状态和 PID，`all` 包含全部 Windows 服务。
 - `processes <service>`：列出受监督的进程树。
 - `remove <service> confirm`：删除服务，必须显式确认。
 - `version`：显示版本、构建信息和架构。

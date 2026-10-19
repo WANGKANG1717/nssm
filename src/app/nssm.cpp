@@ -169,7 +169,7 @@ int wmain(int argc, wchar_t **argv) {
     }
     if (strings_equal_ignore_case(argv[1], L"statuscode")) return control_service(SERVICE_CONTROL_INTERROGATE, argc - 2, argv + 2, true);
     if (strings_equal_ignore_case(argv[1], L"rotate")) return control_service(kServiceControlRotate, argc - 2, argv + 2);
-    if (strings_equal_ignore_case(argv[1], L"list")) return list_nssm_services(argc - 2, argv + 2);
+    if (strings_equal_ignore_case(argv[1], L"list")) return list_services(argc - 2, argv + 2);
     if (strings_equal_ignore_case(argv[1], L"processes")) return service_process_tree(argc - 2, argv + 2);
     if (strings_equal_ignore_case(argv[1], L"remove")) {
       if (! is_admin) {

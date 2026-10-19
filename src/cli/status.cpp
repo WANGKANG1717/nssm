@@ -5,8 +5,6 @@
 
 #include <string>
 
-namespace {
-
 const wchar_t *service_state_text(unsigned long state) {
   switch (state) {
     case SERVICE_STOPPED: return L"stopped";
@@ -19,8 +17,6 @@ const wchar_t *service_state_text(unsigned long state) {
     default: return L"unknown";
   }
 }
-
-}  // namespace
 
 int inspect_service_status_command(int argc, wchar_t **argv) {
   cli_arguments_t arguments = parse_cli_arguments(argc, argv);

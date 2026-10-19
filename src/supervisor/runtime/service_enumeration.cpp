@@ -6,6 +6,7 @@
 #include <windows.h>
 
 #include <new>
+#include <utility>
 
 namespace {
 
@@ -20,13 +21,13 @@ bool unmanaged_service_error(unsigned long error) {
 }  // namespace
 
 bool enumerate_windows_services(bool include_all,
-                                std::vector<std::wstring> *names,
+                                std::vector<service_enumeration_entry_t> *entries,
                                 unsigned long *error) {
-  if (! names) {
+  if (! entries) {
     save_error(error, ERROR_INVALID_PARAMETER);
     return false;
   }
-  names->clear();
+  entries->clear();
 
   unique_service_handle manager(OpenSCManagerW(
       nullptr, SERVICES_ACTIVE_DATABASE,
@@ -80,7 +81,12 @@ bool enumerate_windows_services(bool include_all,
             return false;
           }
         }
-        names->emplace_back(statuses[index].lpServiceName);
+        service_enumeration_entry_t entry;
+        entry.name = statuses[index].lpServiceName;
+        entry.display_name = statuses[index].lpDisplayName;
+        entry.state = statuses[index].ServiceStatusProcess.dwCurrentState;
+        entry.process_id = statuses[index].ServiceStatusProcess.dwProcessId;
+        entries->push_back(std::move(entry));
       }
       if (complete) {
         save_error(error, ERROR_SUCCESS);
@@ -90,7 +96,7 @@ bool enumerate_windows_services(bool include_all,
     }
   }
   catch (const std::bad_alloc &) {
-    names->clear();
+    entries->clear();
     save_error(error, ERROR_NOT_ENOUGH_MEMORY);
     return false;
   }
