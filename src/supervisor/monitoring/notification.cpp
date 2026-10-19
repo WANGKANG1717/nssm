@@ -8,37 +8,107 @@
 #include <sddl.h>
 
 #include <string>
+#include <vector>
 
 namespace {
 
 constexpr unsigned long kNotificationWatchdogExitCode = 0xE0010002UL;
+
+std::wstring notification_account(const nssm_service_t *service) {
+  const auto &account = service->config->service.account;
+  switch (account.type) {
+    case service_account_type_t::system: return L"SYSTEM";
+    case service_account_type_t::local_service: return L"LOCAL SERVICE";
+    case service_account_type_t::network_service: return L"NETWORK SERVICE";
+    case service_account_type_t::virtual_account:
+      return L"NT SERVICE\\" + service->config->service.name;
+    case service_account_type_t::gmsa:
+    case service_account_type_t::user: return account.name;
+  }
+  return L"";
+}
+
+bool notification_descriptor(const nssm_service_t *service,
+                             unique_local_memory<void> *descriptor) {
+  const std::wstring account = notification_account(service);
+  unsigned long sid_bytes = 0;
+  unsigned long domain_chars = 0;
+  SID_NAME_USE use = SidTypeUnknown;
+  LookupAccountNameW(nullptr, account.c_str(), nullptr, &sid_bytes, nullptr,
+                     &domain_chars, &use);
+  if (GetLastError() != ERROR_INSUFFICIENT_BUFFER || ! sid_bytes) return false;
+  std::vector<unsigned char> sid(sid_bytes);
+  std::vector<wchar_t> domain(domain_chars ? domain_chars : 1);
+  if (! LookupAccountNameW(nullptr, account.c_str(), sid.data(), &sid_bytes,
+                           domain.data(), &domain_chars, &use)) return false;
+  unique_local_memory<wchar_t> sid_text;
+  if (! ConvertSidToStringSidW(sid.data(), sid_text.put())) return false;
+  const std::wstring sddl = L"D:P(A;;GA;;;SY)(A;;GA;;;BA)(A;;GA;;;" +
+                            std::wstring(sid_text.get()) + L")";
+  return ConvertStringSecurityDescriptorToSecurityDescriptorW(
+             sddl.c_str(), SDDL_REVISION_1, descriptor->put(), nullptr) != FALSE;
+}
 
 unsigned long WINAPI notification_thread(void *context) {
   auto *service = static_cast<nssm_service_t *>(context);
   while (WaitForSingleObject(service->notification_stop_event, 0) !=
          WAIT_OBJECT_0) {
     unique_local_memory<void> descriptor;
-    if (! ConvertStringSecurityDescriptorToSecurityDescriptorW(
-            L"D:P(A;;GA;;;SY)(A;;GA;;;BA)(A;;GA;;;AU)", SDDL_REVISION_1,
-            descriptor.put(), nullptr)) return GetLastError();
+    if (! notification_descriptor(service, &descriptor)) return GetLastError();
     SECURITY_ATTRIBUTES attributes = {sizeof(attributes), descriptor.get(),
                                       FALSE};
     unique_handle pipe(CreateNamedPipeW(
         service->notification_pipe,
-        PIPE_ACCESS_INBOUND | FILE_FLAG_FIRST_PIPE_INSTANCE,
+        PIPE_ACCESS_INBOUND | FILE_FLAG_OVERLAPPED,
         PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE | PIPE_WAIT |
             PIPE_REJECT_REMOTE_CLIENTS,
         1, 0, 4096, 1000, &attributes));
     if (! pipe) return GetLastError();
-    const BOOL connected = ConnectNamedPipe(pipe.get(), nullptr);
-    const unsigned long connect_error = connected ? ERROR_SUCCESS : GetLastError();
-    if (! connected && connect_error != ERROR_PIPE_CONNECTED) {
-      if (connect_error == ERROR_OPERATION_ABORTED) return 0;
+    unique_handle io_event(CreateEventW(nullptr, TRUE, FALSE, nullptr));
+    if (! io_event) return GetLastError();
+    OVERLAPPED overlapped = {};
+    overlapped.hEvent = io_event.get();
+    const BOOL connected = ConnectNamedPipe(pipe.get(), &overlapped);
+    unsigned long connect_error = connected ? ERROR_SUCCESS : GetLastError();
+    if (! connected && connect_error == ERROR_IO_PENDING) {
+      HANDLE handles[] = {service->notification_stop_event, io_event.get()};
+      const unsigned long wait = WaitForMultipleObjects(2, handles, FALSE,
+                                                        INFINITE);
+      if (wait == WAIT_OBJECT_0) {
+        CancelIoEx(pipe.get(), &overlapped);
+        return 0;
+      }
+      if (wait != WAIT_OBJECT_0 + 1) return GetLastError();
+      unsigned long transferred = 0;
+      if (! GetOverlappedResult(pipe.get(), &overlapped, &transferred,
+                                FALSE)) {
+        connect_error = GetLastError();
+      }
+      else connect_error = ERROR_SUCCESS;
+    }
+    if (! connected && connect_error != ERROR_SUCCESS &&
+        connect_error != ERROR_PIPE_CONNECTED) {
       return connect_error;
     }
     char buffer[4097] = {};
     unsigned long read = 0;
-    if (ReadFile(pipe.get(), buffer, 4096, &read, nullptr) && read) {
+    ResetEvent(io_event.get());
+    ZeroMemory(&overlapped, sizeof(overlapped));
+    overlapped.hEvent = io_event.get();
+    BOOL read_ok = ReadFile(pipe.get(), buffer, 4096, &read, &overlapped);
+    unsigned long read_error = read_ok ? ERROR_SUCCESS : GetLastError();
+    if (! read_ok && read_error == ERROR_IO_PENDING) {
+      HANDLE handles[] = {service->notification_stop_event, io_event.get()};
+      const unsigned long wait = WaitForMultipleObjects(2, handles, FALSE,
+                                                        INFINITE);
+      if (wait == WAIT_OBJECT_0) {
+        CancelIoEx(pipe.get(), &overlapped);
+        return 0;
+      }
+      read_ok = wait == WAIT_OBJECT_0 + 1 &&
+                GetOverlappedResult(pipe.get(), &overlapped, &read, FALSE);
+    }
+    if (read_ok && read) {
       std::string message(buffer, read);
       if (message.find("READY=1") != std::string::npos) {
         SetEvent(service->notification_ready_event);

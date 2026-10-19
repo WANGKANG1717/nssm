@@ -484,6 +484,13 @@ void command_runner_tests() {
 
 void notification_tests() {
   nssm_service_t service = {};
+  service_config_t config;
+  config.service.account.type = service_account_type_t::user;
+  wchar_t current_user[256] = {};
+  unsigned long current_user_length = _countof(current_user);
+  GetUserNameW(current_user, &current_user_length);
+  config.service.account.name = current_user;
+  service.config = &config;
   wcscpy_s(service.name, L"svp-notification-unit");
   service.process_handle = OpenProcess(SYNCHRONIZE, FALSE,
                                        GetCurrentProcessId());
