@@ -185,7 +185,7 @@ struct config_validation_t {
   void add(std::wstring error) { errors.push_back(std::move(error)); }
 };
 
-bool parse_service_config(const char *json, size_t length,
+bool parse_service_config(const char *toml_text, size_t length,
                           service_config_t *config,
                           config_validation_t *validation);
 bool load_service_config(const wchar_t *path, service_config_t *config,

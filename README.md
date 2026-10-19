@@ -15,7 +15,7 @@ SvcPilot 当前处于积极开发、尚未投入生产的阶段，适合继续�
 已经具备：
 
 - 原生 Windows 服务安装、更新、删除与生命周期控制。
-- 严格的声明式 JSON 配置，以及 `validate`、`plan`、`apply`、`export` 工作流。
+- 支持注释的严格 TOML 声明式配置，以及 `validate`、`plan`、`apply`、`export` 工作流。
 - Readiness、Health Check、Watchdog 式进程监督和可配置恢复策略。
 - Job Object 资源治理、进程树跟踪及 CPU、内存、进程数统计。
 - 标准输出/错误重定向、日志轮转和运行时在线轮转。
@@ -100,9 +100,9 @@ GitHub Actions 同时构建和测试 Debug/Release，验证 x64 PE 与静态 Min
 先验证并预览配置，再在管理员终端中应用：
 
 ```powershell
-svp validate --json .\service.json
-svp plan --json .\service.json
-svp apply --json .\service.json
+svp validate --json .\service.toml
+svp plan --json .\service.toml
+svp apply --json .\service.toml
 ```
 
 查询和控制服务：
@@ -111,13 +111,13 @@ svp apply --json .\service.json
 svp start MyService
 svp status --json MyService
 svp stop MyService
-svp export --json MyService .\backup\MyService.json
+svp export --json MyService .\backup\MyService.toml
 svp remove MyService confirm
 ```
 
 主要命令：
 
-- `validate <config>`：校验 JSON 结构和业务规则。
+- `validate <config>`：校验 TOML 结构和业务规则。
 - `plan <config>`：只读比较期望配置与 SCM 当前状态。
 - `apply <config>`：创建服务或原子更新服务配置。
 - `export <service> <path>`：导出已登记的声明式配置。
@@ -131,26 +131,31 @@ svp remove MyService confirm
 
 ## 声明式配置
 
-最小示例位于 [`tests/fixtures/minimal-service.json`](tests/fixtures/minimal-service.json)。
+最小示例位于 [`tests/fixtures/minimal-service.toml`](tests/fixtures/minimal-service.toml)。
 当前 schema 严格固定为 `1`，不会猜测或自动迁移其他版本。
 
-```json
-{
-  "schema": 1,
-  "service": {
-    "name": "example-service",
-    "displayName": "Example Service",
-    "startup": "automatic",
-    "account": { "type": "virtual" }
-  },
-  "application": {
-    "path": "C:\\apps\\example\\example.exe",
-    "arguments": ["--serve"],
-    "workingDirectory": "C:\\apps\\example"
-  },
-  "security": { "serviceSid": "unrestricted" }
-}
+```toml
+schema = 1
+
+[service]
+name = "example-service"
+displayName = "Example Service"
+startup = "automatic"
+
+[service.account]
+type = "virtual"
+
+[application]
+path = 'C:\apps\example\example.exe'
+arguments = ["--serve"]
+workingDirectory = 'C:\apps\example'
+
+# TOML 支持注释；Windows 路径建议使用单引号字面量。
+[security]
+serviceSid = "unrestricted"
 ```
+
+配置文件使用 TOML；`--json` 仅表示 CLI 输出 JSON，便于脚本和自动化程序消费。
 
 声明式命令统一使用以下退出码：
 

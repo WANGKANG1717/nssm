@@ -12,15 +12,15 @@ SvcPilot: Windows service supervisor
 Version %ls %ls, %ls
 Usage: svp <option> [<args> ...]
 
-To validate or apply a declarative JSON configuration:
+To validate or apply a declarative TOML configuration:
 
-        svp validate <config.json>
+        svp validate <config.toml>
 
-        svp plan [--json] <config.json>
+        svp plan [--json] <config.toml>
 
-        svp apply [--json] <config.json>
+        svp apply [--json] <config.toml>
 
-        svp export [--json] <servicename> <destination.json>
+        svp export [--json] <servicename> <destination.toml>
 
 To remove a service with explicit confirmation:
 
@@ -52,10 +52,10 @@ SvcPilot：Windows 服务监督器
 用法：svp <选项> [<参数> ...]
 
 常用命令：
-  验证配置：svp validate <配置文件.json>
-  预览变更：svp plan [--json] <配置文件.json>
-  安装或更新：svp apply [--json] <配置文件.json>
-  原子导出：svp export [--json] <服务名> <目标文件.json>
+  验证配置：svp validate <配置文件.toml>
+  预览变更：svp plan [--json] <配置文件.toml>
+  安装或更新：svp apply [--json] <配置文件.toml>
+  原子导出：svp export [--json] <服务名> <目标文件.toml>
 
   移除（显式确认）: svp remove <服务名> confirm
 

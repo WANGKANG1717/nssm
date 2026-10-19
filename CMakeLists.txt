@@ -37,16 +37,13 @@ include(CompilerOptions)
 include(CompileMessages)
 include(FetchContent)
 
-set(YYJSON_BUILD_TESTS OFF CACHE BOOL "" FORCE)
-set(YYJSON_BUILD_MISC OFF CACHE BOOL "" FORCE)
-set(YYJSON_BUILD_DOC OFF CACHE BOOL "" FORCE)
 FetchContent_Declare(
-  yyjson
-  GIT_REPOSITORY https://github.com/ibireme/yyjson.git
-  GIT_TAG 8b4a38dc994a110abaec8a400615567bd996105f
+  tomlplusplus
+  GIT_REPOSITORY https://github.com/marzer/tomlplusplus.git
+  GIT_TAG 30172438cee64926dc41fdd9c11fb3ba5b2ba9de
   GIT_SHALLOW TRUE
 )
-FetchContent_MakeAvailable(yyjson)
+FetchContent_MakeAvailable(tomlplusplus)
 
 nssm_compile_messages(
   SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/resources/messages.mc"
@@ -182,7 +179,7 @@ target_link_libraries(svp PRIVATE
   user32
   winhttp
   ws2_32
-  yyjson
+  tomlplusplus::tomlplusplus
 )
 
 set_target_properties(svp PROPERTIES
@@ -209,7 +206,7 @@ if(BUILD_TESTING)
   add_test(
     NAME svp.validate
     COMMAND $<TARGET_FILE:svp> validate
-            "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/minimal-service.json"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/minimal-service.toml"
   )
   set_tests_properties(svp.validate PROPERTIES
     PASS_REGULAR_EXPRESSION "Configuration is valid: svcpilot-config-test"
@@ -258,12 +255,12 @@ if(BUILD_TESTING)
     _WIN32_WINNT=0x0A00
   )
   nssm_configure_compiler(svp_unit_tests)
-  target_link_libraries(svp_unit_tests PRIVATE advapi32 shlwapi winhttp ws2_32 yyjson)
+  target_link_libraries(svp_unit_tests PRIVATE advapi32 shlwapi winhttp ws2_32 tomlplusplus::tomlplusplus)
   add_test(NAME svp.unit COMMAND $<TARGET_FILE:svp_unit_tests>)
   add_test(
     NAME svp.validate-json
     COMMAND $<TARGET_FILE:svp> validate --json
-            "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/minimal-service.json"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/minimal-service.toml"
   )
   set_tests_properties(svp.validate-json PROPERTIES
     PASS_REGULAR_EXPRESSION "\"ok\":true.*\"operation\":\"validate\""

@@ -1,0 +1,66 @@
+# SvcPilot configuration supports ordinary TOML comments.
+schema = 1
+
+[service]
+name = "svcpilot-config-test"
+displayName = "SvcPilot 声明式配置测试"
+description = "验证 UTF-8 配置文件与参数数组。"
+startup = "manual"
+
+[service.account]
+type = "virtual"
+
+[application]
+path = 'C:\Windows\System32\cmd.exe'
+arguments = ["/d", "/c", "exit 0"]
+inheritEnvironment = true
+
+[application.environment]
+SVCPILOT_TEST_VALUE = "中文值"
+
+[recovery]
+mode = "onFailure"
+initialDelayMs = 1000
+maximumDelayMs = 60000
+multiplier = 2
+jitterPercent = 10
+windowMs = 60000
+maximumRestarts = 5
+resetAfterMs = 60000
+
+[readiness]
+type = "process"
+startupTimeoutMs = 30000
+successThreshold = 1
+
+[health]
+type = "process"
+initialDelayMs = 10000
+intervalMs = 10000
+timeoutMs = 5000
+failureThreshold = 3
+successThreshold = 1
+
+[resources]
+monitorIntervalMs = 1000
+memoryLimitBytes = 268435456
+maximumProcesses = 16
+
+[resources.cpu]
+maximumPercent = 90
+violationThreshold = 5
+
+[logging]
+timestamp = true
+
+[logging.stdout]
+path = 'C:\Logs\worker.log'
+
+[logging.stderr]
+path = 'C:\Logs\worker-error.log'
+
+[logging.rotation]
+maximumBytes = 10485760
+
+[security]
+serviceSid = "unrestricted"

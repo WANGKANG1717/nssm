@@ -3,14 +3,31 @@
 #include <windows.h>
 
 #include <cstring>
+#include <optional>
 
 namespace {
 
-std::wstring field_path(const wchar_t *object, const char *field) {
+std::wstring field_path(const wchar_t *object, std::string_view field) {
   bool valid = false;
   std::wstring converted = utf8_to_wide(field, &valid);
   return std::wstring(object) + L"." +
          (valid ? converted : L"<invalid UTF-8>");
+}
+
+const toml::node *field(const toml::table *object, const char *name) {
+  return object ? object->get(name) : nullptr;
+}
+
+bool integer_value(const toml::node *node, unsigned long long maximum,
+                   unsigned long long *result) {
+  if (! node) return false;
+  const auto value = node->value<int64_t>();
+  if (! value || *value < 0 ||
+      static_cast<unsigned long long>(*value) > maximum) {
+    return false;
+  }
+  *result = static_cast<unsigned long long>(*value);
+  return true;
 }
 
 }  // namespace
@@ -41,36 +58,36 @@ std::wstring utf8_to_wide(const char *value, bool *valid) {
   return utf8_to_wide(value, value ? std::strlen(value) : 0, valid);
 }
 
-void reject_unknown_fields(yyjson_val *object, const wchar_t *object_name,
+std::wstring utf8_to_wide(std::string_view value, bool *valid) {
+  return utf8_to_wide(value.data(), value.size(), valid);
+}
+
+void reject_unknown_fields(const toml::table *object,
+                           const wchar_t *object_name,
                            const std::set<std::string> &allowed,
                            config_validation_t *validation) {
-  std::set<std::string> seen;
-  yyjson_obj_iter iterator = yyjson_obj_iter_with(object);
-  yyjson_val *key = nullptr;
-  while ((key = yyjson_obj_iter_next(&iterator))) {
-    const char *name = yyjson_get_str(key);
-    if (name && ! seen.insert(name).second) {
-      validation->add(L"Duplicate configuration field: " +
-                      field_path(object_name, name));
-    }
-    else if (name && ! allowed.contains(name)) {
+  if (! object) return;
+  for (const auto &[key, value] : *object) {
+    (void)value;
+    const std::string name(key.str());
+    if (! allowed.contains(name)) {
       validation->add(L"Unknown configuration field: " +
                       field_path(object_name, name));
     }
   }
 }
 
-bool read_required_string(yyjson_val *object, const char *name,
+bool read_required_string(const toml::table *object, const char *name,
                           const wchar_t *path, std::wstring *destination,
                           config_validation_t *validation) {
-  yyjson_val *value = yyjson_obj_get(object, name);
-  if (! yyjson_is_str(value)) {
+  const toml::node *node = field(object, name);
+  const auto value = node ? node->value<std::string>() : std::nullopt;
+  if (! value) {
     validation->add(std::wstring(path) + L" must be a string");
     return false;
   }
   bool valid = false;
-  *destination = utf8_to_wide(yyjson_get_str(value), yyjson_get_len(value),
-                              &valid);
+  *destination = utf8_to_wide(*value, &valid);
   if (! valid) {
     validation->add(std::wstring(path) + L" is not valid UTF-8");
     return false;
@@ -82,64 +99,66 @@ bool read_required_string(yyjson_val *object, const char *name,
   return true;
 }
 
-bool read_optional_string(yyjson_val *object, const char *name,
+bool read_optional_string(const toml::table *object, const char *name,
                           const wchar_t *path, std::wstring *destination,
                           config_validation_t *validation) {
-  if (! yyjson_obj_get(object, name)) return true;
+  if (! field(object, name)) return true;
   return read_required_string(object, name, path, destination, validation);
 }
 
-void read_optional_number(yyjson_val *object, const char *name,
+void read_optional_number(const toml::table *object, const char *name,
                           const wchar_t *path, unsigned long minimum,
                           unsigned long maximum, unsigned long *destination,
                           config_validation_t *validation) {
-  yyjson_val *value = yyjson_obj_get(object, name);
-  if (! value) return;
-  if (! yyjson_is_uint(value) || yyjson_get_uint(value) < minimum ||
-      yyjson_get_uint(value) > maximum) {
+  const toml::node *node = field(object, name);
+  if (! node) return;
+  unsigned long long value = 0;
+  if (! integer_value(node, maximum, &value) || value < minimum) {
     validation->add(std::wstring(path) + L" is outside the allowed range");
     return;
   }
-  *destination = static_cast<unsigned long>(yyjson_get_uint(value));
+  *destination = static_cast<unsigned long>(value);
 }
 
-bool read_required_number(yyjson_val *object, const char *name,
+bool read_required_number(const toml::table *object, const char *name,
                           const wchar_t *path, unsigned long minimum,
                           unsigned long maximum, unsigned long *destination,
                           config_validation_t *validation) {
-  yyjson_val *value = yyjson_obj_get(object, name);
-  if (! yyjson_is_uint(value) || yyjson_get_uint(value) < minimum ||
-      yyjson_get_uint(value) > maximum) {
+  unsigned long long value = 0;
+  if (! integer_value(field(object, name), maximum, &value) ||
+      value < minimum) {
     validation->add(std::wstring(path) +
                     L" is required and outside the allowed range");
     return false;
   }
-  *destination = static_cast<unsigned long>(yyjson_get_uint(value));
+  *destination = static_cast<unsigned long>(value);
   return true;
 }
 
-void read_optional_number64(yyjson_val *object, const char *name,
+void read_optional_number64(const toml::table *object, const char *name,
                             const wchar_t *path,
                             unsigned long long maximum,
                             unsigned long long *destination,
                             config_validation_t *validation) {
-  yyjson_val *value = yyjson_obj_get(object, name);
-  if (! value) return;
-  if (! yyjson_is_uint(value) || yyjson_get_uint(value) > maximum) {
+  const toml::node *node = field(object, name);
+  if (! node) return;
+  unsigned long long value = 0;
+  if (! integer_value(node, maximum, &value)) {
     validation->add(std::wstring(path) + L" is outside the allowed range");
     return;
   }
-  *destination = yyjson_get_uint(value);
+  *destination = value;
 }
 
-void read_optional_bool(yyjson_val *object, const char *name,
+void read_optional_bool(const toml::table *object, const char *name,
                         const wchar_t *path, bool *destination,
                         config_validation_t *validation) {
-  yyjson_val *value = yyjson_obj_get(object, name);
-  if (! value) return;
-  if (! yyjson_is_bool(value)) {
+  const toml::node *node = field(object, name);
+  if (! node) return;
+  const auto value = node->value<bool>();
+  if (! value) {
     validation->add(std::wstring(path) + L" must be a boolean");
     return;
   }
-  *destination = yyjson_get_bool(value);
+  *destination = *value;
 }

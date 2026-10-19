@@ -6,11 +6,10 @@
 #include <windows.h>
 #include <shlwapi.h>
 
+#include <optional>
 #include <set>
 #include <string>
 #include <vector>
-
-#include <yyjson.h>
 
 namespace {
 
@@ -22,14 +21,27 @@ bool valid_service_name(const std::wstring &name) {
   return true;
 }
 
-void parse_account(yyjson_val *service, service_account_config_t *account,
-                   config_validation_t *validation) {
-  yyjson_val *object = yyjson_obj_get(service, "account");
-  if (! object) return;
-  if (! yyjson_is_obj(object)) {
-    validation->add(L"service.account must be an object");
-    return;
+const toml::table *configuration_table(const toml::table *parent,
+                                       const char *name,
+                                       const wchar_t *path,
+                                       bool required,
+                                       config_validation_t *validation) {
+  const toml::node *node = parent ? parent->get(name) : nullptr;
+  if (! node) {
+    if (required) validation->add(std::wstring(path) + L" must be a table");
+    return nullptr;
   }
+  const toml::table *table = node->as_table();
+  if (! table) validation->add(std::wstring(path) + L" must be a table");
+  return table;
+}
+
+void parse_account(const toml::table *service,
+                   service_account_config_t *account,
+                   config_validation_t *validation) {
+  const toml::table *object = configuration_table(
+      service, "account", L"service.account", false, validation);
+  if (! object) return;
   reject_unknown_fields(object, L"service.account", {"type", "name"},
                         validation);
 
@@ -67,18 +79,14 @@ void parse_account(yyjson_val *service, service_account_config_t *account,
   }
 }
 
-void parse_security(yyjson_val *root, security_config_t *security,
+void parse_security(const toml::table *root, security_config_t *security,
                     config_validation_t *validation) {
-  yyjson_val *object = yyjson_obj_get(root, "security");
+  const toml::table *object = configuration_table(
+      root, "security", L"security", false, validation);
   if (! object) return;
-  if (! yyjson_is_obj(object)) {
-    validation->add(L"security must be an object");
-    return;
-  }
   reject_unknown_fields(object, L"security", {"serviceSid"}, validation);
 
-  yyjson_val *service_sid_value = yyjson_obj_get(object, "serviceSid");
-  if (! service_sid_value) return;
+  if (! object->get("serviceSid")) return;
   std::wstring service_sid;
   if (! read_required_string(object, "serviceSid", L"security.serviceSid",
                              &service_sid, validation)) return;
@@ -100,28 +108,27 @@ void parse_security(yyjson_val *root, security_config_t *security,
   }
 }
 
-void parse_dependencies(yyjson_val *service,
+void parse_dependencies(const toml::table *service,
                         std::vector<std::wstring> *dependencies,
                         config_validation_t *validation) {
-  yyjson_val *array = yyjson_obj_get(service, "dependencies");
-  if (! array) return;
-  if (! yyjson_is_arr(array)) {
+  const toml::node *node = service->get("dependencies");
+  if (! node) return;
+  const toml::array *array = node->as_array();
+  if (! array) {
     validation->add(L"service.dependencies must be an array of strings");
     return;
   }
 
   size_t index = 0;
-  yyjson_val *value = nullptr;
-  yyjson_arr_iter iterator = yyjson_arr_iter_with(array);
-  while ((value = yyjson_arr_iter_next(&iterator))) {
-    if (! yyjson_is_str(value)) {
+  for (const toml::node &element : *array) {
+    const auto value = element.value<std::string>();
+    if (! value) {
       validation->add(L"service.dependencies[" + std::to_wstring(index) +
                       L"] must be a string");
     }
     else {
       bool valid = false;
-      std::wstring dependency = utf8_to_wide(
-          yyjson_get_str(value), yyjson_get_len(value), &valid);
+      std::wstring dependency = utf8_to_wide(*value, &valid);
       if (! valid || dependency.empty() ||
           dependency.find(L'\0') != std::wstring::npos) {
         validation->add(L"service.dependencies[" + std::to_wstring(index) +
@@ -133,13 +140,12 @@ void parse_dependencies(yyjson_val *service,
   }
 }
 
-void parse_service(yyjson_val *root, service_metadata_config_t *service,
+void parse_service(const toml::table *root,
+                   service_metadata_config_t *service,
                    config_validation_t *validation) {
-  yyjson_val *object = yyjson_obj_get(root, "service");
-  if (! yyjson_is_obj(object)) {
-    validation->add(L"service must be an object");
-    return;
-  }
+  const toml::table *object = configuration_table(
+      root, "service", L"service", true, validation);
+  if (! object) return;
   reject_unknown_fields(object, L"service",
                         {"name", "displayName", "description", "startup",
                          "account", "dependencies"},
@@ -180,29 +186,28 @@ void parse_service(yyjson_val *root, service_metadata_config_t *service,
   parse_dependencies(object, &service->dependencies, validation);
 }
 
-void parse_string_array(yyjson_val *object, const char *name,
+void parse_string_array(const toml::table *object, const char *name,
                         const wchar_t *path,
                         std::vector<std::wstring> *arguments,
                         config_validation_t *validation) {
-  yyjson_val *array = yyjson_obj_get(object, name);
-  if (! array) return;
-  if (! yyjson_is_arr(array)) {
+  const toml::node *node = object->get(name);
+  if (! node) return;
+  const toml::array *array = node->as_array();
+  if (! array) {
     validation->add(std::wstring(path) + L" must be an array of strings");
     return;
   }
 
   size_t index = 0;
-  yyjson_val *value = nullptr;
-  yyjson_arr_iter iterator = yyjson_arr_iter_with(array);
-  while ((value = yyjson_arr_iter_next(&iterator))) {
-    if (! yyjson_is_str(value)) {
-      validation->add(L"application.arguments[" + std::to_wstring(index) +
+  for (const toml::node &element : *array) {
+    const auto value = element.value<std::string>();
+    if (! value) {
+      validation->add(std::wstring(path) + L"[" + std::to_wstring(index) +
                       L"] must be a string");
     }
     else {
       bool valid = false;
-      std::wstring argument = utf8_to_wide(yyjson_get_str(value),
-                                           yyjson_get_len(value), &valid);
+      std::wstring argument = utf8_to_wide(*value, &valid);
       if (! valid || argument.find(L'\0') != std::wstring::npos) {
         validation->add(std::wstring(path) + L"[" + std::to_wstring(index) +
                         L"] must be valid UTF-8 without U+0000");
@@ -213,39 +218,29 @@ void parse_string_array(yyjson_val *object, const char *name,
   }
 }
 
-void parse_arguments(yyjson_val *application,
+void parse_arguments(const toml::table *application,
                      std::vector<std::wstring> *arguments,
                      config_validation_t *validation) {
   parse_string_array(application, "arguments", L"application.arguments",
                      arguments, validation);
 }
 
-void parse_environment(yyjson_val *application,
+void parse_environment(const toml::table *application,
                        application_config_t *config,
                        config_validation_t *validation) {
-  yyjson_val *inherit = yyjson_obj_get(application, "inheritEnvironment");
-  if (inherit) {
-    if (! yyjson_is_bool(inherit)) {
-      validation->add(L"application.inheritEnvironment must be a boolean");
-    }
-    else config->inherit_environment = yyjson_get_bool(inherit);
-  }
+  read_optional_bool(application, "inheritEnvironment",
+                     L"application.inheritEnvironment",
+                     &config->inherit_environment, validation);
 
-  yyjson_val *environment = yyjson_obj_get(application, "environment");
+  const toml::table *environment = configuration_table(
+      application, "environment", L"application.environment", false,
+      validation);
   if (! environment) return;
-  if (! yyjson_is_obj(environment)) {
-    validation->add(L"application.environment must be an object of string values");
-    return;
-  }
 
   std::set<std::wstring, ordinal_ignore_case_less> names;
-  yyjson_obj_iter iterator = yyjson_obj_iter_with(environment);
-  yyjson_val *key = nullptr;
-  while ((key = yyjson_obj_iter_next(&iterator))) {
-    yyjson_val *value = yyjson_obj_iter_get_val(key);
+  for (const auto &[key, node] : *environment) {
     bool name_valid = false;
-    std::wstring name = utf8_to_wide(yyjson_get_str(key), yyjson_get_len(key),
-                                     &name_valid);
+    std::wstring name = utf8_to_wide(key.str(), &name_valid);
     if (! name_valid || name.empty() || name.find(L'=') != std::wstring::npos ||
         name.find(L'\0') != std::wstring::npos) {
       validation->add(L"application.environment contains an invalid variable name");
@@ -255,13 +250,13 @@ void parse_environment(yyjson_val *application,
       validation->add(L"application.environment contains duplicate variable names ignoring case: " + name);
       continue;
     }
-    if (! yyjson_is_str(value)) {
+    const auto value = node.value<std::string>();
+    if (! value) {
       validation->add(L"application.environment." + name + L" must be a string");
       continue;
     }
     bool value_valid = false;
-    std::wstring converted = utf8_to_wide(yyjson_get_str(value),
-                                          yyjson_get_len(value), &value_valid);
+    std::wstring converted = utf8_to_wide(*value, &value_valid);
     if (! value_valid || converted.find(L'\0') != std::wstring::npos) {
       validation->add(L"application.environment." + name +
                       L" must be valid UTF-8 without U+0000");
@@ -271,13 +266,12 @@ void parse_environment(yyjson_val *application,
   }
 }
 
-void parse_application(yyjson_val *root, application_config_t *application,
+void parse_application(const toml::table *root,
+                       application_config_t *application,
                        config_validation_t *validation) {
-  yyjson_val *object = yyjson_obj_get(root, "application");
-  if (! yyjson_is_obj(object)) {
-    validation->add(L"application must be an object");
-    return;
-  }
+  const toml::table *object = configuration_table(
+      root, "application", L"application", true, validation);
+  if (! object) return;
   reject_unknown_fields(object, L"application",
                         {"path", "arguments", "workingDirectory",
                          "inheritEnvironment", "environment"},
@@ -327,14 +321,11 @@ void parse_application(yyjson_val *root, application_config_t *application,
   parse_environment(object, application, validation);
 }
 
-void parse_recovery(yyjson_val *root, recovery_config_t *recovery,
+void parse_recovery(const toml::table *root, recovery_config_t *recovery,
                     config_validation_t *validation) {
-  yyjson_val *object = yyjson_obj_get(root, "recovery");
+  const toml::table *object = configuration_table(
+      root, "recovery", L"recovery", false, validation);
   if (! object) return;
-  if (! yyjson_is_obj(object)) {
-    validation->add(L"recovery must be an object");
-    return;
-  }
   reject_unknown_fields(
       object, L"recovery",
       {"mode", "initialDelayMs", "maximumDelayMs", "multiplier",
@@ -371,7 +362,8 @@ void parse_recovery(yyjson_val *root, recovery_config_t *recovery,
   }
 }
 
-bool parse_probe_target(yyjson_val *object, const std::wstring &section,
+bool parse_probe_target(const toml::table *object,
+                        const std::wstring &section,
                         health_check_config_t *health,
                         config_validation_t *validation) {
   std::wstring type;
@@ -397,15 +389,16 @@ bool parse_probe_target(yyjson_val *object, const std::wstring &section,
     default: break;
   }
   for (const char *name : {"tcp", "http", "command", "file"}) {
-    if (yyjson_obj_get(object, name) && (! selected || strcmp(name, selected))) {
+    if (object->get(name) && (! selected || strcmp(name, selected))) {
       validation->add(section +
                       L" contains settings for a probe other than " +
                       section + L".type");
     }
   }
   if (! selected) return true;
-  yyjson_val *probe = yyjson_obj_get(object, selected);
-  if (! yyjson_is_obj(probe)) {
+  const toml::node *probe_node = object->get(selected);
+  const toml::table *probe = probe_node ? probe_node->as_table() : nullptr;
+  if (! probe) {
     validation->add(section +
                     L" is missing the settings object selected by " +
                     section + L".type");
@@ -487,14 +480,11 @@ bool parse_probe_target(yyjson_val *object, const std::wstring &section,
   return true;
 }
 
-void parse_health(yyjson_val *root, health_check_config_t *health,
+void parse_health(const toml::table *root, health_check_config_t *health,
                   config_validation_t *validation) {
-  yyjson_val *object = yyjson_obj_get(root, "health");
+  const toml::table *object = configuration_table(
+      root, "health", L"health", false, validation);
   if (! object) return;
-  if (! yyjson_is_obj(object)) {
-    validation->add(L"health must be an object");
-    return;
-  }
   reject_unknown_fields(
       object, L"health",
       {"type", "initialDelayMs", "intervalMs", "timeoutMs",
@@ -516,14 +506,11 @@ void parse_health(yyjson_val *root, health_check_config_t *health,
                        1, 1000, &health->success_threshold, validation);
 }
 
-void parse_readiness(yyjson_val *root, readiness_config_t *readiness,
+void parse_readiness(const toml::table *root, readiness_config_t *readiness,
                      config_validation_t *validation) {
-  yyjson_val *object = yyjson_obj_get(root, "readiness");
+  const toml::table *object = configuration_table(
+      root, "readiness", L"readiness", false, validation);
   if (! object) return;
-  if (! yyjson_is_obj(object)) {
-    validation->add(L"readiness must be an object");
-    return;
-  }
   reject_unknown_fields(
       object, L"readiness",
       {"type", "initialDelayMs", "intervalMs", "timeoutMs",
@@ -552,14 +539,12 @@ void parse_readiness(yyjson_val *root, readiness_config_t *readiness,
   }
 }
 
-void parse_resources(yyjson_val *root, resource_limit_config_t *resources,
+void parse_resources(const toml::table *root,
+                     resource_limit_config_t *resources,
                      config_validation_t *validation) {
-  yyjson_val *object = yyjson_obj_get(root, "resources");
+  const toml::table *object = configuration_table(
+      root, "resources", L"resources", false, validation);
   if (! object) return;
-  if (! yyjson_is_obj(object)) {
-    validation->add(L"resources must be an object");
-    return;
-  }
   reject_unknown_fields(object, L"resources",
                         {"monitorIntervalMs", "memoryLimitBytes",
                          "maximumProcesses", "cpu"},
@@ -576,12 +561,9 @@ void parse_resources(yyjson_val *root, resource_limit_config_t *resources,
                        L"resources.maximumProcesses", 0, 65535,
                        &resources->maximum_processes, validation);
 
-  yyjson_val *cpu = yyjson_obj_get(object, "cpu");
+  const toml::table *cpu = configuration_table(
+      object, "cpu", L"resources.cpu", false, validation);
   if (! cpu) return;
-  if (! yyjson_is_obj(cpu)) {
-    validation->add(L"resources.cpu must be an object");
-    return;
-  }
   reject_unknown_fields(cpu, L"resources.cpu",
                         {"maximumPercent", "violationThreshold"}, validation);
   read_required_number(cpu, "maximumPercent",
@@ -592,15 +574,12 @@ void parse_resources(yyjson_val *root, resource_limit_config_t *resources,
                        &resources->cpu_violation_threshold, validation);
 }
 
-void parse_log_stream(yyjson_val *logging, const char *name,
+void parse_log_stream(const toml::table *logging, const char *name,
                       const wchar_t *path, std::wstring *destination,
                       config_validation_t *validation) {
-  yyjson_val *stream = yyjson_obj_get(logging, name);
+  const toml::table *stream = configuration_table(
+      logging, name, path, false, validation);
   if (! stream) return;
-  if (! yyjson_is_obj(stream)) {
-    validation->add(std::wstring(path) + L" must be an object");
-    return;
-  }
   reject_unknown_fields(stream, path, {"path"}, validation);
   std::wstring path_field = std::wstring(path) + L".path";
   read_required_string(stream, "path", path_field.c_str(), destination,
@@ -613,14 +592,11 @@ void parse_log_stream(yyjson_val *logging, const char *name,
   }
 }
 
-void parse_logging(yyjson_val *root, logging_config_t *logging,
+void parse_logging(const toml::table *root, logging_config_t *logging,
                    config_validation_t *validation) {
-  yyjson_val *object = yyjson_obj_get(root, "logging");
+  const toml::table *object = configuration_table(
+      root, "logging", L"logging", false, validation);
   if (! object) return;
-  if (! yyjson_is_obj(object)) {
-    validation->add(L"logging must be an object");
-    return;
-  }
   reject_unknown_fields(object, L"logging",
                         {"stdout", "stderr", "timestamp", "rotation"},
                         validation);
@@ -631,21 +607,17 @@ void parse_logging(yyjson_val *root, logging_config_t *logging,
   read_optional_bool(object, "timestamp", L"logging.timestamp",
                      &logging->timestamp, validation);
 
-  yyjson_val *rotation = yyjson_obj_get(object, "rotation");
+  const toml::table *rotation = configuration_table(
+      object, "rotation", L"logging.rotation", false, validation);
   if (rotation) {
-    if (! yyjson_is_obj(rotation)) {
-      validation->add(L"logging.rotation must be an object");
-    }
-    else {
-      reject_unknown_fields(rotation, L"logging.rotation", {"maximumBytes"},
-                            validation);
-      constexpr unsigned long long kMaximumLogBytes =
-          16ULL * 1024ULL * 1024ULL * 1024ULL * 1024ULL;
-      read_optional_number64(rotation, "maximumBytes",
-                             L"logging.rotation.maximumBytes",
-                             kMaximumLogBytes, &logging->maximum_bytes,
-                             validation);
-    }
+    reject_unknown_fields(rotation, L"logging.rotation", {"maximumBytes"},
+                          validation);
+    constexpr unsigned long long kMaximumLogBytes =
+        16ULL * 1024ULL * 1024ULL * 1024ULL * 1024ULL;
+    read_optional_number64(rotation, "maximumBytes",
+                           L"logging.rotation.maximumBytes",
+                           kMaximumLogBytes, &logging->maximum_bytes,
+                           validation);
   }
   if (! logging->enabled()) {
     validation->add(L"logging must configure stdout and/or stderr");
@@ -654,54 +626,53 @@ void parse_logging(yyjson_val *root, logging_config_t *logging,
 
 }  // namespace
 
-bool parse_service_config(const char *json, size_t length,
+bool parse_service_config(const char *toml_text, size_t length,
                           service_config_t *config,
                           config_validation_t *validation) {
   if (! config || ! validation) return false;
   *config = {};
   validation->errors.clear();
-  if (! json || ! length) {
+  if (! toml_text || ! length) {
     validation->add(L"Configuration file is empty");
     return false;
   }
 
-  yyjson_read_err parse_error = {};
-  yyjson_doc *document = yyjson_read_opts(const_cast<char *>(json), length, 0,
-                                          nullptr, &parse_error);
-  if (! document) {
+  toml::table root;
+  try {
+    root = toml::parse(std::string_view(toml_text, length));
+  }
+  catch (const toml::parse_error &parse_error) {
     bool valid = false;
-    std::wstring message = utf8_to_wide(parse_error.msg, &valid);
-    validation->add(L"Invalid JSON at byte " + std::to_wstring(parse_error.pos) +
-                    L": " + (valid ? message : L"parse error"));
+    const std::string_view description = parse_error.description();
+    std::wstring message = utf8_to_wide(description, &valid);
+    const auto &position = parse_error.source().begin;
+    validation->add(L"Invalid TOML at line " +
+                    std::to_wstring(position.line) + L", column " +
+                    std::to_wstring(position.column) + L": " +
+                    (valid ? message : L"parse error"));
     return false;
   }
 
-  yyjson_val *root = yyjson_doc_get_root(document);
-  if (! yyjson_is_obj(root)) {
-    validation->add(L"Configuration root must be an object");
-    yyjson_doc_free(document);
-    return false;
-  }
-  reject_unknown_fields(root, L"root",
+  reject_unknown_fields(&root, L"root",
                         {"schema", "service", "application", "recovery",
                          "readiness", "health", "resources", "logging",
                          "security"},
                         validation);
 
-  yyjson_val *schema = yyjson_obj_get(root, "schema");
-  if (! yyjson_is_uint(schema) || yyjson_get_uint(schema) != 1) {
+  const toml::node *schema = root.get("schema");
+  const auto schema_value = schema ? schema->value<int64_t>() : std::nullopt;
+  if (! schema_value || *schema_value != 1) {
     validation->add(L"schema must be the integer 1");
   }
   else config->schema = 1;
 
-  parse_service(root, &config->service, validation);
-  parse_application(root, &config->application, validation);
-  parse_recovery(root, &config->recovery, validation);
-  parse_readiness(root, &config->readiness, validation);
-  parse_health(root, &config->health, validation);
-  parse_resources(root, &config->resources, validation);
-  parse_logging(root, &config->logging, validation);
-  parse_security(root, &config->security, validation);
-  yyjson_doc_free(document);
+  parse_service(&root, &config->service, validation);
+  parse_application(&root, &config->application, validation);
+  parse_recovery(&root, &config->recovery, validation);
+  parse_readiness(&root, &config->readiness, validation);
+  parse_health(&root, &config->health, validation);
+  parse_resources(&root, &config->resources, validation);
+  parse_logging(&root, &config->logging, validation);
+  parse_security(&root, &config->security, validation);
   return validation->ok();
 }

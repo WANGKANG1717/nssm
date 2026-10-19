@@ -1,11 +1,11 @@
 # Third-party notices
 
-## yyjson
+## toml++
 
-NSSM uses [yyjson](https://github.com/ibireme/yyjson), pinned to commit
-`8b4a38dc994a110abaec8a400615567bd996105f` (release 0.12.0).
+SvcPilot uses [toml++](https://github.com/marzer/tomlplusplus), pinned to commit
+`30172438cee64926dc41fdd9c11fb3ba5b2ba9de` (release 3.4.0).
 
-Copyright (c) 2020 Yinan Zhang
+Copyright (c) Mark Gillard <mark.gillard@outlook.com.au>
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal

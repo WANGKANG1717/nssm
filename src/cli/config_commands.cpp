@@ -63,7 +63,7 @@ int validate_service_config_command(int argc, wchar_t **argv) {
   if (arguments.verbose || arguments.positional.size() != 1 ||
       ! arguments.positional[0]) {
     print_cli_error(arguments.json, L"usage",
-                    L"Usage: svp validate [--json] <config.json>");
+                    L"Usage: svp validate [--json] <config.toml>");
     return static_cast<int>(cli_exit_code::usage);
   }
 
@@ -83,7 +83,7 @@ int export_service_config_command(int argc, wchar_t **argv) {
   if (arguments.verbose || arguments.positional.size() != 2 ||
       ! arguments.positional[0] || ! arguments.positional[1]) {
     print_cli_error(arguments.json, L"usage",
-                    L"Usage: svp export [--json] <service> <destination.json>");
+                    L"Usage: svp export [--json] <service> <destination.toml>");
     return static_cast<int>(cli_exit_code::usage);
   }
   return print_operation_result(
@@ -98,7 +98,7 @@ int plan_service_config_command(int argc, wchar_t **argv,
   if (arguments.verbose || arguments.positional.size() != 1 ||
       ! arguments.positional[0] || ! wrapper_image_path) {
     print_cli_error(arguments.json, L"usage",
-                    L"Usage: svp plan [--json] <config.json>");
+                    L"Usage: svp plan [--json] <config.toml>");
     return static_cast<int>(cli_exit_code::usage);
   }
   return print_operation_result(
@@ -112,7 +112,7 @@ int apply_service_config_command(int argc, wchar_t **argv,
   if (arguments.verbose || arguments.positional.size() != 1 ||
       ! arguments.positional[0] || ! wrapper_image_path) {
     print_cli_error(arguments.json, L"usage",
-                    L"Usage: svp apply [--json] <config.json>");
+                    L"Usage: svp apply [--json] <config.toml>");
     return static_cast<int>(cli_exit_code::usage);
   }
   return print_operation_result(

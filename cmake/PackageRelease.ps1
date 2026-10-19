@@ -36,14 +36,14 @@ $sbom = [ordered]@{
       checksums = @([ordered]@{ algorithm = 'SHA256'; checksumValue = $binaryHash })
     },
     [ordered]@{
-      name = 'yyjson'; SPDXID = 'SPDXRef-Package-yyjson'; versionInfo = '0.12.0'
-      downloadLocation = 'git+https://github.com/ibireme/yyjson.git@8b4a38dc994a110abaec8a400615567bd996105f'
+      name = 'tomlplusplus'; SPDXID = 'SPDXRef-Package-tomlplusplus'; versionInfo = '3.4.0'
+      downloadLocation = 'git+https://github.com/marzer/tomlplusplus.git@30172438cee64926dc41fdd9c11fb3ba5b2ba9de'
       filesAnalyzed = $false; licenseConcluded = 'MIT'; licenseDeclared = 'MIT'
     }
   )
   relationships = @([ordered]@{
     spdxElementId = 'SPDXRef-Package-SvcPilot'; relationshipType = 'DEPENDS_ON'
-    relatedSpdxElement = 'SPDXRef-Package-yyjson'
+    relatedSpdxElement = 'SPDXRef-Package-tomlplusplus'
   })
 }
 $sbom | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath (Join-Path $stage "svcpilot-$Version-win64.spdx.json") -Encoding utf8

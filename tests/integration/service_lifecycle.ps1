@@ -14,11 +14,60 @@ $executablePath = (Resolve-Path -LiteralPath $Executable).Path
 $serviceName = "svcpilot-integration-$PID"
 $unmanagedServiceName = "$serviceName-unmanaged"
 $testRoot = Join-Path $env:ProgramData $serviceName
-$configPath = Join-Path $testRoot 'service.json'
-$exportPath = Join-Path $testRoot 'exported.json'
+$configPath = Join-Path $testRoot 'service.toml'
+$exportPath = Join-Path $testRoot 'exported.toml'
 $unsafeRoot = Join-Path $env:ProgramData "$serviceName-unsafe"
 $secureLeaf = Join-Path $unsafeRoot 'secure'
-$unsafeConfigPath = Join-Path $secureLeaf 'service.json'
+$unsafeConfigPath = Join-Path $secureLeaf 'service.toml'
+
+function ConvertTo-TomlString([string]$Value) {
+  $escaped = $Value.Replace('\', '\\').Replace('"', '\"')
+  $escaped = $escaped.Replace("`r", '\r').Replace("`n", '\n').Replace("`t", '\t')
+  return '"' + $escaped + '"'
+}
+
+function Write-TestConfiguration([string]$Path, [bool]$FastFailure) {
+  $systemDirectory = [Environment]::SystemDirectory
+  $applicationPath = if ($FastFailure) {
+    Join-Path $systemDirectory 'cmd.exe'
+  } else {
+    Join-Path $systemDirectory 'ping.exe'
+  }
+  $arguments = if ($FastFailure) {
+    'arguments = ["/d", "/c", "exit 7"]'
+  } else {
+    'arguments = ["-t", "127.0.0.1"]'
+  }
+  $lines = @(
+    'schema = 1',
+    '',
+    '[service]',
+    ('name = {0}' -f (ConvertTo-TomlString $serviceName)),
+    'displayName = "SvcPilot integration test"',
+    'startup = "manual"',
+    '',
+    '[service.account]',
+    'type = "virtual"',
+    '',
+    '[application]',
+    ('path = {0}' -f (ConvertTo-TomlString $applicationPath)),
+    $arguments,
+    ('workingDirectory = {0}' -f (ConvertTo-TomlString $systemDirectory))
+  )
+  if ($FastFailure) {
+    $lines += @('', '[recovery]', 'mode = "never"')
+  } else {
+    $lines += @(
+      '',
+      '[health]',
+      'type = "process"',
+      'intervalMs = 500',
+      'timeoutMs = 500'
+    )
+  }
+  $lines += @('', '[security]', 'serviceSid = "unrestricted"')
+  $lines | Set-Content -LiteralPath $Path -Encoding utf8
+}
 
 function Set-SecureTestAcl([string]$Path, [bool]$Directory) {
   $acl = New-Object Security.AccessControl.DirectorySecurity
@@ -70,23 +119,7 @@ try {
   & sc.exe query $unmanagedServiceName 2>$null | Out-Null
   if ($LASTEXITCODE -ne 0) { throw 'unmanaged service no longer exists' }
 
-  $configuration = @{
-    schema = 1
-    service = @{
-      name = $serviceName
-      displayName = 'SvcPilot integration test'
-      startup = 'manual'
-      account = @{ type = 'virtual' }
-    }
-    application = @{
-      path = (Join-Path $systemDirectory 'ping.exe')
-      arguments = @('-t', '127.0.0.1')
-      workingDirectory = $systemDirectory
-    }
-    health = @{ type = 'process'; intervalMs = 500; timeoutMs = 500 }
-    security = @{ serviceSid = 'unrestricted' }
-  }
-  $configuration | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $configPath -Encoding utf8
+  Write-TestConfiguration $configPath $false
   Set-SecureTestAcl $configPath $false
 
   [void](New-Item -ItemType Directory -Path $secureLeaf -Force)
@@ -101,8 +134,7 @@ try {
   }
   Set-Acl -LiteralPath $unsafeRoot -AclObject $unsafeAcl
   Set-SecureTestAcl $secureLeaf $true
-  $configuration | ConvertTo-Json -Depth 10 |
-    Set-Content -LiteralPath $unsafeConfigPath -Encoding utf8
+  Write-TestConfiguration $unsafeConfigPath $false
   Set-SecureTestAcl $unsafeConfigPath $false
   & $executablePath plan --json $unsafeConfigPath 2>$null | Out-Null
   if ($LASTEXITCODE -ne 6) {
@@ -154,12 +186,7 @@ try {
   & $executablePath stop $serviceName | Out-Null
   if ($LASTEXITCODE -ne 0) { throw 'service stop failed' }
 
-  $configuration.application.path = Join-Path $systemDirectory 'cmd.exe'
-  $configuration.application.arguments = @('/d', '/c', 'exit 7')
-  $configuration.recovery = @{ mode = 'never' }
-  [void]$configuration.Remove('health')
-  $configuration | ConvertTo-Json -Depth 10 |
-    Set-Content -LiteralPath $configPath -Encoding utf8
+  Write-TestConfiguration $configPath $true
   Set-SecureTestAcl $configPath $false
   $updated = Invoke-SvpJson @('apply', '--json', $configPath)
   if (-not $updated.ok) { throw 'fast-failure configuration update failed' }
