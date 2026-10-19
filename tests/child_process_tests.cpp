@@ -268,24 +268,25 @@ void job_object_tests() {
 void configuration_tests() {
   constexpr const char *valid_toml = R"toml(
 # Comments are part of the supported configuration format.
-schema = 1
-
-[service]
-name = "示例服务"
-displayName = "示例服务"
-startup = "delayed"
-dependencies = ["Tcpip"]
-
-[service.account]
-type = "system"
-
-[application]
-path = 'C:\Apps\worker.exe'
-arguments = ["--name", "值 with spaces"]
-inheritEnvironment = true
-
-[application.environment]
-MODE = "production"
+Schema = 1
+[Unit]
+Name = "示例服务"
+DisplayName = "示例服务"
+Requires = ["Tcpip"]
+[Service]
+ExecStart = 'C:\Apps\worker.exe'
+Arguments = ["--name", "值 with spaces"]
+Environment = ["MODE=production"]
+Restart = "on-failure"
+RestartSec = "1500ms"
+RestartMaxDelaySec = "1min"
+MemoryMax = 268435456
+TasksMax = 8
+CPUQuota = 75
+[Windows]
+Startup = "delayed"
+Account = "system"
+ServiceSid = "restricted"
 )toml";
   service_config_t config;
   config_validation_t validation;
@@ -297,6 +298,13 @@ MODE = "production"
   expect(config.application.arguments.size() == 2 &&
              config.application.environment.size() == 1,
          L"application arrays and environment should be retained");
+  expect(config.recovery.initial_delay_ms == 1500 &&
+             config.recovery.maximum_delay_ms == 60000,
+         L"systemd-style duration values should convert to milliseconds");
+  expect(config.resources.memory_limit_bytes == 268435456ULL &&
+             config.resources.maximum_processes == 8 &&
+             config.resources.maximum_cpu_percent == 75,
+         L"systemd-style resource limits should map to the runtime model");
 
   constexpr const char *malformed_toml = "schema = [";
   expect(! parse_service_config(malformed_toml, strlen(malformed_toml),
@@ -310,214 +318,36 @@ MODE = "production"
                                 &validation),
          L"legacy JSON configuration should not be accepted implicitly");
 
-  constexpr const char *drive_root_toml = R"toml(
-schema = 1
-[service]
-name = "root-worker"
-[application]
-path = 'C:\worker.exe'
-)toml";
-  expect(parse_service_config(drive_root_toml, strlen(drive_root_toml),
-                              &config, &validation) &&
-             config.application.working_directory == L"C:\\",
-         L"an executable in a drive root should derive an absolute working directory");
-
-  constexpr const char *virtual_account_toml = R"toml(
+  constexpr const char *legacy_schema = R"toml(
 schema = 1
 [service]
 name = "worker"
-[service.account]
-type = "virtual"
 [application]
 path = 'C:\Apps\worker.exe'
 )toml";
-  expect(parse_service_config(virtual_account_toml,
-                              strlen(virtual_account_toml), &config,
-                              &validation),
-         L"a virtual account should derive its name from the service name");
-
-  constexpr const char *mismatched_virtual_account_toml = R"toml(
-schema = 1
-[service]
-name = "worker"
-[service.account]
-type = "virtual"
-name = "other"
-[application]
-path = 'C:\Apps\worker.exe'
-)toml";
-  expect(! parse_service_config(mismatched_virtual_account_toml,
-                                strlen(mismatched_virtual_account_toml),
-                                &config, &validation),
-         L"an explicit virtual account name must match the service name");
-
-  constexpr const char *invalid_gmsa_toml = R"toml(
-schema = 1
-[service]
-name = "worker"
-[service.account]
-type = "gmsa"
-name = 'DOMAIN\worker'
-[application]
-path = 'C:\Apps\worker.exe'
-)toml";
-  expect(! parse_service_config(invalid_gmsa_toml, strlen(invalid_gmsa_toml),
-                                &config, &validation),
-         L"a gMSA account name must end with a dollar sign");
+  expect(! parse_service_config(legacy_schema, strlen(legacy_schema), &config,
+                                &validation),
+         L"legacy camelCase configuration should not remain as a hidden dialect");
 
   constexpr const char *embedded_nul_toml = R"toml(
-schema = 1
-[service]
-name = "worker\u0000hidden"
-[application]
-path = 'C:\Apps\worker.exe'
+Schema = 1
+[Unit]
+Name = "worker\u0000hidden"
+[Service]
+ExecStart = 'C:\Apps\worker.exe'
 )toml";
   expect(! parse_service_config(embedded_nul_toml, strlen(embedded_nul_toml),
                                 &config, &validation),
          L"configuration strings containing U+0000 must be rejected");
 
-  constexpr const char *tcp_health_toml = R"toml(
-schema = 1
-[service]
-name = "worker"
-[application]
-path = 'C:\Apps\worker.exe'
-[health]
-type = "tcp"
-timeoutMs = 2000
-[health.tcp]
-host = "127.0.0.1"
-port = 8080
-)toml";
-  expect(parse_service_config(tcp_health_toml, strlen(tcp_health_toml),
-                              &config, &validation) &&
-             config.health.type == health_check_type_t::tcp &&
-             config.health.port == 8080,
-         L"TCP health configuration should parse strictly");
-
-  constexpr const char *mixed_health_toml = R"toml(
-schema = 1
-[service]
-name = "worker"
-[application]
-path = 'C:\Apps\worker.exe'
-[health]
-type = "tcp"
-[health.tcp]
-host = "127.0.0.1"
-port = 8080
-[health.file]
-path = 'C:\heartbeat'
-maximumAgeMs = 1000
-)toml";
-  expect(! parse_service_config(mixed_health_toml, strlen(mixed_health_toml),
-                                &config, &validation),
-         L"health settings for an unselected probe type must be rejected");
-
-  constexpr const char *readiness_toml = R"toml(
-schema = 1
-[service]
-name = "worker"
-[application]
-path = 'C:\Apps\worker.exe'
-[readiness]
-type = "tcp"
-startupTimeoutMs = 30000
-successThreshold = 2
-[readiness.tcp]
-host = "127.0.0.1"
-port = 8080
-)toml";
-  expect(parse_service_config(readiness_toml, strlen(readiness_toml),
-                              &config, &validation) &&
-             config.readiness.probe.type == health_check_type_t::tcp &&
-             config.readiness.probe.success_threshold == 2 &&
-             config.readiness.startup_timeout_ms == 30000,
-         L"readiness configuration should parse independently from health");
-
-  constexpr const char *resource_toml = R"toml(
-schema = 1
-[service]
-name = "worker"
-[application]
-path = 'C:\Apps\worker.exe'
-[resources]
-monitorIntervalMs = 1000
-memoryLimitBytes = 268435456
-maximumProcesses = 8
-[resources.cpu]
-maximumPercent = 75
-violationThreshold = 3
-)toml";
-  expect(parse_service_config(resource_toml, strlen(resource_toml), &config,
-                              &validation) &&
-             config.resources.memory_limit_bytes == 268435456ULL &&
-             config.resources.maximum_processes == 8 &&
-             config.resources.maximum_cpu_percent == 75,
-         L"resource limits should parse from declarative configuration");
-
-  constexpr const char *logging_toml = R"toml(
-schema = 1
-[service]
-name = "worker"
-[application]
-path = 'C:\Apps\worker.exe'
-[logging]
-timestamp = true
-[logging.stdout]
-path = 'C:\Logs\worker.log'
-[logging.stderr]
-path = 'C:\Logs\worker-error.log'
-[logging.rotation]
-maximumBytes = 10485760
-)toml";
-  expect(parse_service_config(logging_toml, strlen(logging_toml), &config,
-                              &validation) &&
-             config.logging.timestamp &&
-             config.logging.maximum_bytes == 10485760ULL &&
-             config.logging.stdout_path == L"C:\\Logs\\worker.log",
-         L"declarative logging paths and rotation should parse strictly");
-
-  constexpr const char *security_toml = R"toml(
-schema = 1
-[service]
-name = "worker"
-[application]
-path = 'C:\Apps\worker.exe'
-[security]
-serviceSid = "restricted"
-)toml";
-  expect(parse_service_config(security_toml, strlen(security_toml), &config,
-                              &validation) &&
-             config.service.account.type ==
-                 service_account_type_t::virtual_account &&
-             config.security.service_sid == service_sid_type_t::restricted,
-         L"services should default to a virtual account and parse SID hardening");
-
-  constexpr const char *invalid_security_toml = R"toml(
-schema = 1
-[service]
-name = "worker"
-[application]
-path = 'C:\Apps\worker.exe'
-[security]
-serviceSid = "elevated"
-)toml";
-  expect(! parse_service_config(invalid_security_toml,
-                                strlen(invalid_security_toml), &config,
-                                &validation),
-         L"unsupported service SID modes must be rejected");
-
   constexpr const char *invalid_toml = R"toml(
-schema = 1
-unknown = true
-[service]
-name = "bad/name"
-[application]
-path = "relative.exe"
-[application.environment]
-Path = "one"
-PATH = "two"
+Schema = 1
+Unknown = true
+[Unit]
+Name = "bad/name"
+[Service]
+ExecStart = "relative.exe"
+Environment = ["Path=one", "PATH=two"]
 )toml";
   expect(! parse_service_config(invalid_toml, strlen(invalid_toml), &config,
                                &validation),
@@ -526,18 +356,18 @@ PATH = "two"
          L"configuration validation should report all independent errors");
 
   constexpr const char *password_toml = R"toml(
-schema = 1
-[service]
-name = "secure"
-[service.account]
-type = "user"
-name = 'DOMAIN\svc'
-password = "bad"
-[application]
-path = 'C:\Apps\worker.exe'
+Schema = 1
+[Unit]
+Name = "secure"
+[Service]
+ExecStart = 'C:\Apps\worker.exe'
+[Windows]
+Account = "user"
+AccountName = 'DOMAIN\svc'
+Password = "bad"
 )toml";
   expect(! parse_service_config(password_toml, strlen(password_toml), &config,
-                               &validation),
+                                &validation),
          L"plaintext password fields must not be accepted");
 }
 

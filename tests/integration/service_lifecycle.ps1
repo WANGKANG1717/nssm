@@ -39,33 +39,37 @@ function Write-TestConfiguration([string]$Path, [bool]$FastFailure) {
     'arguments = ["-t", "127.0.0.1"]'
   }
   $lines = @(
-    'schema = 1',
+    'Schema = 1',
     '',
-    '[service]',
-    ('name = {0}' -f (ConvertTo-TomlString $serviceName)),
-    'displayName = "SvcPilot integration test"',
-    'startup = "manual"',
+    '[Unit]',
+    ('Name = {0}' -f (ConvertTo-TomlString $serviceName)),
+    'DisplayName = "SvcPilot integration test"',
     '',
-    '[service.account]',
-    'type = "virtual"',
-    '',
-    '[application]',
-    ('path = {0}' -f (ConvertTo-TomlString $applicationPath)),
+    '[Service]',
+    ('ExecStart = {0}' -f (ConvertTo-TomlString $applicationPath)),
     $arguments,
-    ('workingDirectory = {0}' -f (ConvertTo-TomlString $systemDirectory))
+    ('WorkingDirectory = {0}' -f (ConvertTo-TomlString $systemDirectory)),
+    '',
+    '[Windows]',
+    'Startup = "manual"',
+    'Account = "virtual"',
+    'ServiceSid = "unrestricted"'
   )
   if ($FastFailure) {
-    $lines += @('', '[recovery]', 'mode = "never"')
+    $lines[($lines.IndexOf($arguments))] = 'Arguments = ["/d", "/c", "exit 7"]'
+    $serviceIndex = $lines.IndexOf('[Service]') + 1
+    $lines = @($lines[0..($serviceIndex + 2)] + 'Restart = "never"' +
+      $lines[($serviceIndex + 3)..($lines.Count - 1)])
   } else {
+    $lines[($lines.IndexOf($arguments))] = 'Arguments = ["-t", "127.0.0.1"]'
     $lines += @(
       '',
-      '[health]',
-      'type = "process"',
-      'intervalMs = 500',
-      'timeoutMs = 500'
+      '[Health]',
+      'Type = "process"',
+      'IntervalSec = "500ms"',
+      'TimeoutSec = "500ms"'
     )
   }
-  $lines += @('', '[security]', 'serviceSid = "unrestricted"')
   $lines | Set-Content -LiteralPath $Path -Encoding utf8
 }
 

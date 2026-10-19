@@ -3,6 +3,7 @@
 #include <windows.h>
 
 #include <cstring>
+#include <cwctype>
 #include <optional>
 
 namespace {
@@ -27,6 +28,39 @@ bool integer_value(const toml::node *node, unsigned long long maximum,
     return false;
   }
   *result = static_cast<unsigned long long>(*value);
+  return true;
+}
+
+bool duration_value(const toml::node *node, unsigned long maximum,
+                    unsigned long *result) {
+  if (! node) return false;
+  if (const auto seconds = node->value<int64_t>()) {
+    if (*seconds < 0 || static_cast<unsigned long long>(*seconds) * 1000ULL >
+                            maximum) return false;
+    *result = static_cast<unsigned long>(*seconds) * 1000UL;
+    return true;
+  }
+  const auto text = node->value<std::string>();
+  if (! text || text->empty()) return false;
+  size_t index = 0;
+  unsigned long long number = 0;
+  while (index < text->size() && (*text)[index] >= '0' &&
+         (*text)[index] <= '9') {
+    number = number * 10ULL + static_cast<unsigned>((*text)[index] - '0');
+    if (number > maximum) return false;
+    ++index;
+  }
+  if (! index) return false;
+  const std::string unit = text->substr(index);
+  unsigned long long multiplier = 0;
+  if (unit == "ms") multiplier = 1;
+  else if (unit.empty() || unit == "s" || unit == "sec") multiplier = 1000;
+  else if (unit == "min") multiplier = 60ULL * 1000ULL;
+  else if (unit == "h") multiplier = 60ULL * 60ULL * 1000ULL;
+  else if (unit == "d") multiplier = 24ULL * 60ULL * 60ULL * 1000ULL;
+  else return false;
+  if (number > maximum / multiplier) return false;
+  *result = static_cast<unsigned long>(number * multiplier);
   return true;
 }
 
@@ -161,4 +195,36 @@ void read_optional_bool(const toml::table *object, const char *name,
     return;
   }
   *destination = *value;
+}
+
+void read_optional_duration_ms(const toml::table *object, const char *name,
+                               const wchar_t *path, unsigned long minimum,
+                               unsigned long maximum,
+                               unsigned long *destination,
+                               config_validation_t *validation) {
+  const toml::node *node = field(object, name);
+  if (! node) return;
+  unsigned long value = 0;
+  if (! duration_value(node, maximum, &value) || value < minimum) {
+    validation->add(std::wstring(path) +
+                    L" must be a duration such as 500ms, 10s, 5min, or 1h");
+    return;
+  }
+  *destination = value;
+}
+
+bool read_required_duration_ms(const toml::table *object, const char *name,
+                               const wchar_t *path, unsigned long minimum,
+                               unsigned long maximum,
+                               unsigned long *destination,
+                               config_validation_t *validation) {
+  const toml::node *node = field(object, name);
+  unsigned long value = 0;
+  if (! node || ! duration_value(node, maximum, &value) || value < minimum) {
+    validation->add(std::wstring(path) +
+                    L" is required and must be a valid duration");
+    return false;
+  }
+  *destination = value;
+  return true;
 }

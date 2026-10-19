@@ -100,20 +100,20 @@ bool load_registered_service_config(nssm_service_t *service,
       join_windows_arguments(config->application.arguments);
   bool copied =
       copy_checked(config->service.display_name, service->displayname,
-                   _countof(service->displayname), L"service.displayName",
+                   _countof(service->displayname), L"Unit.DisplayName",
                    validation) &&
       copy_checked(config->application.path, service->exe,
-                   _countof(service->exe), L"application.path", validation) &&
+                   _countof(service->exe), L"Service.ExecStart", validation) &&
       copy_checked(config->application.working_directory, service->dir,
-                   _countof(service->dir), L"application.workingDirectory",
+                   _countof(service->dir), L"Service.WorkingDirectory",
                    validation) &&
       copy_checked(arguments, service->flags, _countof(service->flags),
-                   L"application.arguments", validation) &&
+                   L"Service.Arguments", validation) &&
       copy_checked(config->logging.stdout_path, service->stdout_path,
-                   _countof(service->stdout_path), L"logging.stdout.path",
+                   _countof(service->stdout_path), L"Logging.Stdout.Path",
                    validation) &&
       copy_checked(config->logging.stderr_path, service->stderr_path,
-                   _countof(service->stderr_path), L"logging.stderr.path",
+                   _countof(service->stderr_path), L"Logging.Stderr.Path",
                    validation) &&
       copy_config_environment(config->application, service, validation);
   if (! copied) {

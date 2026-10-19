@@ -30,5 +30,13 @@ void read_optional_number64(const toml::table *, const char *,
                             unsigned long long *, config_validation_t *);
 void read_optional_bool(const toml::table *, const char *, const wchar_t *,
                         bool *, config_validation_t *);
+void read_optional_duration_ms(const toml::table *, const char *,
+                               const wchar_t *, unsigned long,
+                               unsigned long, unsigned long *,
+                               config_validation_t *);
+bool read_required_duration_ms(const toml::table *, const char *,
+                               const wchar_t *, unsigned long,
+                               unsigned long, unsigned long *,
+                               config_validation_t *);
 
 #endif

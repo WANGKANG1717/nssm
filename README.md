@@ -135,27 +135,34 @@ svp remove MyService confirm
 当前 schema 严格固定为 `1`，不会猜测或自动迁移其他版本。
 
 ```toml
-schema = 1
+Schema = 1
 
-[service]
-name = "example-service"
-displayName = "Example Service"
-startup = "automatic"
+[Unit]
+Name = "example-service"
+Description = "Example Service"
 
-[service.account]
-type = "virtual"
+[Service]
+ExecStart = 'C:\apps\example\example.exe'
+Arguments = ["--serve"]
+WorkingDirectory = 'C:\apps\example'
+Environment = ["MODE=production"]
+Restart = "on-failure"
+RestartSec = "2s"
+MemoryMax = 268435456
+TasksMax = 16
 
-[application]
-path = 'C:\apps\example\example.exe'
-arguments = ["--serve"]
-workingDirectory = 'C:\apps\example'
-
-# TOML 支持注释；Windows 路径建议使用单引号字面量。
-[security]
-serviceSid = "unrestricted"
+# Windows SCM 特有设置集中在此，不伪装成 Linux 语义。
+[Windows]
+Startup = "automatic"
+Account = "virtual"
+ServiceSid = "unrestricted"
 ```
 
 配置文件使用 TOML；`--json` 仅表示 CLI 输出 JSON，便于脚本和自动化程序消费。
+`[Unit]` 和 `[Service]` 使用 systemd 熟悉的指令命名；`[Windows]`
+明确表达启动类型、服务账户和 Service SID 等 SCM 特有能力。时长接受
+`500ms`、`10s`、`5min`、`1h` 等可读写法；Windows 路径建议使用 TOML
+单引号字面量。
 
 声明式命令统一使用以下退出码：
 
