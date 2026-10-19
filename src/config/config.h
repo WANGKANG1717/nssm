@@ -179,6 +179,8 @@ struct lifecycle_config_t {
   std::vector<command_config_t> exec_reload;
   unsigned long timeout_start_ms = 90000;
   unsigned long timeout_stop_ms = 90000;
+  bool notify = false;
+  unsigned long watchdog_ms = 0;
 
   bool operator==(const lifecycle_config_t &) const = default;
 };

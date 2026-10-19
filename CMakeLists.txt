@@ -96,6 +96,7 @@ set(NSSM_SUPERVISOR_SOURCES
   src/supervisor/process/process.cpp
   src/supervisor/monitoring/health_check.cpp
   src/supervisor/monitoring/health_monitor.cpp
+  src/supervisor/monitoring/notification.cpp
   src/supervisor/monitoring/readiness.cpp
   src/supervisor/monitoring/resource_monitor.cpp
   src/supervisor/monitoring/status_snapshot.cpp
@@ -234,6 +235,7 @@ if(BUILD_TESTING)
     src/supervisor/monitoring/health_check.cpp
     src/supervisor/process/job_object.cpp
     src/supervisor/monitoring/readiness.cpp
+    src/supervisor/monitoring/notification.cpp
     src/supervisor/runtime/recovery.cpp
     src/supervisor/runtime/nssm_io.cpp
     src/platform/event.cpp

@@ -8,6 +8,7 @@
 #include "health_check.h"
 #include "job_object.h"
 #include "nssm_io.h"
+#include "notification.h"
 #include "output.h"
 #include "readiness.h"
 #include "recovery.h"
@@ -325,6 +326,8 @@ Environment = ["MODE=production"]
 Restart = "on-failure"
 RestartSec = "1500ms"
 RestartMaxDelaySec = "1min"
+Type = "notify"
+WatchdogSec = "30s"
 TimeoutStartSec = "45s"
 TimeoutStopSec = "20s"
 ExecStartPre = [
@@ -363,6 +366,8 @@ ServiceSid = "restricted"
              config.lifecycle.timeout_start_ms == 45000 &&
              config.lifecycle.timeout_stop_ms == 20000,
          L"lifecycle hooks and timeouts should parse into the runtime model");
+  expect(config.lifecycle.notify && config.lifecycle.watchdog_ms == 30000,
+         L"notify readiness and watchdog interval should parse");
 
   constexpr const char *malformed_toml = "schema = [";
   expect(! parse_service_config(malformed_toml, strlen(malformed_toml),
@@ -421,6 +426,7 @@ Name = "bad-hook"
 ExecStart = 'C:\Apps\worker.exe'
 ExecStartPre = [{ Path = "relative.exe" }]
 TimeoutStopSec = "10ms"
+WatchdogSec = "5s"
 )toml";
   expect(! parse_service_config(invalid_hook, strlen(invalid_hook), &config,
                                 &validation),
@@ -474,6 +480,36 @@ void command_runner_tests() {
                        5000);
   expect(result.state == command_state_t::cancelled,
          L"lifecycle command runner should respond to cancellation");
+}
+
+void notification_tests() {
+  nssm_service_t service = {};
+  wcscpy_s(service.name, L"svp-notification-unit");
+  service.process_handle = OpenProcess(SYNCHRONIZE, FALSE,
+                                       GetCurrentProcessId());
+  service.stop_event = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+  std::wstring endpoint;
+  expect(start_notification_listener(&service, &endpoint),
+         L"notification listener should create its protected pipe");
+  if (service.notification_thread) {
+    unique_handle pipe;
+    for (unsigned int attempt = 0; attempt < 50 && ! pipe; ++attempt) {
+      pipe.reset(CreateFileW(endpoint.c_str(), GENERIC_WRITE, 0, nullptr,
+                             OPEN_EXISTING, 0, nullptr));
+      if (! pipe) Sleep(10);
+    }
+    const char ready[] = "READY=1\n";
+    unsigned long written = 0;
+    expect(pipe && WriteFile(pipe.get(), ready, sizeof(ready) - 1, &written,
+                             nullptr),
+           L"application should be able to send a readiness notification");
+    std::wstring detail;
+    expect(wait_for_ready_notification(&service, 5000, &detail),
+           L"readiness notification should wake the supervisor");
+  }
+  stop_notification_listener(&service);
+  if (service.process_handle) CloseHandle(service.process_handle);
+  if (service.stop_event) CloseHandle(service.stop_event);
 }
 
 void recovery_tests() {
@@ -800,6 +836,7 @@ int wmain() {
   job_object_tests();
   configuration_tests();
   command_runner_tests();
+  notification_tests();
   recovery_tests();
   health_probe_tests();
   readiness_tests();

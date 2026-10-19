@@ -163,6 +163,8 @@ Restart = "on-failure"
 RestartSec = "2s"
 TimeoutStartSec = "90s"
 TimeoutStopSec = "30s"
+Type = "notify"
+WatchdogSec = "30s"
 ExecStartPre = [
   { Path = 'C:\apps\example\prepare.exe', Arguments = ["--check"] }
 ]
@@ -192,6 +194,11 @@ shell 解析。`ExecStartPre` 或 `ExecStartPost` 非零退出、超时会让启
 进程树的顺序强制终止。`ExecStopPost` 在进程树清理后运行，其失败会记录但不会阻止服务
 进入 stopped 状态。主进程意外退出时只运行 `ExecStopPost`，不会错误地调用
 `ExecStop`。
+
+`Type = "notify"` 会向应用注入 `SVP_NOTIFY_PIPE`。应用连接该本机命名管道并发送
+UTF-8 消息 `READY=1` 后服务才进入 running；配置 `WatchdogSec` 后还须至少按该间隔
+发送一次 `WATCHDOG=1`，超时会终止受监督的 Job Object 并进入恢复流程。管道拒绝远程
+客户端，并以 SYSTEM、Administrators、服务进程所有者可访问的保护 ACL 创建。
 
 声明式命令统一使用以下退出码：
 

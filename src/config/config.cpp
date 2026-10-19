@@ -345,6 +345,18 @@ void parse_lifecycle(const toml::table *service,
   read_optional_duration_ms(service, "TimeoutStopSec",
                             L"Service.TimeoutStopSec", 100, kDayMs,
                             &lifecycle->timeout_stop_ms, validation);
+  std::wstring type;
+  if (read_optional_string(service, "Type", L"Service.Type", &type,
+                           validation) && ! type.empty()) {
+    if (type == L"simple") lifecycle->notify = false;
+    else if (type == L"notify") lifecycle->notify = true;
+    else validation->add(L"Service.Type must be simple or notify");
+  }
+  read_optional_duration_ms(service, "WatchdogSec", L"Service.WatchdogSec",
+                            100, kDayMs, &lifecycle->watchdog_ms, validation);
+  if (lifecycle->watchdog_ms && ! lifecycle->notify) {
+    validation->add(L"Service.WatchdogSec requires Service.Type = notify");
+  }
 }
 
 void parse_recovery(const toml::table *service, recovery_config_t *recovery,
@@ -566,7 +578,7 @@ void parse_service_options(const toml::table *root,
       service, L"Service",
       {"ExecStart", "Arguments", "WorkingDirectory", "Environment",
        "ExecStartPre", "ExecStartPost", "ExecStop", "ExecStopPost", "ExecReload",
-       "TimeoutStartSec", "TimeoutStopSec",
+       "TimeoutStartSec", "TimeoutStopSec", "Type", "WatchdogSec",
        "InheritEnvironment", "Restart", "RestartSec",
        "RestartMaxDelaySec", "RestartSteps", "RestartJitterPercent",
        "StartLimitIntervalSec", "StartLimitBurst", "RestartResetSec",
@@ -705,6 +717,10 @@ bool parse_service_config(const char *toml_text, size_t length,
   parse_service_options(&root, config, validation);
   parse_windows(&root, config, validation);
   parse_readiness(&root, &config->readiness, validation);
+  if (config->lifecycle.notify && config->readiness.enabled()) {
+    validation->add(
+        L"Readiness probes cannot be combined with Service.Type = notify");
+  }
   parse_health(&root, &config->health, validation);
   parse_logging(&root, &config->logging, validation);
   return validation->ok();

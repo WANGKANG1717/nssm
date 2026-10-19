@@ -5,6 +5,7 @@
 #include "health_monitor.h"
 #include "messages.h"
 #include "nssm_io.h"
+#include "notification.h"
 #include "resource_monitor.h"
 #include "recovery.h"
 #include "service_constants.h"
@@ -47,6 +48,7 @@ void cleanup_nssm_service(nssm_service_t *service) {
   unregister_service_process_wait(service, true);
   stop_resource_monitor(service);
   stop_health_monitor(service);
+  stop_notification_listener(service);
   close_status_snapshot(service);
   if (service->env) HeapFree(GetProcessHeap(), 0, service->env);
   if (service->env_extra) HeapFree(GetProcessHeap(), 0, service->env_extra);

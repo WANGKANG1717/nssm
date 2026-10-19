@@ -8,6 +8,7 @@
 #include "health_monitor.h"
 #include "messages.h"
 #include "nssm_io.h"
+#include "notification.h"
 #include "process.h"
 #include "readiness.h"
 #include "security.h"
@@ -148,7 +149,23 @@ static bool prepare_child_launch(nssm_service_t *service,
 static int finish_service_start(nssm_service_t *service,
                                 wchar_t *environment,
                                 unsigned long long deadline) {
-  if (service->config->readiness.enabled()) {
+  if (service->config->lifecycle.notify) {
+    const unsigned long remaining = remaining_until(deadline);
+    std::wstring detail;
+    if (! remaining ||
+        ! wait_for_ready_notification(service, remaining, &detail)) {
+      log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_READINESS_FAILED,
+                service->name, detail.c_str(), 0);
+      if (service->job_handle) {
+        terminate_service_job(service->job_handle, ERROR_NOT_READY, nullptr);
+      }
+      return kStartAwaitingProcessExit;
+    }
+    reset_throttle(service, false);
+    log_event(EVENTLOG_INFORMATION_TYPE, NSSM_EVENT_READINESS_READY,
+              service->name, detail.c_str(), 0);
+  }
+  else if (service->config->readiness.enabled()) {
     readiness_config_t readiness_config = service->config->readiness;
     const unsigned long remaining = remaining_until(deadline);
     if (! remaining) return stop_service(service, 3);
@@ -513,6 +530,10 @@ int monitor_service(nssm_service_t *service) {
 
   log_event(EVENTLOG_INFORMATION_TYPE, NSSM_EVENT_STARTED_SERVICE,
             service->exe, service->flags, service->name, service->dir, 0);
+  if (! start_notification_watchdog(service)) {
+    terminate_after_monitor_start_failure(service);
+    return ERROR_NOT_READY;
+  }
   if (! start_health_monitor(service)) {
     const unsigned long error = GetLastError();
     if (error == ERROR_OPERATION_ABORTED) return 0;
@@ -648,6 +669,24 @@ int start_service(nssm_service_t *service) {
   std::vector<wchar_t> child_environment;
   if (! prepare_child_launch(service, &command_line, &child_environment)) {
     return stop_service(service, 2);
+  }
+
+  if (service->config->lifecycle.notify) {
+    std::wstring endpoint;
+    if (! start_notification_listener(service, &endpoint)) {
+      return stop_service(service, 3);
+    }
+    std::vector<environment_entry_t> notification_environment = {
+        {L"SVP_NOTIFY_PIPE", endpoint}};
+    std::vector<wchar_t> extended;
+    std::wstring environment_error;
+    if (! extend_child_environment(child_environment.data(),
+                                   notification_environment, &extended,
+                                   &environment_error)) {
+      stop_notification_listener(service);
+      return stop_service(service, 3);
+    }
+    child_environment = std::move(extended);
   }
 
   throttle_restart(service);
@@ -818,6 +857,7 @@ void CALLBACK end_service(void *arg, unsigned char why) {
   }
   stop_resource_monitor(service);
   stop_health_monitor(service);
+  stop_notification_listener(service);
 
   set_logger_rotation_state(&service->rotate_stdout_online,
                             NSSM_ROTATE_OFFLINE);

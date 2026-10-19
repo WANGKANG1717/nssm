@@ -82,6 +82,12 @@ typedef struct nssm_service_t {
   HANDLE wait_handle;
   SRWLOCK wait_lock;
   HANDLE stop_event;
+  HANDLE notification_ready_event;
+  HANDLE notification_watchdog_event;
+  HANDLE notification_stop_event;
+  HANDLE notification_thread;
+  HANDLE notification_watchdog_thread;
+  wchar_t notification_pipe[PATH_LENGTH];
   unsigned long exitcode;
   bool stopping;
   bool stop_post_ran;
