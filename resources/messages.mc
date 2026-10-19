@@ -42,6 +42,10 @@ To manage a service:
 
         svp is-active [--quiet] <servicename> [...]
 
+        svp is-failed [--quiet] <servicename> [...]
+
+        svp reset-failed <servicename> [...]
+
         svp is-enabled [--quiet] <servicename> [...]
 
         svp enable|disable|mask|unmask <servicename> [...]
@@ -70,6 +74,8 @@ SvcPilot：Windows 服务监督器
     svp status [--verbose] [--output=json] <服务名>
     svp show [--output=json] <服务名>
     svp is-active [--quiet] <服务名> [...]
+    svp is-failed [--quiet] <服务名> [...]
+    svp reset-failed <服务名> [...]
     svp is-enabled [--quiet] <服务名> [...]
     svp enable|disable|mask|unmask <服务名> [...]
     svp rotate|processes <服务名>
@@ -761,6 +767,16 @@ Service %1 lifecycle phase %2 failed: %3.
 .
 Language = Chinese
 服务 %1 的生命周期阶段 %2 失败：%3。
+.
+
+MessageId = +1
+SymbolicName = NSSM_EVENT_PERSIST_FAILURE_FAILED
+Severity = Warning
+Language = English
+Failed to persist failure state for service %1: %2.
+.
+Language = Chinese
+无法持久记录服务 %1 的失败状态：%2。
 .
 
 MessageId = +1

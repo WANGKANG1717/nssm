@@ -1,6 +1,7 @@
 #include "child_process.h"
 #include "command_runner.h"
 #include "config.h"
+#include "config_registration.h"
 #include "env.h"
 #include "event.h"
 #include "job_object.h"
@@ -751,6 +752,14 @@ int stop_service(nssm_service_t *service, unsigned long exitcode) {
     }
   });
 
+  if (exitcode && service->config) {
+    unsigned long failure_error = ERROR_SUCCESS;
+    if (! write_persistent_failure(service->name, exitcode, &failure_error)) {
+      log_event(EVENTLOG_WARNING_TYPE, NSSM_EVENT_PERSIST_FAILURE_FAILED,
+                service->name, error_string(failure_error), 0);
+    }
+  }
+
   return exitcode;
 }
 
@@ -883,6 +892,14 @@ void CALLBACK end_service(void *arg, unsigned char why) {
                   : EVENTLOG_WARNING_TYPE,
               NSSM_EVENT_RECOVERY_STOPPED,
               service->name, reason, 0);
+    if (decision.result != recovery_result_t::clean_exit) {
+      unsigned long failure_error = ERROR_SUCCESS;
+      if (! write_persistent_failure(service->name, exitcode,
+                                     &failure_error)) {
+        log_event(EVENTLOG_WARNING_TYPE, NSSM_EVENT_PERSIST_FAILURE_FAILED,
+                  service->name, error_string(failure_error), 0);
+      }
+    }
     stop_service(service, exitcode);
     return;
   }

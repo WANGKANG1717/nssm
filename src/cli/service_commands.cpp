@@ -212,6 +212,54 @@ int is_active_command(int argc, wchar_t **argv) {
   return all_active ? 0 : 3;
 }
 
+int is_failed_command(int argc, wchar_t **argv) {
+  cli_arguments_t arguments = parse_cli_arguments(argc, argv);
+  if (arguments.invalid || arguments.json || arguments.verbose || arguments.all ||
+      arguments.help || arguments.positional.empty()) {
+    print_cli_error(false, L"usage",
+                    L"Usage: svp is-failed [--quiet] <service> [<service> ...]");
+    return static_cast<int>(cli_exit_code::usage);
+  }
+  bool any_failed = false;
+  bool query_failed = false;
+  for (wchar_t *name : arguments.positional) {
+    service_status_query_t status;
+    const bool queried = query_service_runtime_status(name, &status);
+    query_failed = query_failed || ! queried;
+    any_failed = any_failed || (queried && status.failed);
+    if (! arguments.quiet) {
+      wprintf(L"%ls\n", queried && status.failed ? L"failed" : L"inactive");
+    }
+  }
+  if (query_failed) return static_cast<int>(cli_exit_code::system);
+  return any_failed ? 0 : 1;
+}
+
+int reset_failed_command(int argc, wchar_t **argv) {
+  cli_arguments_t arguments = parse_cli_arguments(argc, argv);
+  if (arguments.invalid || arguments.json || arguments.verbose || arguments.all ||
+      arguments.quiet || arguments.help || arguments.positional.empty()) {
+    print_cli_error(false, L"usage",
+                    L"Usage: svp reset-failed <service> [<service> ...]");
+    return static_cast<int>(cli_exit_code::usage);
+  }
+  int failures = 0;
+  for (wchar_t *name : arguments.positional) {
+    if (! managed_service(name)) {
+      fwprintf(stderr, L"%ls: not managed by SvcPilot\n", name);
+      ++failures;
+      continue;
+    }
+    unsigned long error = ERROR_SUCCESS;
+    if (! clear_persistent_failure(name, &error)) {
+      fwprintf(stderr, L"%ls: unable to reset failure state: %ls\n", name,
+               error_string(error));
+      ++failures;
+    }
+  }
+  return failures ? static_cast<int>(cli_exit_code::system) : 0;
+}
+
 int is_enabled_command(int argc, wchar_t **argv) {
   cli_arguments_t arguments = parse_cli_arguments(argc, argv);
   if (arguments.invalid || arguments.json || arguments.verbose || arguments.all ||
@@ -278,7 +326,9 @@ int show_service_command(int argc, wchar_t **argv) {
                     status.windows_error);
     return static_cast<int>(cli_exit_code::system);
   }
-  const wchar_t *active = status.state == SERVICE_RUNNING ? L"active" : L"inactive";
+  const wchar_t *active = status.state == SERVICE_RUNNING
+                              ? L"active"
+                              : status.failed ? L"failed" : L"inactive";
   if (arguments.json) {
     fputws(L"{\"ok\":true,\"operation\":\"show\",\"service\":", stdout);
     write_json_string(stdout, name);
@@ -288,9 +338,11 @@ int show_service_command(int argc, wchar_t **argv) {
              status.wrapper_pid, status.child_pid, status.uptime_ms);
     fputws(L",\"health\":", stdout);
     write_json_string(stdout, runtime_health_text(status.health));
-    fwprintf(stdout, L",\"cpuPercent\":%lu,\"memoryCurrent\":%llu,\"tasksCurrent\":%lu,\"nRestarts\":%lu,\"runtimeAvailable\":%ls}\n",
+    fwprintf(stdout, L",\"cpuPercent\":%lu,\"memoryCurrent\":%llu,\"tasksCurrent\":%lu,\"nRestarts\":%lu,\"execMainStatus\":%lu,\"failed\":%ls,\"runtimeAvailable\":%ls}\n",
              status.cpu_percent, status.memory_bytes, status.process_count,
-             status.restart_count, status.runtime_available ? L"true" : L"false");
+             status.restart_count, status.exit_code,
+             status.failed ? L"true" : L"false",
+             status.runtime_available ? L"true" : L"false");
   }
   else {
     fwprintf(stdout, L"Id=%ls\nActiveState=%ls\nSubState=%ls\nMainPID=%lu\n",
@@ -301,6 +353,8 @@ int show_service_command(int argc, wchar_t **argv) {
     fwprintf(stdout, L"CPUPercent=%lu\nMemoryCurrent=%llu\nTasksCurrent=%lu\nNRestarts=%lu\n",
              status.cpu_percent, status.memory_bytes, status.process_count,
              status.restart_count);
+    fwprintf(stdout, L"ExecMainStatus=%lu\nFailed=%ls\n", status.exit_code,
+             status.failed ? L"yes" : L"no");
   }
   return 0;
 }

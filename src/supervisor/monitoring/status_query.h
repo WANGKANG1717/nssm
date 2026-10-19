@@ -17,6 +17,9 @@ struct service_status_query_t {
   unsigned long long uptime_ms = 0;
   runtime_health_t health = runtime_health_t::unknown;
   bool runtime_available = false;
+  bool failed = false;
+  unsigned long exit_code = 0;
+  unsigned long long failure_time_100ns = 0;
 };
 
 bool query_service_runtime_status(const std::wstring &,

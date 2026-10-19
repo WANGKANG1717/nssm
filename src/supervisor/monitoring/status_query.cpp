@@ -1,5 +1,6 @@
 #include "status_query.h"
 
+#include "config_registration.h"
 #include "win32_handle.h"
 
 bool query_service_runtime_status(const std::wstring &name,
@@ -60,5 +61,14 @@ bool query_service_runtime_status(const std::wstring &name,
   result->windows_error = result->runtime_available
                               ? ERROR_SUCCESS
                               : snapshot_error;
+  persistent_failure_t failure;
+  unsigned long failure_error = ERROR_SUCCESS;
+  if (! read_persistent_failure(name, &failure, &failure_error)) {
+    result->windows_error = failure_error;
+    return false;
+  }
+  result->failed = failure.failed;
+  result->exit_code = failure.exit_code;
+  result->failure_time_100ns = failure.timestamp_100ns;
   return true;
 }

@@ -13,4 +13,16 @@ bool registered_service_config_path(const wchar_t *service_name,
                                     std::wstring *path,
                                     unsigned long *error);
 
+struct persistent_failure_t {
+  bool failed = false;
+  unsigned long exit_code = 0;
+  unsigned long long timestamp_100ns = 0;
+};
+
+bool write_persistent_failure(const std::wstring &, unsigned long,
+                              unsigned long *);
+bool read_persistent_failure(const std::wstring &, persistent_failure_t *,
+                             unsigned long *);
+bool clear_persistent_failure(const std::wstring &, unsigned long *);
+
 #endif

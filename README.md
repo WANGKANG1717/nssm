@@ -112,6 +112,8 @@ svp start MyService
 svp status MyService
 svp show --output=json MyService
 svp is-active MyService
+svp is-failed MyService
+svp reset-failed MyService
 svp stop MyService
 svp export --output=json MyService .\backup\MyService.toml
 svp remove MyService confirm
@@ -127,6 +129,8 @@ svp remove MyService confirm
 - `status <service>`：显示面向人的 SCM 和监督器运行时状态。
 - `show [--output=json] <service>`：输出稳定的机器可读属性。
 - `is-active [--quiet] <service> [...]`：查询运行状态，非活动时返回退出码 `3`。
+- `is-failed [--quiet] <service> [...]`：查询最近一次未恢复的失败状态。
+- `reset-failed <service> [...]`：清除持久失败状态，不启动或停止服务。
 - `enable|disable|mask|unmask <service> [...]`：管理开机启动和手动启动权限。
 - `is-enabled [--quiet] <service> [...]`：返回 `enabled`、`disabled` 或 `masked`。
 - `rotate <service>`：触发在线日志轮转。
@@ -215,6 +219,9 @@ Windows ACL。受信对象必须由 SYSTEM、Administrators 或 TrustedInstaller
 Readiness、Health Check、恢复重启次数，以及 Job Object 的 CPU、内存和进程数。
 运行时数据通过只读 ACL 的共享内存快照发布；服务停止或快照不可用时，
 `runtimeAvailable` 为 `false`。
+失败状态和最后退出码独立持久化在服务注册信息中，即使包装进程已经退出，
+`show` 与 `is-failed` 仍可查询；成功启动不会隐式抹去诊断信息，需明确运行
+`reset-failed`，与 systemd 的运维习惯保持一致。
 
 ## 架构
 
