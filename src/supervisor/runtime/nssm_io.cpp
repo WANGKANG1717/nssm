@@ -39,7 +39,33 @@ static int dup_handle(HANDLE source_handle, HANDLE *dest_handle_ptr,
   pipe_handle:  stdout of application
   write_handle: to file
 */
-static HANDLE create_logging_thread(wchar_t *service_name, wchar_t *path, unsigned long sharing, unsigned long disposition, unsigned long flags, HANDLE *read_handle_ptr, HANDLE *pipe_handle_ptr, HANDLE *write_handle_ptr, unsigned long rotate_bytes_low, unsigned long rotate_bytes_high, unsigned long rotate_delay, unsigned long *tid_ptr, unsigned long *rotate_online, bool timestamp_log, bool copy_and_truncate) {
+LONG logger_rotation_state(volatile LONG *state) {
+  return InterlockedCompareExchange(state, 0, 0);
+}
+
+void set_logger_rotation_state(volatile LONG *state, LONG value) {
+  InterlockedExchange(state, value);
+}
+
+bool request_logger_rotation(volatile LONG *state) {
+  return InterlockedCompareExchange(state, NSSM_ROTATE_ONLINE_ASAP,
+                                    NSSM_ROTATE_ONLINE) ==
+         NSSM_ROTATE_ONLINE;
+}
+
+bool claim_logger_rotation(volatile LONG *state, bool requested) {
+  const LONG expected = requested ? NSSM_ROTATE_ONLINE_ASAP
+                                  : NSSM_ROTATE_ONLINE;
+  return InterlockedCompareExchange(state, NSSM_ROTATE_IN_PROGRESS,
+                                    expected) == expected;
+}
+
+void finish_logger_rotation(volatile LONG *state) {
+  InterlockedCompareExchange(state, NSSM_ROTATE_ONLINE,
+                             NSSM_ROTATE_IN_PROGRESS);
+}
+
+static HANDLE create_logging_thread(wchar_t *service_name, wchar_t *path, unsigned long sharing, unsigned long disposition, unsigned long flags, HANDLE *read_handle_ptr, HANDLE *pipe_handle_ptr, HANDLE *write_handle_ptr, unsigned long rotate_bytes_low, unsigned long rotate_bytes_high, unsigned long rotate_delay, unsigned long *tid_ptr, volatile LONG *rotate_online, HANDLE stop_event, bool timestamp_log, bool copy_and_truncate) {
   *tid_ptr = 0;
 
   /* Pipe between application's stdout/stderr and our logging handle. */
@@ -89,6 +115,7 @@ static HANDLE create_logging_thread(wchar_t *service_name, wchar_t *path, unsign
   logger->timestamp_log = timestamp_log;
   logger->line_length = 0;
   logger->rotate_online = rotate_online;
+  logger->stop_event = stop_event;
   logger->rotate_delay = rotate_delay;
   logger->copy_and_truncate = copy_and_truncate;
 
@@ -273,8 +300,10 @@ int get_output_handles(nssm_service_t *service, STARTUPINFOW *si) {
     service->stdout_si = 0;
 
     if (service->use_stdout_pipe) {
+      set_logger_rotation_state(&service->rotate_stdout_online,
+                                NSSM_ROTATE_ONLINE);
       service->stdout_pipe = si->hStdOutput = 0;
-      service->stdout_thread = create_logging_thread(service->name, service->stdout_path, service->stdout_sharing, service->stdout_disposition, service->stdout_flags, &service->stdout_pipe, &service->stdout_si, &stdout_handle, service->rotate_bytes_low, service->rotate_bytes_high, service->rotate_delay, &service->stdout_tid, &service->rotate_stdout_online, service->timestamp_log, service->stdout_copy_and_truncate);
+      service->stdout_thread = create_logging_thread(service->name, service->stdout_path, service->stdout_sharing, service->stdout_disposition, service->stdout_flags, &service->stdout_pipe, &service->stdout_si, &stdout_handle, service->rotate_bytes_low, service->rotate_bytes_high, service->rotate_delay, &service->stdout_tid, &service->rotate_stdout_online, service->stop_event, service->timestamp_log, service->stdout_copy_and_truncate);
       if (! service->stdout_thread) {
         CloseHandle(service->stdout_pipe);
         CloseHandle(service->stdout_si);
@@ -288,7 +317,8 @@ int get_output_handles(nssm_service_t *service, STARTUPINFOW *si) {
       if (dup_handle(stdout_handle, &service->stdout_si, L"stdout file",
                      L"stdout",
                      DUPLICATE_CLOSE_SOURCE | DUPLICATE_SAME_ACCESS)) return 4;
-      service->rotate_stdout_online = NSSM_ROTATE_OFFLINE;
+      set_logger_rotation_state(&service->rotate_stdout_online,
+                                NSSM_ROTATE_OFFLINE);
     }
 
     if (dup_handle(service->stdout_si, &si->hStdOutput, L"stdout_si",
@@ -308,7 +338,8 @@ int get_output_handles(nssm_service_t *service, STARTUPINFOW *si) {
       service->stderr_sharing = service->stdout_sharing;
       service->stderr_disposition = service->stdout_disposition;
       service->stderr_flags = service->stdout_flags;
-      service->rotate_stderr_online = NSSM_ROTATE_OFFLINE;
+      set_logger_rotation_state(&service->rotate_stderr_online,
+                                NSSM_ROTATE_OFFLINE);
 
       /* A shared path derives the same pipe mode from the common log policy. */
       if (dup_handle(service->stdout_si, &service->stderr_si, L"stdout", L"stderr")) return 6;
@@ -325,8 +356,10 @@ int get_output_handles(nssm_service_t *service, STARTUPINFOW *si) {
       service->stderr_si = 0;
 
       if (service->use_stderr_pipe) {
+        set_logger_rotation_state(&service->rotate_stderr_online,
+                                  NSSM_ROTATE_ONLINE);
         service->stderr_pipe = si->hStdError = 0;
-        service->stderr_thread = create_logging_thread(service->name, service->stderr_path, service->stderr_sharing, service->stderr_disposition, service->stderr_flags, &service->stderr_pipe, &service->stderr_si, &stderr_handle, service->rotate_bytes_low, service->rotate_bytes_high, service->rotate_delay, &service->stderr_tid, &service->rotate_stderr_online, service->timestamp_log, service->stderr_copy_and_truncate);
+        service->stderr_thread = create_logging_thread(service->name, service->stderr_path, service->stderr_sharing, service->stderr_disposition, service->stderr_flags, &service->stderr_pipe, &service->stderr_si, &stderr_handle, service->rotate_bytes_low, service->rotate_bytes_high, service->rotate_delay, &service->stderr_tid, &service->rotate_stderr_online, service->stop_event, service->timestamp_log, service->stderr_copy_and_truncate);
         if (! service->stderr_thread) {
           CloseHandle(service->stderr_pipe);
           CloseHandle(service->stderr_si);
@@ -340,7 +373,8 @@ int get_output_handles(nssm_service_t *service, STARTUPINFOW *si) {
         if (dup_handle(stderr_handle, &service->stderr_si,
                        L"stderr file", L"stderr",
                        DUPLICATE_CLOSE_SOURCE | DUPLICATE_SAME_ACCESS)) return 7;
-        service->rotate_stderr_online = NSSM_ROTATE_OFFLINE;
+        set_logger_rotation_state(&service->rotate_stderr_online,
+                                  NSSM_ROTATE_OFFLINE);
       }
     }
 
@@ -420,7 +454,13 @@ static int try_read(logger_t *logger, void *address, unsigned long bufsize, unsi
 
       /* Couldn't lock the buffer. */
       case ERROR_NOT_ENOUGH_QUOTA:
-        Sleep(2000 + tries * 3000);
+        if (logger->stop_event &&
+            WaitForSingleObject(logger->stop_event, 2000 + tries * 3000) ==
+                WAIT_OBJECT_0) {
+          error = ERROR_OPERATION_ABORTED;
+          ret = -1;
+          goto complain_read;
+        }
         ret = 1;
         continue;
 
@@ -436,7 +476,7 @@ static int try_read(logger_t *logger, void *address, unsigned long bufsize, unsi
 
 complain_read:
   /* Ignore the error if we've been requested to exit anyway. */
-  if (*logger->rotate_online != NSSM_ROTATE_ONLINE) return ret;
+  if (logger_rotation_state(logger->rotate_online) != NSSM_ROTATE_ONLINE) return ret;
   if (! (*complained & COMPLAINED_READ)) log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_READFILE_FAILED, logger->service_name, logger->path, error_string(error), 0);
   *complained |= COMPLAINED_READ;
   return ret;
@@ -471,7 +511,13 @@ static int try_write(logger_t *logger, void *address, unsigned long bufsize, uns
       case ERROR_NOT_ENOUGH_QUOTA:
       /* Out of disk space. */
       case ERROR_DISK_FULL:
-        Sleep(2000 + tries * 3000);
+        if (logger->stop_event &&
+            WaitForSingleObject(logger->stop_event, 2000 + tries * 3000) ==
+                WAIT_OBJECT_0) {
+          error = ERROR_OPERATION_ABORTED;
+          ret = -1;
+          goto complain_write;
+        }
         ret = 1;
         continue;
 
@@ -482,6 +528,9 @@ static int try_write(logger_t *logger, void *address, unsigned long bufsize, uns
   }
 
 complain_write:
+  if (logger_rotation_state(logger->rotate_online) == NSSM_ROTATE_OFFLINE) {
+    return ret;
+  }
   if (! (*complained & COMPLAINED_WRITE)) log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_WRITEFILE_FAILED, logger->service_name, logger->path, error_string(error), 0);
   *complained |= COMPLAINED_WRITE;
   return ret;
@@ -594,7 +643,12 @@ unsigned long WINAPI log_and_rotate(void *arg) {
     }
     else if (ret) continue;
 
-    if (*logger->rotate_online == NSSM_ROTATE_ONLINE_ASAP || (logger->size && size + (__int64) in >= logger->size)) {
+    const LONG rotation_state = logger_rotation_state(logger->rotate_online);
+    const bool requested_rotation =
+        rotation_state == NSSM_ROTATE_ONLINE_ASAP;
+    const bool size_rotation =
+        logger->size && size + (__int64) in >= logger->size;
+    if (requested_rotation || size_rotation) {
       /* Look for newline. */
       unsigned long i;
       if (! charsize) charsize = guess_charsize(address, in);
@@ -616,7 +670,13 @@ unsigned long WINAPI log_and_rotate(void *arg) {
           size += (__int64) out;
 
           /* Rotate. */
-          *logger->rotate_online = NSSM_ROTATE_ONLINE;
+          if (! claim_logger_rotation(logger->rotate_online,
+                                      requested_rotation)) {
+            /* Stop won the race; never resurrect online rotation state. */
+            address = (void *) ((char *) address + i);
+            in -= i;
+            break;
+          }
           wchar_t rotated[PATH_LENGTH];
           rotated_filename(logger->path, rotated, _countof(rotated), 0);
 
@@ -635,7 +695,11 @@ unsigned long WINAPI log_and_rotate(void *arg) {
               HANDLE file = write_to_file(logger->path, NSSM_STDOUT_SHARING, 0, NSSM_STDOUT_DISPOSITION, NSSM_STDOUT_FLAGS);
               if (file == INVALID_HANDLE_VALUE) ok = false;
               else {
-                Sleep(logger->rotate_delay);
+                if (logger->stop_event) {
+                  WaitForSingleObject(logger->stop_event,
+                                      logger->rotate_delay);
+                }
+                else Sleep(logger->rotate_delay);
                 SetFilePointer(file, 0, 0, FILE_BEGIN);
                 SetEndOfFile(file);
                 CloseHandle(file);
@@ -672,6 +736,7 @@ unsigned long WINAPI log_and_rotate(void *arg) {
             HeapFree(GetProcessHeap(), 0, logger);
             return 4;
           }
+          finish_logger_rotation(logger->rotate_online);
 
           /* Resume writing after the newline. */
           address = (void *) ((char *) address + i);

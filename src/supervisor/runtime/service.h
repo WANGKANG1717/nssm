@@ -18,6 +18,7 @@ inline constexpr size_t EXE_LENGTH = PATH_LENGTH;
 #define NSSM_ROTATE_OFFLINE 0
 #define NSSM_ROTATE_ONLINE 1
 #define NSSM_ROTATE_ONLINE_ASAP 2
+#define NSSM_ROTATE_IN_PROGRESS 3
 
 struct service_config_t;
 struct recovery_state_t;
@@ -62,8 +63,8 @@ typedef struct nssm_service_t {
   bool timestamp_log;
   bool stdout_copy_and_truncate;
   bool stderr_copy_and_truncate;
-  unsigned long rotate_stdout_online;
-  unsigned long rotate_stderr_online;
+  volatile LONG rotate_stdout_online;
+  volatile LONG rotate_stderr_online;
   unsigned long rotate_seconds;
   unsigned long rotate_bytes_low;
   unsigned long rotate_bytes_high;

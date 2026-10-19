@@ -5,6 +5,7 @@
 #include "config_registration.h"
 #include "config_security.h"
 #include "recovery.h"
+#include "nssm_io.h"
 #include "service.h"
 #include "string_utils.h"
 
@@ -128,14 +129,14 @@ bool load_registered_service_config(nssm_service_t *service,
   service->rotate_bytes_low = maximum_log_size.LowPart;
   service->rotate_bytes_high = maximum_log_size.HighPart;
   service->rotate_files = config->logging.maximum_bytes != 0;
-  service->rotate_stdout_online =
+  set_logger_rotation_state(&service->rotate_stdout_online,
       ! config->logging.stdout_path.empty() && service->rotate_files
           ? NSSM_ROTATE_ONLINE
-          : NSSM_ROTATE_OFFLINE;
-  service->rotate_stderr_online =
+          : NSSM_ROTATE_OFFLINE);
+  set_logger_rotation_state(&service->rotate_stderr_online,
       ! config->logging.stderr_path.empty() && service->rotate_files
           ? NSSM_ROTATE_ONLINE
-          : NSSM_ROTATE_OFFLINE;
+          : NSSM_ROTATE_OFFLINE);
   service->use_stdout_pipe = ! config->logging.stdout_path.empty() &&
                              (service->rotate_files || service->timestamp_log);
   service->use_stderr_pipe = ! config->logging.stderr_path.empty() &&

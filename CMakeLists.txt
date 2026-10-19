@@ -227,6 +227,7 @@ if(BUILD_TESTING)
     src/cli/output.cpp
     src/platform/child_process.cpp
     src/platform/command_runner.cpp
+    src/platform/console.cpp
     src/config/config.cpp
     src/config/config_parse_utils.cpp
     src/config/config_security.cpp
@@ -234,6 +235,7 @@ if(BUILD_TESTING)
     src/supervisor/process/job_object.cpp
     src/supervisor/monitoring/readiness.cpp
     src/supervisor/runtime/recovery.cpp
+    src/supervisor/runtime/nssm_io.cpp
     src/platform/event.cpp
     src/platform/security.cpp
     src/platform/service_status.cpp

@@ -25,7 +25,8 @@ typedef struct {
   HANDLE write_handle;
   __int64 size;
   unsigned long *tid_ptr;
-  unsigned long *rotate_online;
+  volatile LONG *rotate_online;
+  HANDLE stop_event;
   bool timestamp_log;
   __int64 line_length;
   bool copy_and_truncate;
@@ -39,5 +40,10 @@ int get_output_handles(nssm_service_t *, STARTUPINFOW *);
 void close_output_handles(STARTUPINFOW *);
 void cleanup_loggers(nssm_service_t *);
 unsigned long WINAPI log_and_rotate(void *);
+LONG logger_rotation_state(volatile LONG *);
+void set_logger_rotation_state(volatile LONG *, LONG);
+bool request_logger_rotation(volatile LONG *);
+bool claim_logger_rotation(volatile LONG *, bool);
+void finish_logger_rotation(volatile LONG *);
 
 #endif

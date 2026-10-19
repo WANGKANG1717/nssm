@@ -7,10 +7,12 @@
 #include "config_security.h"
 #include "health_check.h"
 #include "job_object.h"
+#include "nssm_io.h"
 #include "output.h"
 #include "readiness.h"
 #include "recovery.h"
 #include "security.h"
+#include "service.h"
 #include "string_utils.h"
 #include "utf8.h"
 #include "win32_handle.h"
@@ -115,6 +117,22 @@ void log_encoding_tests() {
              ! encoded_newline_at(utf16, 3, sizeof(utf16), sizeof(wchar_t)) &&
              ! encoded_newline_at(utf16, 2, 3, sizeof(wchar_t)),
          L"UTF-16 newlines should include the complete code unit");
+}
+
+void logger_rotation_state_tests() {
+  volatile LONG state = NSSM_ROTATE_ONLINE;
+  expect(request_logger_rotation(&state) &&
+             logger_rotation_state(&state) == NSSM_ROTATE_ONLINE_ASAP,
+         L"online logger rotation should be requested atomically");
+  expect(claim_logger_rotation(&state, true) &&
+             logger_rotation_state(&state) == NSSM_ROTATE_IN_PROGRESS,
+         L"logger should atomically claim a requested rotation");
+  set_logger_rotation_state(&state, NSSM_ROTATE_OFFLINE);
+  finish_logger_rotation(&state);
+  expect(logger_rotation_state(&state) == NSSM_ROTATE_OFFLINE,
+         L"rotation completion must not resurrect a logger stopped concurrently");
+  expect(! request_logger_rotation(&state),
+         L"an offline logger must reject new rotation requests");
 }
 
 void string_utils_tests() {
@@ -771,6 +789,7 @@ int wmain() {
   command_line_tests();
   cli_argument_tests();
   log_encoding_tests();
+  logger_rotation_state_tests();
   string_utils_tests();
   environment_merge_tests();
   environment_replacement_tests();

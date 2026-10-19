@@ -575,8 +575,8 @@ unsigned long WINAPI service_control_handler(unsigned long control, unsigned lon
 
     case kServiceControlRotate:
       log_service_control(service->name, control, true);
-      if (service->rotate_stdout_online == NSSM_ROTATE_ONLINE) service->rotate_stdout_online = NSSM_ROTATE_ONLINE_ASAP;
-      if (service->rotate_stderr_online == NSSM_ROTATE_ONLINE) service->rotate_stderr_online = NSSM_ROTATE_ONLINE_ASAP;
+      request_logger_rotation(&service->rotate_stdout_online);
+      request_logger_rotation(&service->rotate_stderr_online);
       return NO_ERROR;
   }
 
@@ -678,7 +678,10 @@ int stop_service(nssm_service_t *service, unsigned long exitcode) {
   unregister_service_process_wait(service, true);
   critical_section_guard lifecycle_guard(&service->lifecycle_section);
 
-  service->rotate_stdout_online = service->rotate_stderr_online = NSSM_ROTATE_OFFLINE;
+  set_logger_rotation_state(&service->rotate_stdout_online,
+                            NSSM_ROTATE_OFFLINE);
+  set_logger_rotation_state(&service->rotate_stderr_online,
+                            NSSM_ROTATE_OFFLINE);
 
   /* Signal we are stopping */
   update_service_status(service, [](SERVICE_STATUS &status) {
@@ -772,7 +775,10 @@ void CALLBACK end_service(void *arg, unsigned char why) {
   stop_resource_monitor(service);
   stop_health_monitor(service);
 
-  service->rotate_stdout_online = service->rotate_stderr_online = NSSM_ROTATE_OFFLINE;
+  set_logger_rotation_state(&service->rotate_stdout_online,
+                            NSSM_ROTATE_OFFLINE);
+  set_logger_rotation_state(&service->rotate_stderr_online,
+                            NSSM_ROTATE_OFFLINE);
 
   /* Use now as a dummy exit time. */
   GetSystemTimeAsFileTime(&service->exit_time);
