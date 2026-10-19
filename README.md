@@ -116,6 +116,7 @@ svp show --output=json MyService
 svp is-active MyService
 svp is-failed MyService
 svp reset-failed MyService
+svp logs --lines 200 --follow MyService
 svp stop MyService
 svp export --output=json MyService .\backup\MyService.toml
 svp remove MyService confirm
@@ -138,6 +139,7 @@ svp remove MyService confirm
 - `enable|disable|mask|unmask <service> [...]`：管理开机启动和手动启动权限。
 - `is-enabled [--quiet] <service> [...]`：返回 `enabled`、`disabled` 或 `masked`。
 - `rotate <service>`：触发在线日志轮转。
+- `logs [--lines N] [--follow] <service>`：查看统一日志尾部并可持续跟随；持续跟随要求 stdout/stderr 使用同一路径。
 - `list-units [--all] [--verbose|--output=json]`：列出服务；`--all` 包含全部 Windows 服务。
 - `processes <service>`：列出受监督的进程树。
 - `remove <service> confirm`：删除服务，必须显式确认。

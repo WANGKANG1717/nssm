@@ -56,6 +56,8 @@ To manage a service:
 
         svp processes <servicename>
 
+        svp logs [--lines N] [--follow] <servicename>
+
         svp list-units [--all] [--verbose|--output=json]
 .
 Language = Chinese
@@ -82,6 +84,7 @@ SvcPilot：Windows 服务监督器
     svp is-enabled [--quiet] <服务名> [...]
     svp enable|disable|mask|unmask <服务名> [...]
     svp rotate|processes <服务名>
+    svp logs [--lines N] [--follow] <服务名>
     svp list-units [--all] [--verbose|--output=json]
 .
 
