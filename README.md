@@ -226,7 +226,7 @@ Windows ACL。受信对象必须由 SYSTEM、Administrators 或 TrustedInstaller
 服务默认建议使用独立虚拟账户和 Service SID，而不是 LocalSystem。配置不接受明文
 密码；需要域身份时优先使用 gMSA。确需普通用户账户时，先用交互式
 `svp credential set <service> <account>` 安全输入。凭据由 Windows DPAPI 机器作用域
-加密，绑定服务名和账户名，且仅存于受保护的服务注册项；不会进入 TOML、命令行或日志。
+加密，绑定服务名和账户名，且仅存于受保护的 SvcPilot 凭据注册项；不会进入 TOML、命令行或日志。
 涉及 SCM、注册表、进程、令牌和路径的 Win32
 调用集中在平台层，临时句柄使用轻量 RAII 封装。
 

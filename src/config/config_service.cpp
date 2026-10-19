@@ -207,12 +207,13 @@ bool passwordless_service_account(const std::wstring &account) {
 
 bool restore_existing_service(SC_HANDLE service,
                               const std::wstring &service_name,
-                              const existing_service_state_t &state) {
+                              const existing_service_state_t &state,
+                              const wchar_t *password = nullptr) {
   bool restored = ChangeServiceConfigW(
       service, state.service_type, state.start_type, state.error_control,
       state.binary_path.c_str(),
       state.load_order_group.empty() ? nullptr : state.load_order_group.c_str(),
-      nullptr, state.dependencies.data(), state.account.c_str(), nullptr,
+      nullptr, state.dependencies.data(), state.account.c_str(), password,
       state.display_name.c_str()) != FALSE;
   SERVICE_DESCRIPTIONW description = {
       const_cast<wchar_t *>(state.description.c_str())};
@@ -531,9 +532,12 @@ config_operation_result_t apply_service_config(
           query_error);
     }
     if (! passwordless_service_account(previous.account)) {
-      return operation_failure(
-          config_operation_status_t::conflict,
-          L"The existing service account cannot be restored without a password; update refused");
+      if (! custom_user ||
+          ! strings_equal_ignore_case(previous.account.c_str(), account.c_str())) {
+        return operation_failure(
+            config_operation_status_t::conflict,
+            L"Changing from an existing password-backed account cannot be rolled back safely");
+      }
     }
     if (! ChangeServiceConfigW(
             service.get(), SERVICE_WIN32_OWN_PROCESS,
@@ -556,7 +560,8 @@ config_operation_result_t apply_service_config(
 
   auto rollback = [&]() {
     if (created) return DeleteService(service.get()) != FALSE;
-    return restore_existing_service(service.get(), config.service.name, previous);
+    return restore_existing_service(service.get(), config.service.name,
+                                    previous, password);
   };
 
   SERVICE_DESCRIPTIONW description = {

@@ -11,8 +11,7 @@ constexpr wchar_t kCredentialValue[] = L"Credential";
 constexpr wchar_t kCredentialAccountValue[] = L"CredentialAccount";
 
 std::wstring key_path(const std::wstring &service) {
-  return L"SYSTEM\\CurrentControlSet\\Services\\" + service +
-         L"\\Parameters\\SvcPilot";
+  return L"SOFTWARE\\SvcPilot\\Credentials\\" + service;
 }
 
 bool open_key(const std::wstring &service, REGSAM access, bool create,
