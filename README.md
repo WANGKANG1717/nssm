@@ -103,6 +103,7 @@ GitHub Actions 同时构建和测试 Debug/Release，验证 x64 PE 与静态 Min
 svp validate --output=json .\service.toml
 svp plan --output=json .\service.toml
 svp apply --output=json .\service.toml
+svp credential set MyService '.\service-user'
 ```
 
 查询和控制服务：
@@ -221,7 +222,10 @@ Windows ACL。受信对象必须由 SYSTEM、Administrators 或 TrustedInstaller
 且不能向其他主体授予修改权限。
 
 服务默认建议使用独立虚拟账户和 Service SID，而不是 LocalSystem。配置不接受明文
-密码；需要域身份时优先使用 gMSA。涉及 SCM、注册表、进程、令牌和路径的 Win32
+密码；需要域身份时优先使用 gMSA。确需普通用户账户时，先用交互式
+`svp credential set <service> <account>` 安全输入。凭据由 Windows DPAPI 机器作用域
+加密，绑定服务名和账户名，且仅存于受保护的服务注册项；不会进入 TOML、命令行或日志。
+涉及 SCM、注册表、进程、令牌和路径的 Win32
 调用集中在平台层，临时句柄使用轻量 RAII 封装。
 
 ## 运行时状态

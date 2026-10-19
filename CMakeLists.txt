@@ -117,6 +117,7 @@ set(NSSM_PLATFORM_SOURCES
   src/platform/child_process.cpp
   src/platform/command_runner.cpp
   src/platform/console.cpp
+  src/platform/credential.cpp
   src/platform/env.cpp
   src/platform/event.cpp
   src/platform/registry.cpp
@@ -176,6 +177,7 @@ nssm_configure_compiler(svp)
 
 target_link_libraries(svp PRIVATE
   advapi32
+  crypt32
   shell32
   shlwapi
   user32

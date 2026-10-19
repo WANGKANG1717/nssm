@@ -2,6 +2,7 @@
 #include "config_operations.h"
 #include "config_registration.h"
 #include "config_security.h"
+#include "credential.h"
 #include "string_utils.h"
 #include "win32_handle.h"
 
@@ -23,6 +24,11 @@ struct existing_service_state_t {
   bool delayed = false;
   unsigned long service_sid_type = SERVICE_SID_TYPE_NONE;
   std::wstring config_path;
+};
+
+struct credential_guard_t {
+  std::vector<wchar_t> value;
+  ~credential_guard_t() { secure_clear(&value); }
 };
 
 std::vector<wchar_t> make_dependencies(
@@ -90,9 +96,8 @@ bool account_name(const service_config_t &config, std::wstring *name,
       *name = config.service.account.name;
       return true;
     case service_account_type_t::user:
-      validation->add(
-          L"User accounts require secure credential input, which is not yet available");
-      return false;
+      *name = config.service.account.name;
+      return true;
   }
   return false;
 }
@@ -468,6 +473,20 @@ config_operation_result_t apply_service_config(
   if (! audit_service_paths(path, config, &validation)) {
     return validation_failure(validation, config_operation_status_t::security);
   }
+  credential_guard_t credential;
+  const bool custom_user =
+      config.service.account.type == service_account_type_t::user;
+  if (custom_user) {
+    unsigned long credential_error = ERROR_SUCCESS;
+    if (! load_service_credential(config.service.name, account, &credential.value,
+                                  &credential_error)) {
+      return operation_failure(
+          config_operation_status_t::security,
+          L"A matching stored credential is required for the configured user account",
+          credential_error);
+    }
+  }
+  const wchar_t *password = custom_user ? credential.value.data() : nullptr;
 
   std::vector<wchar_t> dependencies =
       make_dependencies(config.service.dependencies);
@@ -494,7 +513,7 @@ config_operation_result_t apply_service_config(
         SERVICE_CHANGE_CONFIG | SERVICE_QUERY_CONFIG | DELETE,
         SERVICE_WIN32_OWN_PROCESS, service_start_type(config.service.startup),
         SERVICE_ERROR_NORMAL, wrapper_image_path.c_str(), nullptr, nullptr,
-        dependencies.data(), account.empty() ? nullptr : account.c_str(), nullptr));
+        dependencies.data(), account.empty() ? nullptr : account.c_str(), password));
     open_error = service ? ERROR_SUCCESS : GetLastError();
     created = static_cast<bool>(service);
   }
@@ -520,7 +539,7 @@ config_operation_result_t apply_service_config(
             service.get(), SERVICE_WIN32_OWN_PROCESS,
             SERVICE_NO_CHANGE, SERVICE_ERROR_NORMAL,
             wrapper_image_path.c_str(), nullptr, nullptr, dependencies.data(),
-            account.empty() ? L"LocalSystem" : account.c_str(), nullptr,
+            account.empty() ? L"LocalSystem" : account.c_str(), password,
             config.service.display_name.c_str())) {
       unsigned long error = GetLastError();
       return operation_failure(config_operation_status_t::system,

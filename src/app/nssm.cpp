@@ -155,6 +155,10 @@ int wmain(int argc, wchar_t **argv) {
       return apply_service_config_command(argc - 2, argv + 2,
                                           nssm_imagepath());
     }
+    if (strings_equal_ignore_case(argv[1], L"credential")) {
+      if (! is_admin) return elevate(argc, argv, NSSM_MESSAGE_NOT_ADMINISTRATOR_CANNOT_INSTALL);
+      return credential_command(argc - 2, argv + 2);
+    }
     if (strings_equal_ignore_case(argv[1], L"start")) return control_services_command(kServiceControlStart, false, argc - 2, argv + 2);
     if (strings_equal_ignore_case(argv[1], L"stop")) return control_services_command(SERVICE_CONTROL_STOP, false, argc - 2, argv + 2);
     if (strings_equal_ignore_case(argv[1], L"restart")) {

@@ -1,5 +1,6 @@
 #include "event.h"
 #include "config_registration.h"
+#include "credential.h"
 #include "messages.h"
 #include "output.h"
 #include "service_control.h"
@@ -14,6 +15,7 @@
 #include "windows_limits.h"
 
 #include <cwchar>
+#include <conio.h>
 #include <string>
 #include <vector>
 
@@ -387,5 +389,50 @@ int show_service_command(int argc, wchar_t **argv) {
     fwprintf(stdout, L"ExecMainStatus=%lu\nFailed=%ls\n", status.exit_code,
              status.failed ? L"yes" : L"no");
   }
+  return 0;
+}
+
+int credential_command(int argc, wchar_t **argv) {
+  if (argc < 2 || ! argv[0] || ! argv[1]) {
+    fwprintf(stderr, L"Usage: svp credential set|delete <service> [account]\n");
+    return static_cast<int>(cli_exit_code::usage);
+  }
+  const std::wstring action = argv[0];
+  const std::wstring service = argv[1];
+  unsigned long error = ERROR_SUCCESS;
+  if (action == L"delete" && argc == 2) {
+    if (! delete_service_credential(service, &error)) {
+      fwprintf(stderr, L"%ls: unable to delete credential: %ls\n",
+               service.c_str(), error_string(error));
+      return static_cast<int>(cli_exit_code::system);
+    }
+    return 0;
+  }
+  if (action != L"set" || argc != 3 || ! argv[2][0]) {
+    fwprintf(stderr, L"Usage: svp credential set <service> <account>\n");
+    return static_cast<int>(cli_exit_code::usage);
+  }
+  fwprintf(stderr, L"Password for %ls: ", argv[2]);
+  std::wstring password;
+  while (true) {
+    const wint_t character = _getwch();
+    if (character == L'\r' || character == L'\n') break;
+    if (character == L'\b') {
+      if (! password.empty()) password.pop_back();
+      continue;
+    }
+    if (character == 0 || character == 0xE0) { _getwch(); continue; }
+    password.push_back(static_cast<wchar_t>(character));
+  }
+  fputwc(L'\n', stderr);
+  const bool stored = ! password.empty() &&
+      store_service_credential(service, argv[2], password, &error);
+  if (! password.empty()) SecureZeroMemory(password.data(), password.size() * sizeof(wchar_t));
+  if (! stored) {
+    fwprintf(stderr, L"%ls: unable to store credential: %ls\n",
+             service.c_str(), error_string(error ? error : ERROR_INVALID_PASSWORD));
+    return static_cast<int>(cli_exit_code::system);
+  }
+  wprintf(L"Stored credential for %ls as %ls\n", service.c_str(), argv[2]);
   return 0;
 }
