@@ -164,10 +164,29 @@ struct application_config_t {
   bool operator==(const application_config_t &) const = default;
 };
 
+struct command_config_t {
+  std::wstring path;
+  std::vector<std::wstring> arguments;
+
+  bool operator==(const command_config_t &) const = default;
+};
+
+struct lifecycle_config_t {
+  std::vector<command_config_t> exec_start_pre;
+  std::vector<command_config_t> exec_start_post;
+  std::vector<command_config_t> exec_stop;
+  std::vector<command_config_t> exec_stop_post;
+  unsigned long timeout_start_ms = 90000;
+  unsigned long timeout_stop_ms = 90000;
+
+  bool operator==(const lifecycle_config_t &) const = default;
+};
+
 struct service_config_t {
   unsigned int schema = 0;
   service_metadata_config_t service;
   application_config_t application;
+  lifecycle_config_t lifecycle;
   recovery_config_t recovery;
   readiness_config_t readiness;
   health_check_config_t health;

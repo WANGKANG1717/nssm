@@ -1,4 +1,5 @@
 #include "child_process.h"
+#include "command_runner.h"
 #include "config.h"
 #include "env.h"
 #include "event.h"
@@ -21,6 +22,7 @@
 #include "resource_monitor.h"
 #include "win32_handle.h"
 
+#include <algorithm>
 #include <string>
 #include <vector>
 
@@ -28,6 +30,14 @@ static constexpr int kStartHandledByRecovery = -1;
 static constexpr int kStartAwaitingProcessExit = -2;
 
 static void set_service_recovery(nssm_service_t *, SC_HANDLE);
+
+static unsigned long remaining_until(unsigned long long deadline) {
+  const unsigned long long now = GetTickCount64();
+  if (now >= deadline) return 0;
+  const unsigned long long remaining = deadline - now;
+  return remaining > MAXDWORD ? MAXDWORD
+                              : static_cast<unsigned long>(remaining);
+}
 
 class critical_section_guard {
  public:
@@ -50,6 +60,37 @@ void update_service_status(nssm_service_t *service, Mutator mutator) {
   report_service_status(service->status_handle, &service->status,
                         service->name, L"updating service state");
   ReleaseSRWLockExclusive(&service->status_lock);
+}
+
+static bool run_lifecycle_commands(
+    nssm_service_t *service, const std::vector<command_config_t> &commands,
+    const wchar_t *phase, wchar_t *environment, HANDLE cancellation_event,
+    unsigned long long deadline, bool failure_is_fatal) {
+  for (size_t index = 0; index < commands.size(); ++index) {
+    const unsigned long remaining = remaining_until(deadline);
+    if (! remaining) {
+      log_event(failure_is_fatal ? EVENTLOG_ERROR_TYPE : EVENTLOG_WARNING_TYPE,
+                NSSM_EVENT_LIFECYCLE_COMMAND_FAILED, service->name, phase,
+                L"lifecycle deadline expired", 0);
+      return false;
+    }
+    update_service_status(service, [remaining](SERVICE_STATUS &status) {
+      ++status.dwCheckPoint;
+      status.dwWaitHint = remaining + kServiceWaitHintMarginMs;
+    });
+    command_result_t result = run_command(
+        commands[index], environment, service->dir, cancellation_event,
+        remaining);
+    if (! result.succeeded()) {
+      std::wstring detail = L"command " + std::to_wstring(index + 1) +
+                            L": " + result.detail;
+      log_event(failure_is_fatal ? EVENTLOG_ERROR_TYPE : EVENTLOG_WARNING_TYPE,
+                NSSM_EVENT_LIFECYCLE_COMMAND_FAILED, service->name, phase,
+                detail.c_str(), 0);
+      return false;
+    }
+  }
+  return true;
 }
 
 static bool start_detached_thread(LPTHREAD_START_ROUTINE function,
@@ -104,10 +145,16 @@ static bool prepare_child_launch(nssm_service_t *service,
 }
 
 static int finish_service_start(nssm_service_t *service,
-                                wchar_t *environment) {
+                                wchar_t *environment,
+                                unsigned long long deadline) {
   if (service->config->readiness.enabled()) {
+    readiness_config_t readiness_config = service->config->readiness;
+    const unsigned long remaining = remaining_until(deadline);
+    if (! remaining) return stop_service(service, 3);
+    readiness_config.startup_timeout_ms =
+        std::min(readiness_config.startup_timeout_ms, remaining);
     readiness_result_t readiness = wait_for_readiness(
-        service->config->readiness, service->process_handle, environment,
+        readiness_config, service->process_handle, environment,
         service->dir, service->stop_event, service->status_handle,
         &service->status, &service->status_lock);
     if (! readiness.ready()) {
@@ -143,6 +190,17 @@ static int finish_service_start(nssm_service_t *service,
       return stop_service(service, 3);
     }
     reset_throttle(service, false);
+  }
+
+  if (! run_lifecycle_commands(
+          service, service->config->lifecycle.exec_start_post,
+          L"ExecStartPost", environment, service->stop_event, deadline, true)) {
+    if (service->job_handle) {
+      terminate_service_job(service->job_handle, ERROR_PROCESS_ABORTED,
+                            nullptr);
+      WaitForSingleObject(service->process_handle, kServiceStatusDeadlineMs);
+    }
+    return kStartAwaitingProcessExit;
   }
 
   if (! restart_allowed(service)) return 0;
@@ -529,7 +587,8 @@ unsigned long WINAPI service_control_handler(unsigned long control, unsigned lon
 
 /* Start the service */
 int start_service(nssm_service_t *service) {
-  critical_section_guard lifecycle(&service->lifecycle_section);
+  critical_section_guard lifecycle_guard(&service->lifecycle_section);
+  service->stop_post_ran = false;
   if (service->health_section_initialised) {
     EnterCriticalSection(&service->health_section);
     service->stopping = false;
@@ -538,6 +597,8 @@ int start_service(nssm_service_t *service) {
   else service->stopping = false;
 
   if (service->process_handle) return 0;
+  const unsigned long long start_deadline =
+      GetTickCount64() + service->config->lifecycle.timeout_start_ms;
   /* Allocate a STARTUPINFO structure for a new process */
   STARTUPINFOW si;
   ZeroMemory(&si, sizeof(si));
@@ -563,6 +624,13 @@ int start_service(nssm_service_t *service) {
     status.dwCurrentState = SERVICE_START_PENDING;
     status.dwControlsAccepted = SERVICE_ACCEPT_SHUTDOWN | SERVICE_ACCEPT_STOP;
   });
+
+  if (! run_lifecycle_commands(
+          service, service->config->lifecycle.exec_start_pre,
+          L"ExecStartPre", child_environment.data(), service->stop_event,
+          start_deadline, true)) {
+    return stop_service(service, 3);
+  }
 
   /* Did another thread receive a stop control? */
   if (restart_allowed(service)) {
@@ -599,7 +667,8 @@ int start_service(nssm_service_t *service) {
     }
   }
 
-  return finish_service_start(service, child_environment.data());
+  return finish_service_start(service, child_environment.data(),
+                              start_deadline);
 }
 
 /* Stop the service */
@@ -607,7 +676,7 @@ int stop_service(nssm_service_t *service, unsigned long exitcode) {
   set_restart_allowed(service, false);
   if (service->stop_event) SetEvent(service->stop_event);
   unregister_service_process_wait(service, true);
-  critical_section_guard lifecycle(&service->lifecycle_section);
+  critical_section_guard lifecycle_guard(&service->lifecycle_section);
 
   service->rotate_stdout_online = service->rotate_stderr_online = NSSM_ROTATE_OFFLINE;
 
@@ -617,18 +686,54 @@ int stop_service(nssm_service_t *service, unsigned long exitcode) {
     status.dwWaitHint = kServiceWaitHintMarginMs;
   });
 
+  const lifecycle_config_t default_lifecycle;
+  const lifecycle_config_t &lifecycle = service->config
+                                              ? service->config->lifecycle
+                                              : default_lifecycle;
+  const unsigned long long stop_deadline =
+      GetTickCount64() + lifecycle.timeout_stop_ms;
+  std::vector<wchar_t> child_environment;
+  std::wstring environment_error;
+  const bool have_environment = build_child_environment(
+      service->initial_env, service->env, service->env_extra,
+      &child_environment, &environment_error);
+
   /* Nothing to do if service isn't running */
   if (service->pid) {
+    if (have_environment) {
+      run_lifecycle_commands(service, lifecycle.exec_stop,
+                             L"ExecStop", child_environment.data(), nullptr,
+                             stop_deadline, false);
+    }
+    const unsigned long remaining = remaining_until(stop_deadline);
+    if (! lifecycle.exec_stop.empty() && remaining && service->process_handle &&
+        WaitForSingleObject(service->process_handle, remaining) ==
+            WAIT_OBJECT_0) {
+      /* The requested stop command completed the shutdown. */
+    }
+    else {
     /* Shut down service */
     log_event(EVENTLOG_INFORMATION_TYPE, NSSM_EVENT_TERMINATEPROCESS, service->name, service->exe, 0);
     kill_t k;
     service_kill_t(service, &k);
     k.exitcode = 0;
+    const unsigned long grace = remaining_until(stop_deadline) / 3;
+    k.kill_console_delay = grace;
+    k.kill_window_delay = grace;
+    k.kill_threads_delay = grace;
     kill_process(&k);
+    }
   }
   else log_event(EVENTLOG_INFORMATION_TYPE, NSSM_EVENT_PROCESS_ALREADY_STOPPED, service->name, service->exe, 0);
 
   end_service((void *) service, true);
+
+  if (have_environment && ! service->stop_post_ran) {
+    service->stop_post_ran = true;
+    run_lifecycle_commands(service, lifecycle.exec_stop_post,
+                           L"ExecStopPost", child_environment.data(), nullptr,
+                           stop_deadline, false);
+  }
 
   /* Signal we stopped */
   update_service_status(service, [exitcode](SERVICE_STATUS &status) {
@@ -721,6 +826,23 @@ void CALLBACK end_service(void *arg, unsigned char why) {
   /* Exit logging threads. */
   cleanup_loggers(service);
   unregister_service_process_wait(service, false);
+
+  if (! why && service->config &&
+      ! service->stop_post_ran &&
+      ! service->config->lifecycle.exec_stop_post.empty()) {
+    service->stop_post_ran = true;
+    std::vector<wchar_t> environment;
+    std::wstring error;
+    if (build_child_environment(service->initial_env, service->env,
+                                service->env_extra, &environment, &error)) {
+      const unsigned long long deadline =
+          GetTickCount64() + service->config->lifecycle.timeout_stop_ms;
+      run_lifecycle_commands(service,
+                             service->config->lifecycle.exec_stop_post,
+                             L"ExecStopPost", environment.data(), nullptr,
+                             deadline, false);
+    }
+  }
 
   /*
     The why argument is true if our wait timed out or false otherwise.

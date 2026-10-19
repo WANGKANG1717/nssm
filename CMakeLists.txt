@@ -114,6 +114,7 @@ set(NSSM_SUPERVISOR_SOURCES
 
 set(NSSM_PLATFORM_SOURCES
   src/platform/child_process.cpp
+  src/platform/command_runner.cpp
   src/platform/console.cpp
   src/platform/env.cpp
   src/platform/event.cpp
@@ -225,6 +226,7 @@ if(BUILD_TESTING)
     tests/child_process_tests.cpp
     src/cli/output.cpp
     src/platform/child_process.cpp
+    src/platform/command_runner.cpp
     src/config/config.cpp
     src/config/config_parse_utils.cpp
     src/config/config_security.cpp

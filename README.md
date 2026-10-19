@@ -154,6 +154,14 @@ WorkingDirectory = 'C:\apps\example'
 Environment = ["MODE=production"]
 Restart = "on-failure"
 RestartSec = "2s"
+TimeoutStartSec = "90s"
+TimeoutStopSec = "30s"
+ExecStartPre = [
+  { Path = 'C:\apps\example\prepare.exe', Arguments = ["--check"] }
+]
+ExecStartPost = [{ Path = 'C:\apps\example\announce.exe' }]
+ExecStop = [{ Path = 'C:\apps\example\shutdown.exe' }]
+ExecStopPost = [{ Path = 'C:\apps\example\cleanup.exe' }]
 MemoryMax = 268435456
 TasksMax = 16
 
@@ -169,6 +177,13 @@ ServiceSid = "unrestricted"
 由 `enable/disable/mask/unmask` 管理。时长接受
 `500ms`、`10s`、`5min`、`1h` 等可读写法；Windows 路径建议使用 TOML
 单引号字面量。
+
+生命周期命令按数组顺序串行执行，使用独立的 kill-on-close Job Object，且不会经过
+shell 解析。`ExecStartPre` 或 `ExecStartPost` 非零退出、超时会让启动失败；显式停止时
+先运行 `ExecStop`，等待主进程自行退出，超过 `TimeoutStopSec` 后按控制台、窗口、线程、
+进程树的顺序强制终止。`ExecStopPost` 在进程树清理后运行，其失败会记录但不会阻止服务
+进入 stopped 状态。主进程意外退出时只运行 `ExecStopPost`，不会错误地调用
+`ExecStop`。
 
 声明式命令统一使用以下退出码：
 
@@ -186,7 +201,7 @@ ServiceSid = "unrestricted"
 
 ## 安全模型
 
-`apply` 和服务启动时会审计配置文件、应用程序、工作目录、命令探针及日志目录的
+`apply` 和服务启动时会审计配置文件、应用程序、工作目录、生命周期命令、命令探针及日志目录的
 Windows ACL。受信对象必须由 SYSTEM、Administrators 或 TrustedInstaller 控制，
 且不能向其他主体授予修改权限。
 

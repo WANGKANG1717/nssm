@@ -24,6 +24,25 @@ bool audit_service_paths(const std::wstring &config_path,
   secure = audit_secure_path(config.application.working_directory,
                              L"Service.WorkingDirectory", true,
                              validation) && secure;
+  const auto audit_commands = [&](const std::vector<command_config_t> &commands,
+                                  const wchar_t *field) {
+    bool result = true;
+    for (size_t index = 0; index < commands.size(); ++index) {
+      std::wstring indexed = std::wstring(field) + L"[" +
+                             std::to_wstring(index) + L"].Path";
+      result = audit_secure_path(commands[index].path, indexed.c_str(), true,
+                                 validation) && result;
+    }
+    return result;
+  };
+  secure = audit_commands(config.lifecycle.exec_start_pre,
+                          L"Service.ExecStartPre") && secure;
+  secure = audit_commands(config.lifecycle.exec_start_post,
+                          L"Service.ExecStartPost") && secure;
+  secure = audit_commands(config.lifecycle.exec_stop,
+                          L"Service.ExecStop") && secure;
+  secure = audit_commands(config.lifecycle.exec_stop_post,
+                          L"Service.ExecStopPost") && secure;
   if (! config.logging.stdout_path.empty()) {
     secure = audit_secure_path(config.logging.stdout_path,
                                L"Logging.Stdout.Path", false, validation) &&

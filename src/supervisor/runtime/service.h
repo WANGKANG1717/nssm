@@ -83,6 +83,7 @@ typedef struct nssm_service_t {
   HANDLE stop_event;
   unsigned long exitcode;
   bool stopping;
+  bool stop_post_ran;
   bool allow_restart;
   CRITICAL_SECTION lifecycle_section;
   bool lifecycle_section_initialised;

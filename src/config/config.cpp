@@ -272,6 +272,79 @@ void parse_application(const toml::table *service,
   parse_environment(service, application, validation);
 }
 
+void parse_commands(const toml::table *service, const char *name,
+                    const wchar_t *path,
+                    std::vector<command_config_t> *commands,
+                    config_validation_t *validation) {
+  const toml::node *node = service->get(name);
+  if (! node) return;
+  const toml::array *array = node->as_array();
+  if (! array) {
+    validation->add(std::wstring(path) + L" must be an array of inline tables");
+    return;
+  }
+  if (array->size() > 64) {
+    validation->add(std::wstring(path) + L" must contain at most 64 commands");
+  }
+
+  size_t index = 0;
+  for (const toml::node &element : *array) {
+    std::wstring item_path = std::wstring(path) + L"[" +
+                             std::to_wstring(index) + L"]";
+    const toml::table *table = element.as_table();
+    if (! table) {
+      validation->add(item_path + L" must be an inline table");
+      ++index;
+      continue;
+    }
+    reject_unknown_fields(table, item_path.c_str(), {"Path", "Arguments"},
+                          validation);
+    command_config_t command;
+    std::wstring field_path = item_path + L".Path";
+    read_required_string(table, "Path", field_path.c_str(), &command.path,
+                         validation);
+    if (command.path.empty() || PathIsRelativeW(command.path.c_str())) {
+      validation->add(field_path + L" must be an absolute executable path");
+    }
+    if (command.path.size() > kMaximumPathCharacters) {
+      validation->add(field_path + L" is too long");
+    }
+    field_path = item_path + L".Arguments";
+    parse_string_array(table, "Arguments", field_path.c_str(),
+                       &command.arguments, validation);
+    std::wstring command_line;
+    std::wstring command_error;
+    if (! command.path.empty() &&
+        ! build_child_command_line(command.path, command.arguments,
+                                   &command_line, &command_error)) {
+      validation->add(item_path + L" command line is invalid: " +
+                      command_error);
+    }
+    if (index < 64) commands->push_back(std::move(command));
+    ++index;
+  }
+}
+
+void parse_lifecycle(const toml::table *service,
+                     lifecycle_config_t *lifecycle,
+                     config_validation_t *validation) {
+  parse_commands(service, "ExecStartPre", L"Service.ExecStartPre",
+                 &lifecycle->exec_start_pre, validation);
+  parse_commands(service, "ExecStartPost", L"Service.ExecStartPost",
+                 &lifecycle->exec_start_post, validation);
+  parse_commands(service, "ExecStop", L"Service.ExecStop",
+                 &lifecycle->exec_stop, validation);
+  parse_commands(service, "ExecStopPost", L"Service.ExecStopPost",
+                 &lifecycle->exec_stop_post, validation);
+  constexpr unsigned long kDayMs = 24UL * 60UL * 60UL * 1000UL;
+  read_optional_duration_ms(service, "TimeoutStartSec",
+                            L"Service.TimeoutStartSec", 100, kDayMs,
+                            &lifecycle->timeout_start_ms, validation);
+  read_optional_duration_ms(service, "TimeoutStopSec",
+                            L"Service.TimeoutStopSec", 100, kDayMs,
+                            &lifecycle->timeout_stop_ms, validation);
+}
+
 void parse_recovery(const toml::table *service, recovery_config_t *recovery,
                     config_validation_t *validation) {
   std::wstring mode;
@@ -490,11 +563,14 @@ void parse_service_options(const toml::table *root,
   reject_unknown_fields(
       service, L"Service",
       {"ExecStart", "Arguments", "WorkingDirectory", "Environment",
+       "ExecStartPre", "ExecStartPost", "ExecStop", "ExecStopPost",
+       "TimeoutStartSec", "TimeoutStopSec",
        "InheritEnvironment", "Restart", "RestartSec",
        "RestartMaxDelaySec", "RestartSteps", "RestartJitterPercent",
        "StartLimitIntervalSec", "StartLimitBurst", "RestartResetSec",
        "MemoryMax", "TasksMax", "CPUQuota"}, validation);
   parse_application(service, &config->application, validation);
+  parse_lifecycle(service, &config->lifecycle, validation);
   parse_recovery(service, &config->recovery, validation);
   constexpr unsigned long long kMaximumMemory =
       16ULL * 1024ULL * 1024ULL * 1024ULL * 1024ULL;

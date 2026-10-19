@@ -754,6 +754,16 @@ Language = Chinese
 .
 
 MessageId = +1
+SymbolicName = NSSM_EVENT_LIFECYCLE_COMMAND_FAILED
+Severity = Error
+Language = English
+Service %1 lifecycle phase %2 failed: %3.
+.
+Language = Chinese
+服务 %1 的生命周期阶段 %2 失败：%3。
+.
+
+MessageId = +1
 SymbolicName = NSSM_EVENT_CONFIGURE_JOB_FAILED
 Severity = Error
 Language = English

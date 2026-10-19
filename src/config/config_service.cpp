@@ -233,6 +233,7 @@ std::vector<std::wstring> config_changes(const service_config_t &current,
   std::vector<std::wstring> changes;
   if (!(current.service == desired.service)) changes.emplace_back(L"service");
   if (!(current.application == desired.application)) changes.emplace_back(L"application");
+  if (!(current.lifecycle == desired.lifecycle)) changes.emplace_back(L"lifecycle");
   if (!(current.recovery == desired.recovery)) changes.emplace_back(L"recovery");
   if (!(current.readiness == desired.readiness)) changes.emplace_back(L"readiness");
   if (!(current.health == desired.health)) changes.emplace_back(L"health");
@@ -389,7 +390,7 @@ config_operation_result_t plan_service_config(
     config_operation_result_t result;
     result.service = desired.service.name;
     result.action = L"create";
-    result.changes = {L"service", L"application", L"recovery", L"readiness",
+    result.changes = {L"service", L"application", L"lifecycle", L"recovery", L"readiness",
                       L"health", L"resources", L"logging", L"security"};
     return result;
   }

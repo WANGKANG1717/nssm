@@ -2,6 +2,7 @@
 #include <ws2tcpip.h>
 
 #include "child_process.h"
+#include "command_runner.h"
 #include "config.h"
 #include "config_security.h"
 #include "health_check.h"
@@ -306,6 +307,13 @@ Environment = ["MODE=production"]
 Restart = "on-failure"
 RestartSec = "1500ms"
 RestartMaxDelaySec = "1min"
+TimeoutStartSec = "45s"
+TimeoutStopSec = "20s"
+ExecStartPre = [
+  { Path = 'C:\Windows\System32\cmd.exe', Arguments = ["/d", "/c", "exit 0"] },
+  { Path = 'C:\Windows\System32\where.exe', Arguments = ["cmd.exe"] }
+]
+ExecStopPost = [{ Path = 'C:\Windows\System32\cmd.exe' }]
 MemoryMax = 268435456
 TasksMax = 8
 CPUQuota = 75
@@ -330,6 +338,11 @@ ServiceSid = "restricted"
              config.resources.maximum_processes == 8 &&
              config.resources.maximum_cpu_percent == 75,
          L"systemd-style resource limits should map to the runtime model");
+  expect(config.lifecycle.exec_start_pre.size() == 2 &&
+             config.lifecycle.exec_stop_post.size() == 1 &&
+             config.lifecycle.timeout_start_ms == 45000 &&
+             config.lifecycle.timeout_stop_ms == 20000,
+         L"lifecycle hooks and timeouts should parse into the runtime model");
 
   constexpr const char *malformed_toml = "schema = [";
   expect(! parse_service_config(malformed_toml, strlen(malformed_toml),
@@ -380,6 +393,19 @@ Environment = ["Path=one", "PATH=two"]
   expect(validation.errors.size() >= 4,
          L"configuration validation should report all independent errors");
 
+  constexpr const char *invalid_hook = R"toml(
+Schema = 1
+[Unit]
+Name = "bad-hook"
+[Service]
+ExecStart = 'C:\Apps\worker.exe'
+ExecStartPre = [{ Path = "relative.exe" }]
+TimeoutStopSec = "10ms"
+)toml";
+  expect(! parse_service_config(invalid_hook, strlen(invalid_hook), &config,
+                                &validation),
+         L"relative lifecycle commands and undersized timeouts must be rejected");
+
   constexpr const char *password_toml = R"toml(
 Schema = 1
 [Unit]
@@ -394,6 +420,40 @@ Password = "bad"
   expect(! parse_service_config(password_toml, strlen(password_toml), &config,
                                 &validation),
          L"plaintext password fields must not be accepted");
+}
+
+void command_runner_tests() {
+  wchar_t system_directory[MAX_PATH] = {};
+  const UINT length = GetSystemDirectoryW(
+      system_directory, static_cast<UINT>(std::size(system_directory)));
+  expect(length && length < std::size(system_directory),
+         L"system directory should be available to lifecycle tests");
+  if (! length || length >= std::size(system_directory)) return;
+
+  command_config_t command;
+  command.path = std::wstring(system_directory) + L"\\cmd.exe";
+  command.arguments = {L"/d", L"/c", L"exit 0"};
+  command_result_t result = run_command(command, nullptr, system_directory,
+                                        nullptr, 5000);
+  expect(result.succeeded() && result.exit_code == 0,
+         L"lifecycle command runner should report successful commands");
+
+  command.arguments = {L"/d", L"/c", L"exit 7"};
+  result = run_command(command, nullptr, system_directory, nullptr, 5000);
+  expect(result.state == command_state_t::failed && result.exit_code == 7,
+         L"lifecycle command runner should preserve a non-zero exit code");
+
+  command.path = std::wstring(system_directory) + L"\\ping.exe";
+  command.arguments = {L"-n", L"30", L"127.0.0.1"};
+  result = run_command(command, nullptr, system_directory, nullptr, 10);
+  expect(result.state == command_state_t::timed_out,
+         L"lifecycle command runner should enforce its deadline");
+
+  unique_handle cancelled(CreateEventW(nullptr, TRUE, TRUE, nullptr));
+  result = run_command(command, nullptr, system_directory, cancelled.get(),
+                       5000);
+  expect(result.state == command_state_t::cancelled,
+         L"lifecycle command runner should respond to cancellation");
 }
 
 void recovery_tests() {
@@ -718,6 +778,7 @@ int wmain() {
   environment_isolation_tests();
   job_object_tests();
   configuration_tests();
+  command_runner_tests();
   recovery_tests();
   health_probe_tests();
   readiness_tests();
