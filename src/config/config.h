@@ -176,6 +176,7 @@ struct lifecycle_config_t {
   std::vector<command_config_t> exec_start_post;
   std::vector<command_config_t> exec_stop;
   std::vector<command_config_t> exec_stop_post;
+  std::vector<command_config_t> exec_reload;
   unsigned long timeout_start_ms = 90000;
   unsigned long timeout_stop_ms = 90000;
 

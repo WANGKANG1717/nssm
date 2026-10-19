@@ -14,6 +14,9 @@ TimeoutStopSec = "15s"
 ExecStartPre = [
   { Path = 'C:\Windows\System32\cmd.exe', Arguments = ["/d", "/c", "exit 0"] }
 ]
+ExecReload = [
+  { Path = 'C:\Windows\System32\cmd.exe', Arguments = ["/d", "/c", "exit 0"] }
+]
 InheritEnvironment = true
 Environment = ["SVCPILOT_TEST_VALUE=中文值"]
 Restart = "on-failure"

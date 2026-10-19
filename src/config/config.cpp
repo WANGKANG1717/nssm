@@ -336,6 +336,8 @@ void parse_lifecycle(const toml::table *service,
                  &lifecycle->exec_stop, validation);
   parse_commands(service, "ExecStopPost", L"Service.ExecStopPost",
                  &lifecycle->exec_stop_post, validation);
+  parse_commands(service, "ExecReload", L"Service.ExecReload",
+                 &lifecycle->exec_reload, validation);
   constexpr unsigned long kDayMs = 24UL * 60UL * 60UL * 1000UL;
   read_optional_duration_ms(service, "TimeoutStartSec",
                             L"Service.TimeoutStartSec", 100, kDayMs,
@@ -563,7 +565,7 @@ void parse_service_options(const toml::table *root,
   reject_unknown_fields(
       service, L"Service",
       {"ExecStart", "Arguments", "WorkingDirectory", "Environment",
-       "ExecStartPre", "ExecStartPost", "ExecStop", "ExecStopPost",
+       "ExecStartPre", "ExecStartPost", "ExecStop", "ExecStopPost", "ExecReload",
        "TimeoutStartSec", "TimeoutStopSec",
        "InheritEnvironment", "Restart", "RestartSec",
        "RestartMaxDelaySec", "RestartSteps", "RestartJitterPercent",

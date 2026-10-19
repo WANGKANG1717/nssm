@@ -160,6 +160,12 @@ int wmain(int argc, wchar_t **argv) {
     if (strings_equal_ignore_case(argv[1], L"restart")) {
       return control_services_command(0, true, argc - 2, argv + 2);
     }
+    if (strings_equal_ignore_case(argv[1], L"reload")) {
+      return reload_services_command(false, argc - 2, argv + 2);
+    }
+    if (strings_equal_ignore_case(argv[1], L"reload-or-restart")) {
+      return reload_services_command(true, argc - 2, argv + 2);
+    }
     if (strings_equal_ignore_case(argv[1], L"continue")) return control_service(SERVICE_CONTROL_CONTINUE, argc - 2, argv + 2);
     if (strings_equal_ignore_case(argv[1], L"status")) {
       return inspect_service_status_command(argc - 2, argv + 2);

@@ -326,6 +326,30 @@ static unsigned long WINAPI launch_service(void *arg) {
   return monitor_service((nssm_service_t *) arg);
 }
 
+static unsigned long WINAPI reload_service(void *arg) {
+  auto *service = static_cast<nssm_service_t *>(arg);
+  critical_section_guard lifecycle_guard(&service->lifecycle_section);
+  if (! service->config || service->config->lifecycle.exec_reload.empty() ||
+      ! service->process_handle ||
+      WaitForSingleObject(service->stop_event, 0) == WAIT_OBJECT_0) {
+    return ERROR_CALL_NOT_IMPLEMENTED;
+  }
+  std::vector<wchar_t> environment;
+  std::wstring error;
+  if (! build_child_environment(service->initial_env, service->env,
+                                service->env_extra, &environment, &error)) {
+    return ERROR_INVALID_DATA;
+  }
+  const unsigned long long deadline =
+      GetTickCount64() + service->config->lifecycle.timeout_start_ms;
+  return run_lifecycle_commands(service,
+                                service->config->lifecycle.exec_reload,
+                                L"ExecReload", environment.data(),
+                                service->stop_event, deadline, true)
+             ? ERROR_SUCCESS
+             : ERROR_PROCESS_ABORTED;
+}
+
 /* About to install the service */
 /* Service initialisation */
 void WINAPI service_main(unsigned long argc, wchar_t **argv) {
@@ -578,6 +602,17 @@ unsigned long WINAPI service_control_handler(unsigned long control, unsigned lon
       log_service_control(service->name, control, true);
       request_logger_rotation(&service->rotate_stdout_online);
       request_logger_rotation(&service->rotate_stderr_online);
+      return NO_ERROR;
+
+    case kServiceControlReload:
+      log_service_control(service->name, control, true);
+      if (! service->config ||
+          service->config->lifecycle.exec_reload.empty()) {
+        return ERROR_CALL_NOT_IMPLEMENTED;
+      }
+      if (! start_detached_thread(reload_service, service)) {
+        return GetLastError();
+      }
       return NO_ERROR;
   }
 

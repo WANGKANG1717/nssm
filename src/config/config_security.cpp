@@ -43,6 +43,8 @@ bool audit_service_paths(const std::wstring &config_path,
                           L"Service.ExecStop") && secure;
   secure = audit_commands(config.lifecycle.exec_stop_post,
                           L"Service.ExecStopPost") && secure;
+  secure = audit_commands(config.lifecycle.exec_reload,
+                          L"Service.ExecReload") && secure;
   if (! config.logging.stdout_path.empty()) {
     secure = audit_secure_path(config.logging.stdout_path,
                                L"Logging.Stdout.Path", false, validation) &&

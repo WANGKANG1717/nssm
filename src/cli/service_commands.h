@@ -14,5 +14,6 @@ int reset_failed_command(int, wchar_t **);
 int is_enabled_command(int, wchar_t **);
 int set_service_startup_command(unsigned long, int, wchar_t **);
 int show_service_command(int, wchar_t **);
+int reload_services_command(bool, int, wchar_t **);
 
 #endif

@@ -193,6 +193,37 @@ int control_services_command(unsigned long control, bool restart, int argc,
   return failures ? static_cast<int>(cli_exit_code::system) : 0;
 }
 
+int reload_services_command(bool restart_if_unsupported, int argc,
+                            wchar_t **argv) {
+  cli_arguments_t arguments = parse_cli_arguments(argc, argv);
+  if (arguments.invalid || arguments.json || arguments.verbose || arguments.all ||
+      arguments.quiet || arguments.help || arguments.positional.empty()) {
+    print_cli_error(false, L"usage",
+                    restart_if_unsupported
+                        ? L"Usage: svp reload-or-restart <service> [<service> ...]"
+                        : L"Usage: svp reload <service> [<service> ...]");
+    return static_cast<int>(cli_exit_code::usage);
+  }
+  int failures = 0;
+  for (wchar_t *name : arguments.positional) {
+    service_control_result_t result;
+    if (execute_service_control(kServiceControlReload, name, &result)) continue;
+    if (restart_if_unsupported &&
+        (result.windows_error == ERROR_CALL_NOT_IMPLEMENTED ||
+         result.windows_error == ERROR_INVALID_SERVICE_CONTROL ||
+         result.windows_error == ERROR_SERVICE_NOT_ACTIVE)) {
+      int status = control_service(SERVICE_CONTROL_STOP, 1, &name);
+      if (! status) status = control_service(kServiceControlStart, 1, &name);
+      if (status) ++failures;
+      continue;
+    }
+    fwprintf(stderr, L"%ls: reload: %ls\n", name,
+             error_string(result.windows_error));
+    ++failures;
+  }
+  return failures ? static_cast<int>(cli_exit_code::system) : 0;
+}
+
 int is_active_command(int argc, wchar_t **argv) {
   cli_arguments_t arguments = parse_cli_arguments(argc, argv);
   if (arguments.invalid || arguments.json || arguments.verbose || arguments.all ||

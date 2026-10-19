@@ -34,6 +34,8 @@ To manage a service:
 
         svp restart <servicename>
 
+        svp reload|reload-or-restart <servicename> [...]
+
         svp continue <servicename>
 
         svp status [--verbose] [--output=json] <servicename>
@@ -71,6 +73,7 @@ SvcPilot：Windows 服务监督器
 
   管理：
     svp start|stop|restart|continue <服务名>
+    svp reload|reload-or-restart <服务名> [...]
     svp status [--verbose] [--output=json] <服务名>
     svp show [--output=json] <服务名>
     svp is-active [--quiet] <服务名> [...]

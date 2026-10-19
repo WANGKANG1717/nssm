@@ -332,6 +332,7 @@ ExecStartPre = [
   { Path = 'C:\Windows\System32\where.exe', Arguments = ["cmd.exe"] }
 ]
 ExecStopPost = [{ Path = 'C:\Windows\System32\cmd.exe' }]
+ExecReload = [{ Path = 'C:\Windows\System32\cmd.exe', Arguments = ["/d", "/c", "exit 0"] }]
 MemoryMax = 268435456
 TasksMax = 8
 CPUQuota = 75
@@ -358,6 +359,7 @@ ServiceSid = "restricted"
          L"systemd-style resource limits should map to the runtime model");
   expect(config.lifecycle.exec_start_pre.size() == 2 &&
              config.lifecycle.exec_stop_post.size() == 1 &&
+             config.lifecycle.exec_reload.size() == 1 &&
              config.lifecycle.timeout_start_ms == 45000 &&
              config.lifecycle.timeout_stop_ms == 20000,
          L"lifecycle hooks and timeouts should parse into the runtime model");

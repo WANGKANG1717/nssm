@@ -11,6 +11,7 @@ inline constexpr unsigned long kServiceWaitHintMarginMs = 2000;
 inline constexpr unsigned long kServiceStatusDeadlineMs = 20000;
 inline constexpr unsigned long kServiceControlStart = 0;
 inline constexpr unsigned long kServiceControlRotate = 128;
+inline constexpr unsigned long kServiceControlReload = 129;
 inline constexpr unsigned long kLoggerCleanupDeadlineMs = 1500;
 
 #endif

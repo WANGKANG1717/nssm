@@ -29,6 +29,7 @@ int service_control_response(unsigned long control, unsigned long status) {
       return status == SERVICE_RUNNING ? 0 : -1;
     case SERVICE_CONTROL_INTERROGATE:
     case kServiceControlRotate:
+    case kServiceControlReload:
     default:
       return 0;
   }
@@ -96,7 +97,9 @@ unsigned long service_control_access(unsigned long control) {
     case SERVICE_CONTROL_CONTINUE:
     case SERVICE_CONTROL_PAUSE: return access | SERVICE_PAUSE_CONTINUE;
     case SERVICE_CONTROL_STOP: return access | SERVICE_STOP;
-    case kServiceControlRotate: return access | SERVICE_USER_DEFINED_CONTROL;
+    case kServiceControlRotate:
+    case kServiceControlReload:
+      return access | SERVICE_USER_DEFINED_CONTROL;
     default: return access;
   }
 }

@@ -109,6 +109,7 @@ svp apply --output=json .\service.toml
 
 ```powershell
 svp start MyService
+svp reload-or-restart MyService
 svp status MyService
 svp show --output=json MyService
 svp is-active MyService
@@ -126,6 +127,8 @@ svp remove MyService confirm
 - `apply <config>`：创建服务或原子更新服务配置。
 - `export <service> <path>`：导出已登记的声明式配置。
 - `start|stop|restart <service> [...]`：批量控制服务生命周期。
+- `reload <service> [...]`：运行配置声明的 `ExecReload`，不重启主进程。
+- `reload-or-restart <service> [...]`：支持重载时运行 `ExecReload`，否则回退为重启。
 - `status <service>`：显示面向人的 SCM 和监督器运行时状态。
 - `show [--output=json] <service>`：输出稳定的机器可读属性。
 - `is-active [--quiet] <service> [...]`：查询运行状态，非活动时返回退出码 `3`。
@@ -166,6 +169,7 @@ ExecStartPre = [
 ExecStartPost = [{ Path = 'C:\apps\example\announce.exe' }]
 ExecStop = [{ Path = 'C:\apps\example\shutdown.exe' }]
 ExecStopPost = [{ Path = 'C:\apps\example\cleanup.exe' }]
+ExecReload = [{ Path = 'C:\apps\example\reload.exe' }]
 MemoryMax = 268435456
 TasksMax = 16
 

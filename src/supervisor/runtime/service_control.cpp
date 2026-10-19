@@ -14,6 +14,7 @@ const wchar_t *service_control_text(unsigned long control) {
     case SERVICE_CONTROL_CONTINUE: return L"CONTINUE";
     case SERVICE_CONTROL_INTERROGATE: return L"INTERROGATE";
     case kServiceControlRotate: return L"ROTATE";
+    case kServiceControlReload: return L"RELOAD";
     case SERVICE_CONTROL_POWEREVENT: return L"POWEREVENT";
     default: return nullptr;
   }
