@@ -44,7 +44,7 @@ function Set-SecureTestAcl([string]$Path, [bool]$Directory) {
   Set-Acl -LiteralPath $Path -AclObject $acl
 }
 
-function Invoke-NssmJson([string[]]$Arguments) {
+function Invoke-SvpJson([string[]]$Arguments) {
   $text = & $executablePath @Arguments
   if ($LASTEXITCODE -ne 0) {
     throw "svp failed with exit code $LASTEXITCODE`: $text"
@@ -60,6 +60,11 @@ try {
   & sc.exe create $unmanagedServiceName 'binPath=' $unmanagedCommand `
     'start=' 'demand' | Out-Null
   if ($LASTEXITCODE -ne 0) { throw 'unmanaged test service creation failed' }
+  $foreignParametersKey =
+    "HKLM\SYSTEM\CurrentControlSet\Services\$unmanagedServiceName\Parameters"
+  & reg.exe add $foreignParametersKey /v ConfigPath /t REG_EXPAND_SZ `
+    /d "$env:ProgramData\ForeignService" /f | Out-Null
+  if ($LASTEXITCODE -ne 0) { throw 'foreign ConfigPath setup failed' }
   & $executablePath remove $unmanagedServiceName confirm 2>$null | Out-Null
   if ($LASTEXITCODE -eq 0) { throw 'svp removed an unmanaged service' }
   & sc.exe query $unmanagedServiceName 2>$null | Out-Null
@@ -104,11 +109,14 @@ try {
     throw 'configuration beneath an insecure ancestor was not rejected'
   }
 
-  $applied = Invoke-NssmJson @('apply', '--json', $configPath)
+  $applied = Invoke-SvpJson @('apply', '--json', $configPath)
   if (-not $applied.ok) { throw 'apply did not report success' }
   $managedServices = @(& $executablePath list)
   if ($LASTEXITCODE -ne 0 -or $managedServices -notcontains $serviceName) {
     throw 'declaratively managed service was missing from svp list'
+  }
+  if ($managedServices -contains $unmanagedServiceName) {
+    throw 'foreign ConfigPath was misidentified as a SvcPilot registration'
   }
   & $executablePath start $serviceName | Out-Null
   if ($LASTEXITCODE -ne 0) { throw 'service start failed' }
@@ -116,7 +124,7 @@ try {
   $deadline = [DateTime]::UtcNow.AddSeconds(20)
   do {
     Start-Sleep -Milliseconds 250
-    $status = Invoke-NssmJson @('status', '--json', $serviceName)
+    $status = Invoke-SvpJson @('status', '--json', $serviceName)
   } while (($status.state -ne 'running' -or -not $status.runtimeAvailable) -and
            [DateTime]::UtcNow -lt $deadline)
   if ($status.state -ne 'running' -or $status.childPid -eq 0) {
@@ -128,7 +136,7 @@ try {
     throw 'process-tree query did not include the managed child process'
   }
 
-  $exported = Invoke-NssmJson @('export', '--json', $serviceName, $exportPath)
+  $exported = Invoke-SvpJson @('export', '--json', $serviceName, $exportPath)
   if (-not $exported.ok -or -not (Test-Path -LiteralPath $exportPath)) {
     throw 'configuration export failed'
   }
@@ -142,7 +150,7 @@ try {
   $configuration | ConvertTo-Json -Depth 10 |
     Set-Content -LiteralPath $configPath -Encoding utf8
   Set-SecureTestAcl $configPath $false
-  $updated = Invoke-NssmJson @('apply', '--json', $configPath)
+  $updated = Invoke-SvpJson @('apply', '--json', $configPath)
   if (-not $updated.ok) { throw 'fast-failure configuration update failed' }
 
   $failureStarted = [DateTime]::UtcNow

@@ -11,9 +11,9 @@ namespace {
 
 constexpr wchar_t kConfigPathValue[] = L"ConfigPath";
 
-std::wstring parameters_key(const std::wstring &service_name) {
+std::wstring registration_key(const std::wstring &service_name) {
   return L"SYSTEM\\CurrentControlSet\\Services\\" + service_name +
-         L"\\Parameters";
+         L"\\Parameters\\SvcPilot";
 }
 
 }  // namespace
@@ -41,7 +41,7 @@ bool write_config_path(const std::wstring &service_name,
   unique_registry_key key;
   unsigned long disposition = 0;
   long result = RegCreateKeyExW(
-      HKEY_LOCAL_MACHINE, parameters_key(service_name).c_str(), 0, nullptr, 0,
+      HKEY_LOCAL_MACHINE, registration_key(service_name).c_str(), 0, nullptr, 0,
       KEY_SET_VALUE, nullptr, key.put(), &disposition);
   if (result != ERROR_SUCCESS) {
     if (error) *error = static_cast<unsigned long>(result);
@@ -59,7 +59,7 @@ bool read_config_path(const std::wstring &service_name, std::wstring *path,
                       unsigned long *error) {
   unique_registry_key key;
   long result = RegOpenKeyExW(HKEY_LOCAL_MACHINE,
-                              parameters_key(service_name).c_str(), 0,
+                              registration_key(service_name).c_str(), 0,
                               KEY_QUERY_VALUE, key.put());
   if (result != ERROR_SUCCESS) {
     if (error) *error = static_cast<unsigned long>(result);
