@@ -100,18 +100,20 @@ GitHub Actions 同时构建和测试 Debug/Release，验证 x64 PE 与静态 Min
 先验证并预览配置，再在管理员终端中应用：
 
 ```powershell
-svp validate --json .\service.toml
-svp plan --json .\service.toml
-svp apply --json .\service.toml
+svp validate --output=json .\service.toml
+svp plan --output=json .\service.toml
+svp apply --output=json .\service.toml
 ```
 
 查询和控制服务：
 
 ```powershell
 svp start MyService
-svp status --json MyService
+svp status MyService
+svp show --output=json MyService
+svp is-active MyService
 svp stop MyService
-svp export --json MyService .\backup\MyService.toml
+svp export --output=json MyService .\backup\MyService.toml
 svp remove MyService confirm
 ```
 
@@ -121,10 +123,14 @@ svp remove MyService confirm
 - `plan <config>`：只读比较期望配置与 SCM 当前状态。
 - `apply <config>`：创建服务或原子更新服务配置。
 - `export <service> <path>`：导出已登记的声明式配置。
-- `start|stop|restart|continue <service>`：控制服务生命周期。
-- `status [--verbose|--json] <service>`：查询 SCM 和监督器运行时状态。
+- `start|stop|restart <service> [...]`：批量控制服务生命周期。
+- `status <service>`：显示面向人的 SCM 和监督器运行时状态。
+- `show [--output=json] <service>`：输出稳定的机器可读属性。
+- `is-active [--quiet] <service> [...]`：查询运行状态，非活动时返回退出码 `3`。
+- `enable|disable|mask|unmask <service> [...]`：管理开机启动和手动启动权限。
+- `is-enabled [--quiet] <service> [...]`：返回 `enabled`、`disabled` 或 `masked`。
 - `rotate <service>`：触发在线日志轮转。
-- `list [--verbose|--json] [all]`：列出服务；详细模式同时返回状态和 PID，`all` 包含全部 Windows 服务。
+- `list-units [--all] [--verbose|--output=json]`：列出服务；`--all` 包含全部 Windows 服务。
 - `processes <service>`：列出受监督的进程树。
 - `remove <service> confirm`：删除服务，必须显式确认。
 - `version`：显示版本、构建信息和架构。
@@ -153,14 +159,14 @@ TasksMax = 16
 
 # Windows SCM 特有设置集中在此，不伪装成 Linux 语义。
 [Windows]
-Startup = "automatic"
 Account = "virtual"
 ServiceSid = "unrestricted"
 ```
 
-配置文件使用 TOML；`--json` 仅表示 CLI 输出 JSON，便于脚本和自动化程序消费。
+配置文件使用 TOML；`--output=json` 仅表示 CLI 输出 JSON，便于脚本和自动化程序消费。
 `[Unit]` 和 `[Service]` 使用 systemd 熟悉的指令命名；`[Windows]`
-明确表达启动类型、服务账户和 Service SID 等 SCM 特有能力。时长接受
+明确表达服务账户和 Service SID 等 SCM 特有能力。启动策略与运行配置分离，
+由 `enable/disable/mask/unmask` 管理。时长接受
 `500ms`、`10s`、`5min`、`1h` 等可读写法；Windows 路径建议使用 TOML
 单引号字面量。
 
@@ -176,7 +182,7 @@ ServiceSid = "unrestricted"
 | `5` | Windows/SCM 错误 |
 | `6` | 路径安全审计失败 |
 
-`--json` 模式不会弹出 UAC，便于 CI/CD 确定性处理失败。
+`--output=json` 模式不会弹出 UAC，便于 CI/CD 确定性处理失败。
 
 ## 安全模型
 
@@ -190,7 +196,7 @@ Windows ACL。受信对象必须由 SYSTEM、Administrators 或 TrustedInstaller
 
 ## 运行时状态
 
-`svp status --json <service>` 返回 SCM 状态、包装进程 PID、子进程 PID、运行时长、
+`svp show --output=json <service>` 返回 SCM 状态、包装进程 PID、子进程 PID、运行时长、
 Readiness、Health Check、恢复重启次数，以及 Job Object 的 CPU、内存和进程数。
 运行时数据通过只读 ACL 的共享内存快照发布；服务停止或快照不可用时，
 `runtimeAvailable` 为 `false`。

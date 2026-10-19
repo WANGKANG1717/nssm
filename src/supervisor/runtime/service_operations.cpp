@@ -298,3 +298,61 @@ service_removal_status_t remove_managed_service(
   if (error) *error = ERROR_SUCCESS;
   return service_removal_status_t::success;
 }
+
+bool set_service_start_type(const std::wstring &service_name,
+                            unsigned long start_type,
+                            unsigned long *error) {
+  unique_service_handle manager(OpenSCManagerW(
+      nullptr, SERVICES_ACTIVE_DATABASE, SC_MANAGER_CONNECT));
+  if (! manager) {
+    if (error) *error = GetLastError();
+    return false;
+  }
+  unique_service_handle service(OpenServiceW(manager.get(), service_name.c_str(),
+                                              SERVICE_CHANGE_CONFIG));
+  if (! service || ! ChangeServiceConfigW(
+                        service.get(), SERVICE_NO_CHANGE, start_type,
+                        SERVICE_NO_CHANGE, nullptr, nullptr, nullptr, nullptr,
+                        nullptr, nullptr, nullptr)) {
+    if (error) *error = GetLastError();
+    return false;
+  }
+  if (error) *error = ERROR_SUCCESS;
+  return true;
+}
+
+bool query_service_start_type(const std::wstring &service_name,
+                              unsigned long *start_type,
+                              unsigned long *error) {
+  if (! start_type) {
+    if (error) *error = ERROR_INVALID_PARAMETER;
+    return false;
+  }
+  unique_service_handle manager(OpenSCManagerW(
+      nullptr, SERVICES_ACTIVE_DATABASE, SC_MANAGER_CONNECT));
+  if (! manager) {
+    if (error) *error = GetLastError();
+    return false;
+  }
+  unique_service_handle service(OpenServiceW(manager.get(), service_name.c_str(),
+                                              SERVICE_QUERY_CONFIG));
+  if (! service) {
+    if (error) *error = GetLastError();
+    return false;
+  }
+  unsigned long needed = 0;
+  QueryServiceConfigW(service.get(), nullptr, 0, &needed);
+  if (! needed || GetLastError() != ERROR_INSUFFICIENT_BUFFER) {
+    if (error) *error = GetLastError();
+    return false;
+  }
+  std::vector<unsigned char> buffer(needed);
+  auto *config = reinterpret_cast<QUERY_SERVICE_CONFIGW *>(buffer.data());
+  if (! QueryServiceConfigW(service.get(), config, needed, &needed)) {
+    if (error) *error = GetLastError();
+    return false;
+  }
+  *start_type = config->dwStartType;
+  if (error) *error = ERROR_SUCCESS;
+  return true;
+}

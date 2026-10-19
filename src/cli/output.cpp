@@ -5,12 +5,35 @@
 
 cli_arguments_t parse_cli_arguments(int argc, wchar_t **argv) {
   cli_arguments_t parsed;
+  bool positional_only = false;
   for (int index = 0; index < argc; ++index) {
-    if (strings_equal_ignore_case(argv[index], L"--json")) {
+    if (! positional_only && strings_equal_ignore_case(argv[index], L"--")) {
+      positional_only = true;
+    }
+    else if (! positional_only &&
+             strings_equal_ignore_case(argv[index], L"--output=json")) {
       parsed.json = true;
     }
-    else if (strings_equal_ignore_case(argv[index], L"--verbose")) {
+    else if (! positional_only &&
+             strings_equal_ignore_case(argv[index], L"--verbose")) {
       parsed.verbose = true;
+    }
+    else if (! positional_only && strings_equal_ignore_case(argv[index], L"--all")) {
+      parsed.all = true;
+    }
+    else if (! positional_only &&
+             (strings_equal_ignore_case(argv[index], L"--quiet") ||
+              strings_equal_ignore_case(argv[index], L"-q"))) {
+      parsed.quiet = true;
+    }
+    else if (! positional_only &&
+             (strings_equal_ignore_case(argv[index], L"--help") ||
+              strings_equal_ignore_case(argv[index], L"-h"))) {
+      parsed.help = true;
+    }
+    else if (! positional_only && argv[index] && argv[index][0] == L'-') {
+      parsed.invalid = true;
+      parsed.invalid_option = argv[index];
     }
     else {
       parsed.positional.push_back(argv[index]);

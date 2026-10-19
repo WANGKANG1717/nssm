@@ -1,4 +1,5 @@
 #include "event.h"
+#include "config_registration.h"
 #include "messages.h"
 #include "output.h"
 #include "service_control.h"
@@ -7,6 +8,7 @@
 #include "service_enumeration.h"
 #include "service_operations.h"
 #include "status.h"
+#include "status_query.h"
 #include "string_utils.h"
 #include "usage.h"
 #include "windows_limits.h"
@@ -16,6 +18,12 @@
 #include <vector>
 
 namespace {
+
+bool managed_service(const std::wstring &name) {
+  std::wstring path;
+  unsigned long error = ERROR_SUCCESS;
+  return read_config_path(name, &path, &error);
+}
 
 void print_control_wait_failure(const wchar_t *service_name,
                                 unsigned long control,
@@ -36,15 +44,14 @@ void print_control_wait_failure(const wchar_t *service_name,
 
 int list_services(int argc, wchar_t **argv) {
   cli_arguments_t arguments = parse_cli_arguments(argc, argv);
-  if (arguments.positional.size() > 1 ||
-      (arguments.positional.size() == 1 &&
-       ! strings_equal_ignore_case(arguments.positional[0], L"all")) ||
+  if (arguments.invalid || arguments.help || arguments.quiet ||
+      ! arguments.positional.empty() ||
       (arguments.json && arguments.verbose)) {
     print_cli_error(arguments.json, L"usage",
-                    L"Usage: svp list [--verbose|--json] [all]");
+                    L"Usage: svp list-units [--all] [--verbose|--output=json]");
     return static_cast<int>(cli_exit_code::usage);
   }
-  const bool including_native = ! arguments.positional.empty();
+  const bool including_native = arguments.all;
   std::vector<service_enumeration_entry_t> entries;
   unsigned long error = ERROR_SUCCESS;
   if (! enumerate_windows_services(including_native, &entries, &error)) {
@@ -162,4 +169,138 @@ int control_service(unsigned long control, int argc, wchar_t **argv,
 
 int control_service(unsigned long control, int argc, wchar_t **argv) {
   return control_service(control, argc, argv, false);
+}
+
+int control_services_command(unsigned long control, bool restart, int argc,
+                             wchar_t **argv) {
+  cli_arguments_t arguments = parse_cli_arguments(argc, argv);
+  if (arguments.invalid || arguments.json || arguments.verbose || arguments.all ||
+      arguments.help || arguments.positional.empty()) {
+    print_cli_error(false, L"usage",
+                    L"Usage: svp start|stop|restart <service> [<service> ...]");
+    return static_cast<int>(cli_exit_code::usage);
+  }
+  int failures = 0;
+  for (wchar_t *name : arguments.positional) {
+    int result = 0;
+    if (restart) {
+      result = control_service(SERVICE_CONTROL_STOP, 1, &name);
+      if (! result) result = control_service(kServiceControlStart, 1, &name);
+    }
+    else result = control_service(control, 1, &name);
+    if (result) ++failures;
+  }
+  return failures ? static_cast<int>(cli_exit_code::system) : 0;
+}
+
+int is_active_command(int argc, wchar_t **argv) {
+  cli_arguments_t arguments = parse_cli_arguments(argc, argv);
+  if (arguments.invalid || arguments.json || arguments.verbose || arguments.all ||
+      arguments.help || arguments.positional.empty()) {
+    print_cli_error(false, L"usage",
+                    L"Usage: svp is-active [--quiet] <service> [<service> ...]");
+    return static_cast<int>(cli_exit_code::usage);
+  }
+  bool all_active = true;
+  for (wchar_t *name : arguments.positional) {
+    service_status_query_t status;
+    const bool active = query_service_runtime_status(name, &status) &&
+                        status.state == SERVICE_RUNNING;
+    all_active = all_active && active;
+    if (! arguments.quiet) wprintf(L"%ls\n", active ? L"active" : L"inactive");
+  }
+  return all_active ? 0 : 3;
+}
+
+int is_enabled_command(int argc, wchar_t **argv) {
+  cli_arguments_t arguments = parse_cli_arguments(argc, argv);
+  if (arguments.invalid || arguments.json || arguments.verbose || arguments.all ||
+      arguments.help || arguments.positional.empty()) {
+    print_cli_error(false, L"usage",
+                    L"Usage: svp is-enabled [--quiet] <service> [<service> ...]");
+    return static_cast<int>(cli_exit_code::usage);
+  }
+  bool all_enabled = true;
+  for (wchar_t *name : arguments.positional) {
+    unsigned long start_type = SERVICE_DEMAND_START;
+    unsigned long error = ERROR_SUCCESS;
+    const bool queried = query_service_start_type(name, &start_type, &error);
+    const bool enabled = queried && start_type == SERVICE_AUTO_START;
+    all_enabled = all_enabled && enabled;
+    if (! arguments.quiet) {
+      const wchar_t *state = ! queried ? L"not-found" :
+          start_type == SERVICE_AUTO_START ? L"enabled" :
+          start_type == SERVICE_DISABLED ? L"masked" : L"disabled";
+      wprintf(L"%ls\n", state);
+    }
+  }
+  return all_enabled ? 0 : 1;
+}
+
+int set_service_startup_command(unsigned long start_type, int argc,
+                                wchar_t **argv) {
+  cli_arguments_t arguments = parse_cli_arguments(argc, argv);
+  if (arguments.invalid || arguments.json || arguments.verbose || arguments.all ||
+      arguments.quiet || arguments.help || arguments.positional.empty()) {
+    print_cli_error(false, L"usage",
+                    L"Usage: svp enable|disable|mask|unmask <service> [<service> ...]");
+    return static_cast<int>(cli_exit_code::usage);
+  }
+  int failures = 0;
+  for (wchar_t *name : arguments.positional) {
+    if (! managed_service(name)) {
+      fwprintf(stderr, L"%ls: not managed by SvcPilot\n", name);
+      ++failures;
+      continue;
+    }
+    unsigned long error = ERROR_SUCCESS;
+    if (! set_service_start_type(name, start_type, &error)) {
+      fwprintf(stderr, L"%ls: unable to change startup mode: %ls\n", name,
+               error_string(error));
+      ++failures;
+    }
+  }
+  return failures ? static_cast<int>(cli_exit_code::system) : 0;
+}
+
+int show_service_command(int argc, wchar_t **argv) {
+  cli_arguments_t arguments = parse_cli_arguments(argc, argv);
+  if (arguments.invalid || arguments.verbose || arguments.all || arguments.help ||
+      arguments.quiet || arguments.positional.size() != 1) {
+    print_cli_error(arguments.json, L"usage",
+                    L"Usage: svp show [--output=json] <service>");
+    return static_cast<int>(cli_exit_code::usage);
+  }
+  wchar_t *name = arguments.positional.front();
+  service_status_query_t status;
+  if (! query_service_runtime_status(name, &status)) {
+    print_cli_error(arguments.json, L"system", L"Unable to query the service",
+                    status.windows_error);
+    return static_cast<int>(cli_exit_code::system);
+  }
+  const wchar_t *active = status.state == SERVICE_RUNNING ? L"active" : L"inactive";
+  if (arguments.json) {
+    fputws(L"{\"ok\":true,\"operation\":\"show\",\"service\":", stdout);
+    write_json_string(stdout, name);
+    fputws(L",\"activeState\":", stdout);
+    write_json_string(stdout, active);
+    fwprintf(stdout, L",\"wrapperPid\":%lu,\"mainPid\":%lu,\"uptimeMs\":%llu",
+             status.wrapper_pid, status.child_pid, status.uptime_ms);
+    fputws(L",\"health\":", stdout);
+    write_json_string(stdout, runtime_health_text(status.health));
+    fwprintf(stdout, L",\"cpuPercent\":%lu,\"memoryCurrent\":%llu,\"tasksCurrent\":%lu,\"nRestarts\":%lu,\"runtimeAvailable\":%ls}\n",
+             status.cpu_percent, status.memory_bytes, status.process_count,
+             status.restart_count, status.runtime_available ? L"true" : L"false");
+  }
+  else {
+    fwprintf(stdout, L"Id=%ls\nActiveState=%ls\nSubState=%ls\nMainPID=%lu\n",
+             name, active, service_state_text(status.state), status.child_pid);
+    fwprintf(stdout, L"ExecMainPID=%lu\nUptimeMSec=%llu\nHealth=%ls\n",
+             status.wrapper_pid, status.uptime_ms,
+             runtime_health_text(status.health));
+    fwprintf(stdout, L"CPUPercent=%lu\nMemoryCurrent=%llu\nTasksCurrent=%lu\nNRestarts=%lu\n",
+             status.cpu_percent, status.memory_bytes, status.process_count,
+             status.restart_count);
+  }
+  return 0;
 }

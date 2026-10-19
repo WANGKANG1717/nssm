@@ -16,11 +16,11 @@ To validate or apply a declarative TOML configuration:
 
         svp validate <config.toml>
 
-        svp plan [--json] <config.toml>
+        svp plan [--output=json] <config.toml>
 
-        svp apply [--json] <config.toml>
+        svp apply [--output=json] <config.toml>
 
-        svp export [--json] <servicename> <destination.toml>
+        svp export [--output=json] <servicename> <destination.toml>
 
 To remove a service with explicit confirmation:
 
@@ -36,15 +36,21 @@ To manage a service:
 
         svp continue <servicename>
 
-        svp status [--verbose] [--json] <servicename>
+        svp status [--verbose] [--output=json] <servicename>
 
-        svp statuscode <servicename>
+        svp show [--output=json] <servicename>
+
+        svp is-active [--quiet] <servicename> [...]
+
+        svp is-enabled [--quiet] <servicename> [...]
+
+        svp enable|disable|mask|unmask <servicename> [...]
 
         svp rotate <servicename>
 
         svp processes <servicename>
 
-        svp list [--verbose|--json] [all]
+        svp list-units [--all] [--verbose|--output=json]
 .
 Language = Chinese
 SvcPilot：Windows 服务监督器
@@ -53,18 +59,21 @@ SvcPilot：Windows 服务监督器
 
 常用命令：
   验证配置：svp validate <配置文件.toml>
-  预览变更：svp plan [--json] <配置文件.toml>
-  安装或更新：svp apply [--json] <配置文件.toml>
-  原子导出：svp export [--json] <服务名> <目标文件.toml>
+  预览变更：svp plan [--output=json] <配置文件.toml>
+  安装或更新：svp apply [--output=json] <配置文件.toml>
+  原子导出：svp export [--output=json] <服务名> <目标文件.toml>
 
   移除（显式确认）: svp remove <服务名> confirm
 
   管理：
     svp start|stop|restart|continue <服务名>
-    svp status [--verbose] [--json] <服务名>
-    svp statuscode <服务名>
+    svp status [--verbose] [--output=json] <服务名>
+    svp show [--output=json] <服务名>
+    svp is-active [--quiet] <服务名> [...]
+    svp is-enabled [--quiet] <服务名> [...]
+    svp enable|disable|mask|unmask <服务名> [...]
     svp rotate|processes <服务名>
-    svp list [--verbose|--json] [all]
+    svp list-units [--all] [--verbose|--output=json]
 .
 
 MessageId = +1

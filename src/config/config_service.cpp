@@ -433,8 +433,6 @@ config_operation_result_t plan_service_config(
   const std::wstring expected_account = account.empty() ? L"LocalSystem" : account;
   const bool scm_matches =
       state.service_type == SERVICE_WIN32_OWN_PROCESS &&
-      state.start_type == service_start_type(desired.service.startup) &&
-      state.delayed == (desired.service.startup == service_startup_t::delayed) &&
       strings_equal_ignore_case(state.binary_path.c_str(),
                                 wrapper_image_path.c_str()) &&
       state.dependencies == make_dependencies(desired.service.dependencies) &&
@@ -519,7 +517,7 @@ config_operation_result_t apply_service_config(
     }
     if (! ChangeServiceConfigW(
             service.get(), SERVICE_WIN32_OWN_PROCESS,
-            service_start_type(config.service.startup), SERVICE_ERROR_NORMAL,
+            SERVICE_NO_CHANGE, SERVICE_ERROR_NORMAL,
             wrapper_image_path.c_str(), nullptr, nullptr, dependencies.data(),
             account.empty() ? L"LocalSystem" : account.c_str(), nullptr,
             config.service.display_name.c_str())) {
@@ -553,10 +551,10 @@ config_operation_result_t apply_service_config(
         error);
   }
 
-  SERVICE_DELAYED_AUTO_START_INFO delayed = {
-      config.service.startup == service_startup_t::delayed};
-  if (! ChangeServiceConfig2W(service.get(), SERVICE_CONFIG_DELAYED_AUTO_START_INFO,
-                              &delayed)) {
+  SERVICE_DELAYED_AUTO_START_INFO delayed = {FALSE};
+  if (created && ! ChangeServiceConfig2W(
+                     service.get(), SERVICE_CONFIG_DELAYED_AUTO_START_INFO,
+                     &delayed)) {
     unsigned long error = GetLastError();
     bool restored = rollback();
     return operation_failure(

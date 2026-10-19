@@ -26,6 +26,11 @@ bool query_service_process_tree(const std::wstring &,
                                 std::vector<service_process_entry_t> *,
                                 unsigned long *);
 
+bool set_service_start_type(const std::wstring &, unsigned long,
+                            unsigned long *);
+bool query_service_start_type(const std::wstring &, unsigned long *,
+                              unsigned long *);
+
 enum class service_removal_status_t {
   success,
   unmanaged,

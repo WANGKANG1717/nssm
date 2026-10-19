@@ -259,7 +259,7 @@ if(BUILD_TESTING)
   add_test(NAME svp.unit COMMAND $<TARGET_FILE:svp_unit_tests>)
   add_test(
     NAME svp.validate-json
-    COMMAND $<TARGET_FILE:svp> validate --json
+    COMMAND $<TARGET_FILE:svp> validate --output=json
             "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/minimal-service.toml"
   )
   set_tests_properties(svp.validate-json PROPERTIES

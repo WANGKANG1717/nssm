@@ -20,9 +20,10 @@ const wchar_t *service_state_text(unsigned long state) {
 
 int inspect_service_status_command(int argc, wchar_t **argv) {
   cli_arguments_t arguments = parse_cli_arguments(argc, argv);
-  if (arguments.positional.size() != 1 || ! arguments.positional[0]) {
+  if (arguments.invalid || arguments.all || arguments.help ||
+      arguments.positional.size() != 1 || ! arguments.positional[0]) {
     print_cli_error(arguments.json, L"usage",
-                    L"Usage: svp status [--verbose] [--json] <service>");
+                    L"Usage: svp status [--verbose] [--output=json] <service>");
     return static_cast<int>(cli_exit_code::usage);
   }
   std::wstring name = arguments.positional[0];
@@ -43,7 +44,7 @@ int inspect_service_status_command(int argc, wchar_t **argv) {
   const wchar_t *state = service_state_text(status.state);
   const wchar_t *health = runtime_health_text(status.health);
 
-  if (! arguments.json) {
+  if (! arguments.json && ! arguments.quiet) {
     fwprintf(stdout, L"Service: %ls\nState: %ls\nWrapper PID: %lu\n",
              name.c_str(), state, status.wrapper_pid);
     fwprintf(stdout, L"Child PID: %lu\nUptime: %llu ms\nHealth: %ls\n",

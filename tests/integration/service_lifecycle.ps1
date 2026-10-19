@@ -51,7 +51,6 @@ function Write-TestConfiguration([string]$Path, [bool]$FastFailure) {
     ('WorkingDirectory = {0}' -f (ConvertTo-TomlString $systemDirectory)),
     '',
     '[Windows]',
-    'Startup = "manual"',
     'Account = "virtual"',
     'ServiceSid = "unrestricted"'
   )
@@ -140,26 +139,38 @@ try {
   Set-SecureTestAcl $secureLeaf $true
   Write-TestConfiguration $unsafeConfigPath $false
   Set-SecureTestAcl $unsafeConfigPath $false
-  & $executablePath plan --json $unsafeConfigPath 2>$null | Out-Null
+  & $executablePath plan --output=json $unsafeConfigPath 2>$null | Out-Null
   if ($LASTEXITCODE -ne 6) {
     throw 'configuration beneath an insecure ancestor was not rejected'
   }
 
-  $applied = Invoke-SvpJson @('apply', '--json', $configPath)
+  $applied = Invoke-SvpJson @('apply', '--output=json', $configPath)
   if (-not $applied.ok) { throw 'apply did not report success' }
+  $enabledState = @(& $executablePath is-enabled $serviceName)
+  if ($LASTEXITCODE -ne 1 -or $enabledState -ne 'disabled') {
+    throw 'new services must default to disabled-at-boot/manual start'
+  }
+  & $executablePath enable $serviceName | Out-Null
+  if ($LASTEXITCODE -ne 0) { throw 'service enable failed' }
+  $enabledState = @(& $executablePath is-enabled $serviceName)
+  if ($LASTEXITCODE -ne 0 -or $enabledState -ne 'enabled') {
+    throw 'enabled service did not report enabled state'
+  }
+  & $executablePath disable $serviceName | Out-Null
+  if ($LASTEXITCODE -ne 0) { throw 'service disable failed' }
   $managedServices = @(& $executablePath list)
   if ($LASTEXITCODE -ne 0 -or $managedServices -notcontains $serviceName) {
-    throw 'declaratively managed service was missing from svp list'
+    throw 'declaratively managed service was missing from svp list-units'
   }
   if ($managedServices -contains $unmanagedServiceName) {
     throw 'foreign ConfigPath was misidentified as a SvcPilot registration'
   }
-  $listed = Invoke-SvpJson @('list', '--json')
+  $listed = Invoke-SvpJson @('list-units', '--output=json')
   if (-not $listed.ok -or $listed.operation -ne 'list' -or
       $listed.services.name -notcontains $serviceName) {
     throw 'JSON service listing did not include the managed service'
   }
-  $verboseServices = @(& $executablePath list --verbose)
+  $verboseServices = @(& $executablePath list-units --verbose)
   if ($LASTEXITCODE -ne 0 -or
       ($verboseServices -join "`n") -notmatch
         "stopped\s+0\s+$([regex]::Escape($serviceName))") {
@@ -171,7 +182,7 @@ try {
   $deadline = [DateTime]::UtcNow.AddSeconds(20)
   do {
     Start-Sleep -Milliseconds 250
-    $status = Invoke-SvpJson @('status', '--json', $serviceName)
+    $status = Invoke-SvpJson @('status', '--output=json', $serviceName)
   } while (($status.state -ne 'running' -or -not $status.runtimeAvailable) -and
            [DateTime]::UtcNow -lt $deadline)
   if ($status.state -ne 'running' -or $status.childPid -eq 0) {
@@ -183,7 +194,7 @@ try {
     throw 'process-tree query did not include the managed child process'
   }
 
-  $exported = Invoke-SvpJson @('export', '--json', $serviceName, $exportPath)
+  $exported = Invoke-SvpJson @('export', '--output=json', $serviceName, $exportPath)
   if (-not $exported.ok -or -not (Test-Path -LiteralPath $exportPath)) {
     throw 'configuration export failed'
   }
@@ -192,7 +203,7 @@ try {
 
   Write-TestConfiguration $configPath $true
   Set-SecureTestAcl $configPath $false
-  $updated = Invoke-SvpJson @('apply', '--json', $configPath)
+  $updated = Invoke-SvpJson @('apply', '--output=json', $configPath)
   if (-not $updated.ok) { throw 'fast-failure configuration update failed' }
 
   $failureStarted = [DateTime]::UtcNow

@@ -119,9 +119,12 @@ int wmain(int argc, wchar_t **argv) {
   if (argc > 1) {
     /*
       Valid commands are:
-      validate, plan, apply, export, start, stop, restart, continue, remove, status,
-      statuscode, rotate, list, processes, version
+      validate, plan, apply, export, start, stop, restart, continue, remove,
+      status, show, is-active, enable, disable, mask, unmask, rotate,
+      list-units, processes, version
     */
+    if (strings_equal_ignore_case(argv[1], L"--help") ||
+        strings_equal_ignore_case(argv[1], L"-h")) return usage(0);
     if (is_version(argv[1])) {
       wprintf(L"%ls %ls %ls %ls\n", kProductName, NSSM_VERSION,
                NSSM_CONFIGURATION, NSSM_DATE);
@@ -152,24 +155,31 @@ int wmain(int argc, wchar_t **argv) {
       return apply_service_config_command(argc - 2, argv + 2,
                                           nssm_imagepath());
     }
-    if (strings_equal_ignore_case(argv[1], L"start")) return control_service(kServiceControlStart, argc - 2, argv + 2);
-    if (strings_equal_ignore_case(argv[1], L"stop")) return control_service(SERVICE_CONTROL_STOP, argc - 2, argv + 2);
+    if (strings_equal_ignore_case(argv[1], L"start")) return control_services_command(kServiceControlStart, false, argc - 2, argv + 2);
+    if (strings_equal_ignore_case(argv[1], L"stop")) return control_services_command(SERVICE_CONTROL_STOP, false, argc - 2, argv + 2);
     if (strings_equal_ignore_case(argv[1], L"restart")) {
-      int ret = control_service(SERVICE_CONTROL_STOP, argc - 2, argv + 2);
-      if (ret) return ret;
-      return control_service(kServiceControlStart, argc - 2, argv + 2);
+      return control_services_command(0, true, argc - 2, argv + 2);
     }
     if (strings_equal_ignore_case(argv[1], L"continue")) return control_service(SERVICE_CONTROL_CONTINUE, argc - 2, argv + 2);
     if (strings_equal_ignore_case(argv[1], L"status")) {
-      cli_arguments_t arguments = parse_cli_arguments(argc - 2, argv + 2);
-      if (arguments.verbose || arguments.json) {
-        return inspect_service_status_command(argc - 2, argv + 2);
-      }
-      return control_service(SERVICE_CONTROL_INTERROGATE, argc - 2, argv + 2);
+      return inspect_service_status_command(argc - 2, argv + 2);
     }
-    if (strings_equal_ignore_case(argv[1], L"statuscode")) return control_service(SERVICE_CONTROL_INTERROGATE, argc - 2, argv + 2, true);
     if (strings_equal_ignore_case(argv[1], L"rotate")) return control_service(kServiceControlRotate, argc - 2, argv + 2);
-    if (strings_equal_ignore_case(argv[1], L"list")) return list_services(argc - 2, argv + 2);
+    if (strings_equal_ignore_case(argv[1], L"list-units")) return list_services(argc - 2, argv + 2);
+    if (strings_equal_ignore_case(argv[1], L"show")) return show_service_command(argc - 2, argv + 2);
+    if (strings_equal_ignore_case(argv[1], L"is-active")) return is_active_command(argc - 2, argv + 2);
+    if (strings_equal_ignore_case(argv[1], L"is-enabled")) return is_enabled_command(argc - 2, argv + 2);
+    if (strings_equal_ignore_case(argv[1], L"enable") ||
+        strings_equal_ignore_case(argv[1], L"disable") ||
+        strings_equal_ignore_case(argv[1], L"mask") ||
+        strings_equal_ignore_case(argv[1], L"unmask")) {
+      if (! is_admin) return elevate(argc, argv, NSSM_MESSAGE_NOT_ADMINISTRATOR_CANNOT_INSTALL);
+      const unsigned long start_type =
+          strings_equal_ignore_case(argv[1], L"enable") ? SERVICE_AUTO_START :
+          strings_equal_ignore_case(argv[1], L"mask") ? SERVICE_DISABLED :
+          SERVICE_DEMAND_START;
+      return set_service_startup_command(start_type, argc - 2, argv + 2);
+    }
     if (strings_equal_ignore_case(argv[1], L"processes")) return service_process_tree(argc - 2, argv + 2);
     if (strings_equal_ignore_case(argv[1], L"remove")) {
       if (! is_admin) {

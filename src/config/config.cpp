@@ -513,18 +513,9 @@ void parse_windows(const toml::table *root, service_config_t *config,
       root, "Windows", L"Windows", false, validation);
   if (! windows) return;
   reject_unknown_fields(windows, L"Windows",
-                        {"Startup", "Account", "AccountName", "ServiceSid",
-                         "DelayedAutoStart", "CPUMonitorInterval",
+                        {"Account", "AccountName", "ServiceSid",
+                         "CPUMonitorInterval",
                          "CPUViolationThreshold"}, validation);
-  std::wstring startup;
-  if (read_optional_string(windows, "Startup", L"Windows.Startup", &startup,
-                           validation) && ! startup.empty()) {
-    if (startup == L"automatic") config->service.startup = service_startup_t::automatic;
-    else if (startup == L"delayed") config->service.startup = service_startup_t::delayed;
-    else if (startup == L"manual") config->service.startup = service_startup_t::manual;
-    else if (startup == L"disabled") config->service.startup = service_startup_t::disabled;
-    else validation->add(L"Windows.Startup has an unsupported value");
-  }
   parse_account(windows, &config->service.account, validation);
   if (config->service.account.type == service_account_type_t::virtual_account &&
       ! config->service.account.name.empty() &&

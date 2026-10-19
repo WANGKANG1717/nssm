@@ -147,7 +147,7 @@ struct service_metadata_config_t {
   std::wstring name;
   std::wstring display_name;
   std::wstring description;
-  service_startup_t startup = service_startup_t::automatic;
+  service_startup_t startup = service_startup_t::manual;
   service_account_config_t account;
   std::vector<std::wstring> dependencies;
 

@@ -24,7 +24,6 @@ TasksMax = 16
 CPUQuota = 90
 
 [Windows]
-Startup = "manual"
 Account = "virtual"
 ServiceSid = "unrestricted"
 CPUMonitorInterval = "1s"

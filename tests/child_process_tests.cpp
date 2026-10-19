@@ -6,6 +6,7 @@
 #include "config_security.h"
 #include "health_check.h"
 #include "job_object.h"
+#include "output.h"
 #include "readiness.h"
 #include "recovery.h"
 #include "security.h"
@@ -75,6 +76,31 @@ void command_line_tests() {
   expect(command ==
              LR"("C:\Apps\app.exe" plain "two words" "" "quoted\"value" "C:\path with space\\")",
          L"argument array should follow Windows backslash and quote rules");
+}
+
+void cli_argument_tests() {
+  wchar_t output_json[] = L"--output=json";
+  wchar_t all[] = L"--all";
+  wchar_t separator[] = L"--";
+  wchar_t dash_name[] = L"-worker";
+  wchar_t *valid[] = {output_json, all, separator, dash_name};
+  cli_arguments_t parsed = parse_cli_arguments(4, valid);
+  expect(parsed.json && parsed.all && ! parsed.invalid &&
+             parsed.positional.size() == 1 &&
+             std::wstring(parsed.positional.front()) == L"-worker",
+         L"CLI parser should support systemctl-style options and -- separator");
+
+  wchar_t unknown[] = L"--unknown";
+  wchar_t *invalid[] = {unknown};
+  parsed = parse_cli_arguments(1, invalid);
+  expect(parsed.invalid && parsed.invalid_option == L"--unknown",
+         L"unknown options must be rejected instead of becoming positional values");
+
+  wchar_t legacy[] = L"--json";
+  wchar_t *legacy_args[] = {legacy};
+  parsed = parse_cli_arguments(1, legacy_args);
+  expect(parsed.invalid,
+         L"the old --json spelling should not remain as a hidden dialect");
 }
 
 void log_encoding_tests() {
@@ -284,7 +310,6 @@ MemoryMax = 268435456
 TasksMax = 8
 CPUQuota = 75
 [Windows]
-Startup = "delayed"
 Account = "system"
 ServiceSid = "restricted"
 )toml";
@@ -684,6 +709,7 @@ void debug_privilege_guard_tests() {
 
 int wmain() {
   command_line_tests();
+  cli_argument_tests();
   log_encoding_tests();
   string_utils_tests();
   environment_merge_tests();

@@ -7,7 +7,7 @@
 #include <cstdio>
 
 int usage(int result) {
-  print_message(stderr, NSSM_MESSAGE_USAGE, NSSM_VERSION,
+  print_message(result ? stderr : stdout, NSSM_MESSAGE_USAGE, NSSM_VERSION,
                 NSSM_CONFIGURATION, NSSM_DATE);
   return result;
 }
