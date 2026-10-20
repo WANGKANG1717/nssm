@@ -230,6 +230,25 @@ Readiness 支持 `InitialDelaySec`、`IntervalSec`、`TimeoutSec`、`StartupTime
 
 ## 构建与测试
 
+### 虚拟机一键验收
+
+在全新的 Windows 10/11 x64 虚拟机中，以管理员身份打开 PowerShell，在发布包目录执行：
+
+```powershell
+Set-ExecutionPolicy -Scope Process Bypass
+.\Test-SvcPilot.ps1
+```
+
+从源码目录测试指定产物：
+
+```powershell
+.\scripts\Test-SvcPilot.ps1 -Executable .\out\Release\win64\svp.exe
+```
+
+脚本退出码为 `0` 且最后显示 `PASS`，才表示全部通过。任何异常、断言失败或非预期退出码都会返回 `1`。测试使用随机 GUID 服务名，只创建自己的受管服务和一个用于验证删除保护的临时外部服务；`finally` 清理只针对这两个精确名称及其独立 `%ProgramData%\SvcPilotTest-*` 目录，不会停止、修改或删除既有服务。
+
+验收覆盖配置校验和安全 ACL、plan/apply 幂等性、服务创建与删除、启动策略、启停重启、Readiness/Health、生命周期钩子、运行时状态、进程树、日志与轮转、reload、export、快速失败、持久失败状态及清理。
+
 在 MSYS2 UCRT64 安装工具链：
 
 ```sh

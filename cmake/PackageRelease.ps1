@@ -19,6 +19,7 @@ if (Test-Path -LiteralPath $archive) { Remove-Item -LiteralPath $archive -Force 
 Copy-Item -LiteralPath $exe -Destination (Join-Path $stage 'svp.exe')
 Copy-Item -LiteralPath (Join-Path $source 'README.md') -Destination $stage
 Copy-Item -LiteralPath (Join-Path $source 'THIRD_PARTY_NOTICES.md') -Destination $stage
+Copy-Item -LiteralPath (Join-Path $source 'scripts\Test-SvcPilot.ps1') -Destination $stage
 
 $binaryHash = (Get-FileHash -Algorithm SHA256 -LiteralPath (Join-Path $stage 'svp.exe')).Hash.ToLowerInvariant()
 $sbom = [ordered]@{
