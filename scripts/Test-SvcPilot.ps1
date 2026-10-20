@@ -132,15 +132,15 @@ function Write-ServiceConfig([string]$Path, [bool]$FailImmediately,
     'MemoryMax = 268435456',
     'TasksMax = 8',
     'CPUQuota = 100',
-    ('ExecStartPre = [{ Path = {0}, Arguments = ["/d", "/c", {1}] }]' -f
+    ('ExecStartPre = [{{ Path = {0}, Arguments = ["/d", "/c", {1}] }}]' -f
       (ConvertTo-TomlString $cmd), (ConvertTo-TomlString "echo start-pre>`"$startPre`"")),
-    ('ExecStartPost = [{ Path = {0}, Arguments = ["/d", "/c", {1}] }]' -f
+    ('ExecStartPost = [{{ Path = {0}, Arguments = ["/d", "/c", {1}] }}]' -f
       (ConvertTo-TomlString $cmd), (ConvertTo-TomlString "echo start-post>`"$startPost`"")),
-    ('ExecStop = [{ Path = {0}, Arguments = ["/d", "/c", {1}] }]' -f
+    ('ExecStop = [{{ Path = {0}, Arguments = ["/d", "/c", {1}] }}]' -f
       (ConvertTo-TomlString $cmd), (ConvertTo-TomlString "echo stop>`"$stop`"")),
-    ('ExecStopPost = [{ Path = {0}, Arguments = ["/d", "/c", {1}] }]' -f
+    ('ExecStopPost = [{{ Path = {0}, Arguments = ["/d", "/c", {1}] }}]' -f
       (ConvertTo-TomlString $cmd), (ConvertTo-TomlString "echo stop-post>`"$stopPost`"")),
-    ('ExecReload = [{ Path = {0}, Arguments = ["/d", "/c", {1}] }]' -f
+    ('ExecReload = [{{ Path = {0}, Arguments = ["/d", "/c", {1}] }}]' -f
       (ConvertTo-TomlString $cmd), (ConvertTo-TomlString "echo reload>`"$reload`"")),
     '',
     '[Windows]',
