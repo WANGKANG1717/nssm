@@ -246,6 +246,7 @@ try {
   $script:TestRoot = Join-Path $env:ProgramData "SvcPilotTest-$suffix"
   $script:UnsafeRoot = Join-Path $env:ProgramData "SvcPilotTest-$suffix-unsafe"
   $configPath = Join-Path $script:TestRoot 'service.toml'
+  $failureConfigPath = Join-Path $script:TestRoot 'failure.toml'
   $exportPath = Join-Path $script:TestRoot 'exported.toml'
   $invalidPath = Join-Path $script:TestRoot 'invalid.toml'
 
@@ -371,10 +372,10 @@ try {
   Complete-Step
 
   Write-Step 'Apply an update and verify fast failure diagnostics'
-  Write-ServiceConfig $configPath $true 'SvcPilot VM fast-failure test'
-  $updatePlan = Invoke-SvpJson @('plan', '--output=json', $configPath)
+  Write-ServiceConfig $failureConfigPath $true 'SvcPilot VM fast-failure test'
+  $updatePlan = Invoke-SvpJson @('plan', '--output=json', $failureConfigPath)
   Assert-True ($updatePlan.action -eq 'update') 'Changed configuration did not produce an update plan.'
-  $updated = Invoke-SvpJson @('apply', '--output=json', $configPath)
+  $updated = Invoke-SvpJson @('apply', '--output=json', $failureConfigPath)
   Assert-True ($updated.ok -and $updated.action -eq 'update') 'Configuration update failed.'
   $startedAt = [DateTime]::UtcNow
   [void](Invoke-Svp @('start', $script:ServiceName) @(5))
