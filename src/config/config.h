@@ -213,5 +213,6 @@ bool parse_service_config(const char *toml_text, size_t length,
 bool load_service_config(const wchar_t *path, service_config_t *config,
                          config_validation_t *validation);
 bool load_secure_service_config(const wchar_t *path, service_config_t *config,
-                                config_validation_t *validation);
+                                config_validation_t *validation,
+                                bool *security_failure = nullptr);
 #endif

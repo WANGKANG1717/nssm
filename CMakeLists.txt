@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.25)
 
-project(svcpilot VERSION 3.2.2 LANGUAGES C CXX RC)
+project(svcpilot VERSION 3.2.3 LANGUAGES C CXX RC)
 
 file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/generated")
 configure_file(

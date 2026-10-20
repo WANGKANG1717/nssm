@@ -20,8 +20,10 @@ std::wstring read_error_message(unsigned long error) {
 
 static bool load_service_config_impl(const wchar_t *path, bool require_secure,
                                      service_config_t *config,
-                                     config_validation_t *validation) {
+                                     config_validation_t *validation,
+                                     bool *security_failure) {
   if (! config || ! validation) return false;
+  if (security_failure) *security_failure = false;
   validation->errors.clear();
   if (! path || ! *path) {
     validation->add(L"Configuration path must not be empty");
@@ -31,6 +33,7 @@ static bool load_service_config_impl(const wchar_t *path, bool require_secure,
   if (require_secure) {
     std::wstring reason;
     if (! check_secure_path(path, true, &reason)) {
+      if (security_failure) *security_failure = true;
       validation->add(L"Configuration path " + reason);
       return false;
     }
@@ -46,6 +49,7 @@ static bool load_service_config_impl(const wchar_t *path, bool require_secure,
   if (require_secure) {
     std::wstring reason;
     if (! check_secure_file_handle(file.get(), &reason)) {
+      if (security_failure) *security_failure = true;
       validation->add(L"Configuration file is insecure: " + reason);
       return false;
     }
@@ -94,10 +98,12 @@ static bool load_service_config_impl(const wchar_t *path, bool require_secure,
 
 bool load_service_config(const wchar_t *path, service_config_t *config,
                          config_validation_t *validation) {
-  return load_service_config_impl(path, false, config, validation);
+  return load_service_config_impl(path, false, config, validation, nullptr);
 }
 
 bool load_secure_service_config(const wchar_t *path, service_config_t *config,
-                                config_validation_t *validation) {
-  return load_service_config_impl(path, true, config, validation);
+                                config_validation_t *validation,
+                                bool *security_failure) {
+  return load_service_config_impl(path, true, config, validation,
+                                  security_failure);
 }

@@ -339,8 +339,17 @@ config_operation_result_t export_service_config(
   }
   service_config_t config;
   config_validation_t validation;
-  if (! load_secure_service_config(source.c_str(), &config, &validation) ||
-      ! strings_equal_ignore_case(config.service.name.c_str(),
+  bool security_failure = false;
+  if (! load_secure_service_config(source.c_str(), &config, &validation,
+                                   &security_failure)) {
+    return security_failure
+               ? validation_failure(validation,
+                                    config_operation_status_t::security)
+               : operation_failure(
+                     config_operation_status_t::conflict,
+                     L"The registered configuration is invalid");
+  }
+  if (! strings_equal_ignore_case(config.service.name.c_str(),
                                   service_name.c_str())) {
     return operation_failure(
         config_operation_status_t::conflict,
@@ -366,9 +375,12 @@ config_operation_result_t plan_service_config(
     const std::wstring &config_path, const std::wstring &wrapper_image_path) {
   service_config_t desired;
   config_validation_t validation;
+  bool security_failure = false;
   if (! load_secure_service_config(config_path.c_str(), &desired,
-                                   &validation)) {
-    return validation_failure(validation);
+                                   &validation, &security_failure)) {
+    return validation_failure(
+        validation, security_failure ? config_operation_status_t::security
+                                     : config_operation_status_t::validation);
   }
   std::wstring desired_path;
   std::wstring account;
@@ -460,9 +472,12 @@ config_operation_result_t apply_service_config(
     const std::wstring &config_path, const std::wstring &wrapper_image_path) {
   service_config_t config;
   config_validation_t validation;
+  bool security_failure = false;
   if (! load_secure_service_config(config_path.c_str(), &config,
-                                   &validation)) {
-    return validation_failure(validation);
+                                   &validation, &security_failure)) {
+    return validation_failure(
+        validation, security_failure ? config_operation_status_t::security
+                                     : config_operation_status_t::validation);
   }
 
   std::wstring path;
