@@ -2,6 +2,7 @@
 
 #include "config.h"
 #include "config_registration.h"
+#include "console.h"
 #include "event.h"
 #include "output.h"
 #include "utf8.h"
@@ -34,12 +35,19 @@ bool read_chunk(HANDLE file, unsigned long long offset, std::vector<char> *data,
   data->resize(read); return true;
 }
 
-void print_tail(const log_source_t &source, unsigned long lines, bool header,
+bool write_log_bytes(const char *data, size_t size) {
+  unsigned long error = ERROR_SUCCESS;
+  if (write_standard_output_bytes(data, size, &error)) return true;
+  fwprintf(stderr, L"unable to write log output: %ls\n", error_string(error));
+  return false;
+}
+
+bool print_tail(const log_source_t &source, unsigned long lines, bool header,
                 bool follow, HANDLE stop_event) {
   unique_handle file(CreateFileW(source.path.c_str(), GENERIC_READ,
       FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr,
       OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL | FILE_FLAG_SEQUENTIAL_SCAN, nullptr));
-  if (! file) { fwprintf(stderr, L"%ls: %ls\n", source.path.c_str(), error_string(GetLastError())); return; }
+  if (! file) { fwprintf(stderr, L"%ls: %ls\n", source.path.c_str(), error_string(GetLastError())); return false; }
   LARGE_INTEGER size = {}; GetFileSizeEx(file.get(), &size);
   const unsigned long long window = 4ULL * 1024ULL * 1024ULL;
   const unsigned long long start = size.QuadPart > static_cast<long long>(window)
@@ -50,14 +58,18 @@ void print_tail(const log_source_t &source, unsigned long lines, bool header,
   while (begin && found <= lines) if (data[--begin] == '\n') ++found;
   if (found > lines) ++begin; else begin = 0;
   if (header) fwprintf(stdout, L"==> %ls (%ls) <==\n", source.label.c_str(), source.path.c_str());
-  if (begin < data.size()) fwrite(data.data() + begin, 1, data.size() - begin, stdout);
-  fflush(stdout);
+  if (begin < data.size() &&
+      ! write_log_bytes(data.data() + begin, data.size() - begin)) return false;
   unsigned long long offset = static_cast<unsigned long long>(size.QuadPart);
   while (follow && WaitForSingleObject(stop_event, 250) == WAIT_TIMEOUT) {
     if (! read_chunk(file.get(), offset, &data, &error)) break;
-    if (! data.empty()) { fwrite(data.data(), 1, data.size(), stdout); fflush(stdout); offset += data.size(); }
+    if (! data.empty()) {
+      if (! write_log_bytes(data.data(), data.size())) return false;
+      offset += data.size();
+    }
     LARGE_INTEGER current = {}; if (GetFileSizeEx(file.get(), &current) && current.QuadPart < static_cast<long long>(offset)) offset = 0;
   }
+  return true;
 }
 
 BOOL WINAPI stop_follow(unsigned long control) {
@@ -93,15 +105,18 @@ int logs_command(int argc, wchar_t **argv) {
   if (! config.logging.stderr_path.empty() && config.logging.stderr_path != config.logging.stdout_path) sources.push_back({L"stderr", config.logging.stderr_path});
   if (sources.empty()) { fwprintf(stderr, L"%ls: logging is not configured\n", service.c_str()); return 4; }
   unique_handle stop(CreateEventW(nullptr, TRUE, FALSE, nullptr));
-  for (const auto &source : sources) print_tail(source, lines, sources.size() > 1, false, stop.get());
+  for (const auto &source : sources) {
+    if (! print_tail(source, lines, sources.size() > 1, false, stop.get())) return 5;
+  }
   if (follow) {
     if (sources.size() > 1) fwprintf(stderr, L"--follow requires stdout and stderr to share one path\n");
     else {
       follow_stop_event = stop.get();
       SetConsoleCtrlHandler(stop_follow, TRUE);
-      print_tail(sources.front(), 0, false, true, stop.get());
+      const bool followed = print_tail(sources.front(), 0, false, true, stop.get());
       SetConsoleCtrlHandler(stop_follow, FALSE);
       follow_stop_event = nullptr;
+      if (! followed) return 5;
     }
   }
   return follow && sources.size() > 1 ? 2 : 0;

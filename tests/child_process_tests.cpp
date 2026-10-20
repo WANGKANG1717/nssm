@@ -5,6 +5,7 @@
 #include "command_runner.h"
 #include "config.h"
 #include "config_security.h"
+#include "console.h"
 #include "health_check.h"
 #include "job_object.h"
 #include "nssm_io.h"
@@ -20,6 +21,7 @@
 
 #include <aclapi.h>
 
+#include <cstring>
 #include <iostream>
 #include <string>
 #include <thread>
@@ -118,6 +120,33 @@ void log_encoding_tests() {
              ! encoded_newline_at(utf16, 3, sizeof(utf16), sizeof(wchar_t)) &&
              ! encoded_newline_at(utf16, 2, 3, sizeof(wchar_t)),
          L"UTF-16 newlines should include the complete code unit");
+}
+
+void standard_output_bytes_tests() {
+  SECURITY_ATTRIBUTES security = {sizeof(security), nullptr, TRUE};
+  unique_handle read_handle;
+  unique_handle write_handle;
+  expect(CreatePipe(read_handle.put(), write_handle.put(), &security, 0) != FALSE,
+         L"an output test pipe should be created");
+  if (! read_handle || ! write_handle) return;
+
+  HANDLE original = GetStdHandle(STD_OUTPUT_HANDLE);
+  expect(SetStdHandle(STD_OUTPUT_HANDLE, write_handle.get()) != FALSE,
+         L"the output test pipe should become standard output");
+  const char probe[] = "SVP_LOG_PROBE\r\n";
+  unsigned long error = ERROR_SUCCESS;
+  expect(write_standard_output_bytes(probe, sizeof(probe) - 1, &error),
+         L"raw log bytes should be written independently of CRT stream mode");
+  SetStdHandle(STD_OUTPUT_HANDLE, original);
+  write_handle.reset();
+
+  char received[sizeof(probe)] = {};
+  unsigned long read = 0;
+  expect(ReadFile(read_handle.get(), received, sizeof(received), &read,
+                  nullptr) != FALSE &&
+             read == sizeof(probe) - 1 &&
+             memcmp(received, probe, sizeof(probe) - 1) == 0,
+         L"standard output should receive every raw log byte");
 }
 
 void logger_rotation_state_tests() {
@@ -834,6 +863,7 @@ int wmain() {
   command_line_tests();
   cli_argument_tests();
   log_encoding_tests();
+  standard_output_bytes_tests();
   logger_rotation_state_tests();
   string_utils_tests();
   environment_merge_tests();
