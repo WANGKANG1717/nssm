@@ -13,6 +13,7 @@ $script:ServiceName = ''
 $script:ForeignServiceName = ''
 $script:TestRoot = ''
 $script:UnsafeRoot = ''
+$script:DiagnosticPath = ''
 
 function Write-Step([string]$Name) {
   $script:Step++
@@ -153,15 +154,15 @@ function Write-ServiceConfig([string]$Path, [bool]$FailImmediately,
     'TasksMax = 8',
     'CPUQuota = 100',
     ('ExecStartPre = [{{ Path = {0}, Arguments = ["/d", "/c", {1}] }}]' -f
-      (ConvertTo-TomlString $cmd), (ConvertTo-TomlString "echo start-pre>`"$startPre`"")),
+      (ConvertTo-TomlString $cmd), (ConvertTo-TomlString "echo start-pre>$startPre")),
     ('ExecStartPost = [{{ Path = {0}, Arguments = ["/d", "/c", {1}] }}]' -f
-      (ConvertTo-TomlString $cmd), (ConvertTo-TomlString "echo start-post>`"$startPost`"")),
+      (ConvertTo-TomlString $cmd), (ConvertTo-TomlString "echo start-post>$startPost")),
     ('ExecStop = [{{ Path = {0}, Arguments = ["/d", "/c", {1}] }}]' -f
-      (ConvertTo-TomlString $cmd), (ConvertTo-TomlString "echo stop>`"$stop`"")),
+      (ConvertTo-TomlString $cmd), (ConvertTo-TomlString "echo stop>$stop")),
     ('ExecStopPost = [{{ Path = {0}, Arguments = ["/d", "/c", {1}] }}]' -f
-      (ConvertTo-TomlString $cmd), (ConvertTo-TomlString "echo stop-post>`"$stopPost`"")),
+      (ConvertTo-TomlString $cmd), (ConvertTo-TomlString "echo stop-post>$stopPost")),
     ('ExecReload = [{{ Path = {0}, Arguments = ["/d", "/c", {1}] }}]' -f
-      (ConvertTo-TomlString $cmd), (ConvertTo-TomlString "echo reload>`"$reload`"")),
+      (ConvertTo-TomlString $cmd), (ConvertTo-TomlString "echo reload>$reload")),
     '',
     '[Windows]',
     'Account = "system"',
@@ -239,6 +240,43 @@ function Test-ServiceAbsent([string]$Name) {
   return $result.ExitCode -ne 0
 }
 
+function Save-FailureDiagnostics([string]$Message) {
+  if ([string]::IsNullOrWhiteSpace($script:DiagnosticPath)) { return }
+  $lines = [Collections.Generic.List[string]]::new()
+  $lines.Add('SvcPilot VM acceptance failure')
+  $lines.Add("Time: $([DateTime]::Now.ToString('o'))")
+  $lines.Add("Message: $Message")
+  $lines.Add("Service: $($script:ServiceName)")
+  $lines.Add('')
+  foreach ($command in @(
+      @($script:ExecutablePath, 'show', '--output=json', $script:ServiceName),
+      @($script:ExecutablePath, 'status', '--output=json', $script:ServiceName),
+      @('sc.exe', 'queryex', $script:ServiceName),
+      @('sc.exe', 'qc', $script:ServiceName))) {
+    $file = $command[0]
+    $arguments = @($command | Select-Object -Skip 1)
+    $result = Invoke-Native $file $arguments
+    $lines.Add("> $file $($arguments -join ' ')")
+    $lines.Add("Exit code: $($result.ExitCode)")
+    $lines.Add($result.Output)
+    $lines.Add('')
+  }
+  try {
+    $events = Get-WinEvent -FilterHashtable @{
+      LogName = 'Application'
+      ProviderName = 'SvcPilot'
+      StartTime = [DateTime]::Now.AddMinutes(-10)
+    } -ErrorAction Stop | Select-Object -First 30 `
+      TimeCreated, Id, LevelDisplayName, Message
+    $lines.Add('> Recent SvcPilot Application events')
+    $lines.Add(($events | Format-List | Out-String).Trim())
+  }
+  catch {
+    $lines.Add("> Recent SvcPilot Application events unavailable: $($_.Exception.Message)")
+  }
+  $lines | Set-Content -LiteralPath $script:DiagnosticPath -Encoding utf8
+}
+
 $failure = $null
 try {
   Write-Step 'Preflight: administrator, Windows x64, and executable'
@@ -266,6 +304,8 @@ try {
   $script:ForeignServiceName = "svp-vm-$suffix-foreign"
   $script:TestRoot = Join-Path $env:ProgramData "SvcPilotTest-$suffix"
   $script:UnsafeRoot = Join-Path $env:ProgramData "SvcPilotTest-$suffix-unsafe"
+  $script:DiagnosticPath = Join-Path ([Environment]::GetFolderPath('Desktop')) `
+    "SvcPilot-Test-Failure-$suffix.txt"
   $configPath = Join-Path $script:TestRoot 'service.toml'
   $failureConfigPath = Join-Path $script:TestRoot 'failure.toml'
   $exportPath = Join-Path $script:TestRoot 'exported.toml'
@@ -426,6 +466,7 @@ try {
 }
 catch {
   $failure = $_
+  Save-FailureDiagnostics $failure.Exception.Message
 }
 finally {
   Write-Host 'Cleaning exact test services and temporary files...' -ForegroundColor DarkGray
@@ -461,6 +502,10 @@ if ($failure) {
   Write-Host ''
   Write-Host "FAILED after $script:Passed completed steps." -ForegroundColor Red
   Write-Host $failure.Exception.Message -ForegroundColor Red
+  if (-not [string]::IsNullOrWhiteSpace($script:DiagnosticPath) -and
+      (Test-Path -LiteralPath $script:DiagnosticPath)) {
+    Write-Host "Diagnostics: $($script:DiagnosticPath)" -ForegroundColor Yellow
+  }
   exit 1
 }
 
