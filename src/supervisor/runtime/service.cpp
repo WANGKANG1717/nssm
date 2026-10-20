@@ -808,9 +808,17 @@ int stop_service(nssm_service_t *service, unsigned long exitcode) {
 
   if (have_environment && ! service->stop_post_ran) {
     service->stop_post_ran = true;
+    /*
+      ExecStopPost runs after the main process has stopped, so it needs its
+      own timeout budget.  Reusing stop_deadline meant a process which used
+      the full shutdown grace period caused every post-stop command to be
+      rejected as already timed out.
+    */
+    const unsigned long long stop_post_deadline =
+        GetTickCount64() + lifecycle.timeout_stop_ms;
     run_lifecycle_commands(service, lifecycle.exec_stop_post,
                            L"ExecStopPost", child_environment.data(), nullptr,
-                           stop_deadline, false);
+                           stop_post_deadline, false);
   }
 
   /* Signal we stopped */
