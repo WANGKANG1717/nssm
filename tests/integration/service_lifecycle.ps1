@@ -117,8 +117,11 @@ try {
   & reg.exe add $foreignParametersKey /v ConfigPath /t REG_EXPAND_SZ `
     /d "$env:ProgramData\ForeignService" /f | Out-Null
   if ($LASTEXITCODE -ne 0) { throw 'foreign ConfigPath setup failed' }
+  $ErrorActionPreference = 'Continue'
   & $executablePath remove $unmanagedServiceName confirm 2>$null | Out-Null
-  if ($LASTEXITCODE -eq 0) { throw 'svp removed an unmanaged service' }
+  $unmanagedRemovalExitCode = $LASTEXITCODE
+  $ErrorActionPreference = 'Stop'
+  if ($unmanagedRemovalExitCode -eq 0) { throw 'svp removed an unmanaged service' }
   & sc.exe query $unmanagedServiceName 2>$null | Out-Null
   if ($LASTEXITCODE -ne 0) { throw 'unmanaged service no longer exists' }
 
@@ -139,8 +142,11 @@ try {
   Set-SecureTestAcl $secureLeaf $true
   Write-TestConfiguration $unsafeConfigPath $false
   Set-SecureTestAcl $unsafeConfigPath $false
+  $ErrorActionPreference = 'Continue'
   & $executablePath plan --output=json $unsafeConfigPath 2>$null | Out-Null
-  if ($LASTEXITCODE -ne 6) {
+  $unsafePlanExitCode = $LASTEXITCODE
+  $ErrorActionPreference = 'Stop'
+  if ($unsafePlanExitCode -ne 6) {
     throw 'configuration beneath an insecure ancestor was not rejected'
   }
 
@@ -158,7 +164,7 @@ try {
   }
   & $executablePath disable $serviceName | Out-Null
   if ($LASTEXITCODE -ne 0) { throw 'service disable failed' }
-  $managedServices = @(& $executablePath list)
+  $managedServices = @(& $executablePath list-units)
   if ($LASTEXITCODE -ne 0 -or $managedServices -notcontains $serviceName) {
     throw 'declaratively managed service was missing from svp list-units'
   }
@@ -207,8 +213,10 @@ try {
   if (-not $updated.ok) { throw 'fast-failure configuration update failed' }
 
   $failureStarted = [DateTime]::UtcNow
+  $ErrorActionPreference = 'Continue'
   & $executablePath start $serviceName 2>$null | Out-Null
   $startExitCode = $LASTEXITCODE
+  $ErrorActionPreference = 'Stop'
   $failureElapsed = ([DateTime]::UtcNow - $failureStarted).TotalSeconds
   if ($startExitCode -eq 0) {
     throw 'a service which exited during startup was reported as running'
@@ -221,6 +229,7 @@ try {
   if ($LASTEXITCODE -ne 0) { throw 'service removal failed' }
 }
 finally {
+  $ErrorActionPreference = 'Continue'
   & sc.exe stop $serviceName 2>$null | Out-Null
   & sc.exe delete $serviceName 2>$null | Out-Null
   & sc.exe stop $unmanagedServiceName 2>$null | Out-Null
@@ -231,4 +240,5 @@ finally {
   if (Test-Path -LiteralPath $unsafeRoot) {
     Remove-Item -LiteralPath $unsafeRoot -Recurse -Force
   }
+  $ErrorActionPreference = 'Stop'
 }
