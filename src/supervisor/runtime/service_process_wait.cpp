@@ -6,7 +6,7 @@
 
 #include <windows.h>
 
-void unregister_service_process_wait(nssm_service_t *service,
+void unregister_service_process_wait(service_runtime_t *service,
                                      bool wait_for_callbacks) {
   AcquireSRWLockExclusive(&service->wait_lock);
   HANDLE wait_handle = static_cast<HANDLE>(InterlockedExchangePointer(
@@ -18,11 +18,11 @@ void unregister_service_process_wait(nssm_service_t *service,
   if (UnregisterWaitEx(wait_handle, completion_event)) return;
   const unsigned long error = GetLastError();
   if (! wait_for_callbacks && error == ERROR_IO_PENDING) return;
-  log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_UNREGISTERWAIT_FAILED,
+  log_event(EVENTLOG_ERROR_TYPE, SVP_EVENT_UNREGISTERWAIT_FAILED,
             service->name, error_string(error), 0);
 }
 
-bool register_service_process_wait(nssm_service_t *service) {
+bool register_service_process_wait(service_runtime_t *service) {
   AcquireSRWLockExclusive(&service->wait_lock);
   if (! service->process_handle ||
       WaitForSingleObject(service->stop_event, 0) == WAIT_OBJECT_0) {

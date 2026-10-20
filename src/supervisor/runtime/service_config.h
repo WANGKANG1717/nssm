@@ -1,10 +1,10 @@
-#ifndef NSSM_SUPERVISOR_SERVICE_CONFIG_H
-#define NSSM_SUPERVISOR_SERVICE_CONFIG_H
+#ifndef SVP_SUPERVISOR_SERVICE_CONFIG_H
+#define SVP_SUPERVISOR_SERVICE_CONFIG_H
 
 struct config_validation_t;
-struct nssm_service_t;
+struct service_runtime_t;
 
-bool load_registered_service_config(nssm_service_t *service,
+bool load_registered_service_config(service_runtime_t *service,
                                     config_validation_t *validation);
 
 #endif

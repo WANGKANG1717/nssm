@@ -36,7 +36,7 @@ const wchar_t *service_status_text(unsigned long status) {
 void log_service_control(const wchar_t *service_name, unsigned long control,
                          bool handled) {
   const wchar_t *text = service_control_text(control);
-  unsigned long event = NSSM_EVENT_SERVICE_CONTROL_UNKNOWN;
+  unsigned long event = SVP_EVENT_SERVICE_CONTROL_UNKNOWN;
   wchar_t unknown_control[11] = {};
 
   if (! text) {
@@ -46,8 +46,8 @@ void log_service_control(const wchar_t *service_name, unsigned long control,
     text = unknown_control;
   }
   else {
-    event = handled ? NSSM_EVENT_SERVICE_CONTROL_HANDLED
-                    : NSSM_EVENT_SERVICE_CONTROL_NOT_HANDLED;
+    event = handled ? SVP_EVENT_SERVICE_CONTROL_HANDLED
+                    : SVP_EVENT_SERVICE_CONTROL_NOT_HANDLED;
   }
 
   log_event(EVENTLOG_INFORMATION_TYPE, event, service_name, text, 0);

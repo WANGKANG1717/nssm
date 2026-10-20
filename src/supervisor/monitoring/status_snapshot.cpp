@@ -21,7 +21,7 @@ std::wstring mapping_name(const std::wstring &service_name) {
   return L"Global\\SvcPilot.Status." + service_name;
 }
 
-runtime_health_t current_health(const nssm_service_t *service,
+runtime_health_t current_health(const service_runtime_t *service,
                                 bool health_degraded,
                                 unsigned long health_successes) {
   if (! service || ! service->config) return runtime_health_t::unknown;
@@ -34,7 +34,7 @@ runtime_health_t current_health(const nssm_service_t *service,
   return runtime_health_t::starting;
 }
 
-void publish_status_snapshot_unlocked(nssm_service_t *service) {
+void publish_status_snapshot_unlocked(service_runtime_t *service) {
   status_snapshot_t *snapshot = service->status_snapshot;
   if (! snapshot) return;
   InterlockedIncrement(&snapshot->sequence);
@@ -64,7 +64,7 @@ void publish_status_snapshot_unlocked(nssm_service_t *service) {
 
 }  // namespace
 
-bool create_status_snapshot(nssm_service_t *service) {
+bool create_status_snapshot(service_runtime_t *service) {
   if (! service || ! service->name[0]) return false;
   unique_local_memory<void> descriptor;
   if (! ConvertStringSecurityDescriptorToSecurityDescriptorW(
@@ -108,14 +108,14 @@ bool create_status_snapshot(nssm_service_t *service) {
   return true;
 }
 
-void publish_status_snapshot(nssm_service_t *service) {
+void publish_status_snapshot(service_runtime_t *service) {
   if (! service) return;
   AcquireSRWLockExclusive(&service->status_snapshot_lock);
   publish_status_snapshot_unlocked(service);
   ReleaseSRWLockExclusive(&service->status_snapshot_lock);
 }
 
-void close_status_snapshot(nssm_service_t *service) {
+void close_status_snapshot(service_runtime_t *service) {
   if (! service) return;
   AcquireSRWLockExclusive(&service->status_snapshot_lock);
   if (service->status_snapshot) {

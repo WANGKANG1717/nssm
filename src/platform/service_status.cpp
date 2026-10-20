@@ -14,7 +14,7 @@ bool report_service_status(SERVICE_STATUS_HANDLE status_handle,
   const unsigned long error = status_handle && status
                                   ? GetLastError()
                                   : ERROR_INVALID_PARAMETER;
-  log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_SETSERVICESTATUS_FAILED,
+  log_event(EVENTLOG_ERROR_TYPE, SVP_EVENT_SETSERVICESTATUS_FAILED,
             service_name ? service_name : L"", operation ? operation : L"",
             error_string(error), 0);
   SetLastError(error);

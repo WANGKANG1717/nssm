@@ -1,5 +1,5 @@
-#ifndef NSSM_SERVICE_CONSTANTS_H
-#define NSSM_SERVICE_CONSTANTS_H
+#ifndef SVP_SERVICE_CONSTANTS_H
+#define SVP_SERVICE_CONSTANTS_H
 
 inline constexpr wchar_t kProductName[] = L"SvcPilot";
 

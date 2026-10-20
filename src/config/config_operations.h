@@ -1,5 +1,5 @@
-#ifndef NSSM_CONFIG_OPERATIONS_H
-#define NSSM_CONFIG_OPERATIONS_H
+#ifndef SVP_CONFIG_OPERATIONS_H
+#define SVP_CONFIG_OPERATIONS_H
 
 #include <string>
 #include <vector>

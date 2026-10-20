@@ -1,5 +1,5 @@
-#ifndef NSSM_CLI_USAGE_H
-#define NSSM_CLI_USAGE_H
+#ifndef SVP_CLI_USAGE_H
+#define SVP_CLI_USAGE_H
 
 int usage(int result);
 

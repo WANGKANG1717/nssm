@@ -5,12 +5,12 @@
 
 #include <string>
 
-struct nssm_service_t;
+struct service_runtime_t;
 
-bool start_notification_listener(nssm_service_t *, std::wstring *);
-void stop_notification_listener(nssm_service_t *);
-bool wait_for_ready_notification(nssm_service_t *, unsigned long,
+bool start_notification_listener(service_runtime_t *, std::wstring *);
+void stop_notification_listener(service_runtime_t *);
+bool wait_for_ready_notification(service_runtime_t *, unsigned long,
                                  std::wstring *);
-bool start_notification_watchdog(nssm_service_t *);
+bool start_notification_watchdog(service_runtime_t *);
 
 #endif

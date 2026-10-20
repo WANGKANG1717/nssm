@@ -15,16 +15,16 @@
 */
 inline constexpr size_t EXE_LENGTH = PATH_LENGTH;
 
-#define NSSM_ROTATE_OFFLINE 0
-#define NSSM_ROTATE_ONLINE 1
-#define NSSM_ROTATE_ONLINE_ASAP 2
-#define NSSM_ROTATE_IN_PROGRESS 3
+#define SVP_ROTATE_OFFLINE 0
+#define SVP_ROTATE_ONLINE 1
+#define SVP_ROTATE_ONLINE_ASAP 2
+#define SVP_ROTATE_IN_PROGRESS 3
 
 struct service_config_t;
 struct recovery_state_t;
 struct status_snapshot_t;
 
-typedef struct nssm_service_t {
+typedef struct service_runtime_t {
   wchar_t name[SERVICE_NAME_LENGTH];
   wchar_t displayname[SERVICE_NAME_LENGTH];
   service_config_t *config;
@@ -117,24 +117,24 @@ typedef struct nssm_service_t {
   status_snapshot_t *status_snapshot;
   SRWLOCK status_snapshot_lock;
   CONDITION_VARIABLE throttle_condition;
-  FILETIME nssm_creation_time;
+  FILETIME wrapper_creation_time;
   FILETIME creation_time;
   FILETIME exit_time;
   wchar_t *initial_env;
   unsigned long next_restart_delay_ms;
   unsigned long long process_started_ms;
-} nssm_service_t;
+} service_runtime_t;
 
 void WINAPI service_main(unsigned long, wchar_t **);
 unsigned long WINAPI service_control_handler(unsigned long, unsigned long, void *, void *);
 
-nssm_service_t *alloc_nssm_service();
-void set_nssm_service_defaults(nssm_service_t *);
-void cleanup_nssm_service(nssm_service_t *);
-int monitor_service(nssm_service_t *);
-int start_service(nssm_service_t *);
-int stop_service(nssm_service_t *, unsigned long);
+service_runtime_t *allocate_service_runtime();
+void set_service_runtime_defaults(service_runtime_t *);
+void cleanup_service_runtime(service_runtime_t *);
+int monitor_service(service_runtime_t *);
+int start_service(service_runtime_t *);
+int stop_service(service_runtime_t *, unsigned long);
 void CALLBACK end_service(void *, unsigned char);
-void throttle_restart(nssm_service_t *);
+void throttle_restart(service_runtime_t *);
 
 #endif

@@ -1,5 +1,5 @@
-#ifndef NSSM_PLATFORM_CONSOLE_H
-#define NSSM_PLATFORM_CONSOLE_H
+#ifndef SVP_PLATFORM_CONSOLE_H
+#define SVP_PLATFORM_CONSOLE_H
 
 #include <cstddef>
 

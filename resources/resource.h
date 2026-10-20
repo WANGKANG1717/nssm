@@ -1,7 +1,7 @@
-#ifndef NSSM_RESOURCE_H
-#define NSSM_RESOURCE_H
+#ifndef SVP_RESOURCE_H
+#define SVP_RESOURCE_H
 
-#define IDI_NSSM 101
+#define IDI_SVP 101
 
 #endif
 

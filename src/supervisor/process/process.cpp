@@ -5,7 +5,7 @@
 #include "service_wait.h"
 #include "win32_handle.h"
 
-void service_kill_t(nssm_service_t *service, kill_t *k) {
+void service_kill_t(service_runtime_t *service, kill_t *k) {
   if (! service) return;
   if (! k) return;
 
@@ -29,7 +29,7 @@ int get_process_creation_time(HANDLE process_handle, FILETIME *ft) {
 
   if (! GetProcessTimes(process_handle, &creation_time, &exit_time, &kernel_time, &user_time)) {
     const unsigned long error = GetLastError();
-    log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_GETPROCESSTIMES_FAILED,
+    log_event(EVENTLOG_ERROR_TYPE, SVP_EVENT_GETPROCESSTIMES_FAILED,
               error_string(error), 0);
     SetLastError(error);
     return 1;
@@ -45,7 +45,7 @@ int get_process_exit_time(HANDLE process_handle, FILETIME *ft) {
 
   if (! GetProcessTimes(process_handle, &creation_time, &exit_time, &kernel_time, &user_time)) {
     const unsigned long error = GetLastError();
-    log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_GETPROCESSTIMES_FAILED,
+    log_event(EVENTLOG_ERROR_TYPE, SVP_EVENT_GETPROCESSTIMES_FAILED,
               error_string(error), 0);
     SetLastError(error);
     return 1;
@@ -74,7 +74,7 @@ int check_parent(kill_t *k, PROCESSENTRY32W *pe, unsigned long ppid) {
     if (! k->traversal_error) k->traversal_error = error;
     wchar_t pid_string[16];
     _snwprintf_s(pid_string, _countof(pid_string), _TRUNCATE, L"%lu", pe->th32ProcessID);
-    log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_OPENPROCESS_FAILED, pid_string,
+    log_event(EVENTLOG_ERROR_TYPE, SVP_EVENT_OPENPROCESS_FAILED, pid_string,
               k->name, error_string(error), 0);
     return 2;
   }
@@ -121,14 +121,14 @@ int CALLBACK kill_window(HWND window, LPARAM arg) {
   processes so this function returns only true if at least one thread was
   successfully prodded.
 */
-int kill_threads(nssm_service_t *service, kill_t *k) {
+int kill_threads(service_runtime_t *service, kill_t *k) {
   (void) service;
   int ret = 0;
 
   /* Get a snapshot of all threads in the system. */
   unique_handle snapshot(CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0));
   if (! snapshot) {
-    log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_CREATETOOLHELP32SNAPSHOT_THREAD_FAILED, k->name, error_string(GetLastError()), 0);
+    log_event(EVENTLOG_ERROR_TYPE, SVP_EVENT_CREATETOOLHELP32SNAPSHOT_THREAD_FAILED, k->name, error_string(GetLastError()), 0);
     return 0;
   }
 
@@ -137,7 +137,7 @@ int kill_threads(nssm_service_t *service, kill_t *k) {
   te.dwSize = sizeof(te);
 
   if (! Thread32First(snapshot.get(), &te)) {
-    log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_THREAD_ENUMERATE_FAILED, k->name, error_string(GetLastError()), 0);
+    log_event(EVENTLOG_ERROR_TYPE, SVP_EVENT_THREAD_ENUMERATE_FAILED, k->name, error_string(GetLastError()), 0);
     return 0;
   }
 
@@ -151,7 +151,7 @@ int kill_threads(nssm_service_t *service, kill_t *k) {
     if (! Thread32Next(snapshot.get(), &te)) {
       unsigned long error = GetLastError();
       if (error == ERROR_NO_MORE_FILES) break;
-      log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_THREAD_ENUMERATE_FAILED,
+      log_event(EVENTLOG_ERROR_TYPE, SVP_EVENT_THREAD_ENUMERATE_FAILED,
                 k->name, error_string(error), 0);
       return ret;
     }
@@ -169,7 +169,7 @@ int kill_threads(kill_t *k) {
 }
 
 /* Give the process a chance to die gracefully. */
-int kill_process(nssm_service_t *service, kill_t *k) {
+int kill_process(service_runtime_t *service, kill_t *k) {
   (void) service;
   if (! k) return 1;
 
@@ -214,7 +214,7 @@ int kill_process(kill_t *k) {
 }
 
 /* Simulate a Control-C event to our console (shared with the app). */
-int kill_console(nssm_service_t *service, kill_t *k) {
+int kill_console(service_runtime_t *service, kill_t *k) {
   (void) service;
   unsigned long ret;
 
@@ -236,7 +236,7 @@ int kill_console(nssm_service_t *service, kill_t *k) {
       case ERROR_ACCESS_DENIED:
       default:
         /* We already have a console. */
-        log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_ATTACHCONSOLE_FAILED, k->name, error_string(ret), 0);
+        log_event(EVENTLOG_ERROR_TYPE, SVP_EVENT_ATTACHCONSOLE_FAILED, k->name, error_string(ret), 0);
         return 3;
     }
   }
@@ -245,7 +245,7 @@ int kill_console(nssm_service_t *service, kill_t *k) {
   ret = 0;
   BOOL ignored = SetConsoleCtrlHandler(0, TRUE);
   if (! ignored) {
-    log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_SETCONSOLECTRLHANDLER_FAILED, k->name, error_string(GetLastError()), 0);
+    log_event(EVENTLOG_ERROR_TYPE, SVP_EVENT_SETCONSOLECTRLHANDLER_FAILED, k->name, error_string(GetLastError()), 0);
     ret = 4;
   }
 
@@ -256,14 +256,14 @@ int kill_console(nssm_service_t *service, kill_t *k) {
   */
   if (! ret) {
     if (! GenerateConsoleCtrlEvent(CTRL_BREAK_EVENT, k->pid)) {
-      log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_GENERATECONSOLECTRLEVENT_FAILED, k->name, error_string(GetLastError()), 0);
+      log_event(EVENTLOG_ERROR_TYPE, SVP_EVENT_GENERATECONSOLECTRLEVENT_FAILED, k->name, error_string(GetLastError()), 0);
       ret = 5;
     }
   }
 
   /* Detach from the console. */
   if (! FreeConsole()) {
-    log_event(EVENTLOG_WARNING_TYPE, NSSM_EVENT_FREECONSOLE_FAILED, k->name, error_string(GetLastError()), 0);
+    log_event(EVENTLOG_WARNING_TYPE, SVP_EVENT_FREECONSOLE_FAILED, k->name, error_string(GetLastError()), 0);
   }
 
   /* Wait for process to exit. */
@@ -273,7 +273,7 @@ int kill_console(nssm_service_t *service, kill_t *k) {
 
   /* Remove our handler. */
   if (ignored && ! SetConsoleCtrlHandler(0, FALSE)) {
-    log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_SETCONSOLECTRLHANDLER_FAILED, k->name, error_string(GetLastError()), 0);
+    log_event(EVENTLOG_ERROR_TYPE, SVP_EVENT_SETCONSOLECTRLHANDLER_FAILED, k->name, error_string(GetLastError()), 0);
   }
 
   return ret;
@@ -283,7 +283,7 @@ int kill_console(kill_t *k) {
   return kill_console(NULL, k);
 }
 
-void walk_process_tree(nssm_service_t *service, walk_function_t fn, kill_t *k, unsigned long ppid) {
+void walk_process_tree(service_runtime_t *service, walk_function_t fn, kill_t *k, unsigned long ppid) {
   if (! k) return;
   /* Shouldn't happen unless the service failed to start. */
   /* PID 0 is the System Idle Process and must never enter the stop pipeline. */
@@ -294,7 +294,7 @@ void walk_process_tree(nssm_service_t *service, walk_function_t fn, kill_t *k, u
   wchar_t pid_string[16], code[16];
   _snwprintf_s(pid_string, _countof(pid_string), _TRUNCATE, L"%lu", pid);
   _snwprintf_s(code, _countof(code), _TRUNCATE, L"%lu", k->exitcode);
-  if (fn == static_cast<walk_function_t>(kill_process)) log_event(EVENTLOG_INFORMATION_TYPE, NSSM_EVENT_KILLING, k->name, pid_string, code, 0);
+  if (fn == static_cast<walk_function_t>(kill_process)) log_event(EVENTLOG_INFORMATION_TYPE, SVP_EVENT_KILLING, k->name, pid_string, code, 0);
 
   /* We will need a process handle in order to call TerminateProcess() later. */
   unique_handle process_handle(OpenProcess(
@@ -304,7 +304,7 @@ void walk_process_tree(nssm_service_t *service, walk_function_t fn, kill_t *k, u
     /* Kill this process first, then its descendents. */
     wchar_t ppid_string[16];
     _snwprintf_s(ppid_string, _countof(ppid_string), _TRUNCATE, L"%lu", ppid);
-    if (fn == static_cast<walk_function_t>(kill_process)) log_event(EVENTLOG_INFORMATION_TYPE, NSSM_EVENT_KILL_PROCESS_TREE, pid_string, ppid_string, k->name, 0);
+    if (fn == static_cast<walk_function_t>(kill_process)) log_event(EVENTLOG_INFORMATION_TYPE, SVP_EVENT_KILL_PROCESS_TREE, pid_string, ppid_string, k->name, 0);
     HANDLE previous_process_handle = k->process_handle;
     k->process_handle = process_handle.get();
     if (! fn(service, k)) {
@@ -313,7 +313,7 @@ void walk_process_tree(nssm_service_t *service, walk_function_t fn, kill_t *k, u
       unsigned long ret;
       if (! GetExitCodeProcess(process_handle.get(), &ret) ||
           ret == STILL_ACTIVE) {
-        log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_TERMINATEPROCESS_FAILED,
+        log_event(EVENTLOG_ERROR_TYPE, SVP_EVENT_TERMINATEPROCESS_FAILED,
                   pid_string, k->name, error_string(action_error), 0);
       }
     }
@@ -323,7 +323,7 @@ void walk_process_tree(nssm_service_t *service, walk_function_t fn, kill_t *k, u
   else {
     const unsigned long error = GetLastError();
     if (! k->traversal_error) k->traversal_error = error;
-    log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_OPENPROCESS_FAILED, pid_string,
+    log_event(EVENTLOG_ERROR_TYPE, SVP_EVENT_OPENPROCESS_FAILED, pid_string,
               k->name, error_string(error), 0);
   }
 
@@ -333,7 +333,7 @@ void walk_process_tree(nssm_service_t *service, walk_function_t fn, kill_t *k, u
     const unsigned long error = GetLastError();
     if (! k->traversal_error) k->traversal_error = error;
     log_event(EVENTLOG_ERROR_TYPE,
-              NSSM_EVENT_CREATETOOLHELP32SNAPSHOT_PROCESS_FAILED, k->name,
+              SVP_EVENT_CREATETOOLHELP32SNAPSHOT_PROCESS_FAILED, k->name,
               error_string(error), 0);
     return;
   }
@@ -345,7 +345,7 @@ void walk_process_tree(nssm_service_t *service, walk_function_t fn, kill_t *k, u
   if (! Process32FirstW(snapshot.get(), &pe)) {
     const unsigned long error = GetLastError();
     if (! k->traversal_error) k->traversal_error = error;
-    log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_PROCESS_ENUMERATE_FAILED,
+    log_event(EVENTLOG_ERROR_TYPE, SVP_EVENT_PROCESS_ENUMERATE_FAILED,
               k->name, error_string(error), 0);
     return;
   }
@@ -364,7 +364,7 @@ void walk_process_tree(nssm_service_t *service, walk_function_t fn, kill_t *k, u
       unsigned long ret = GetLastError();
       if (ret == ERROR_NO_MORE_FILES) break;
       if (! k->traversal_error) k->traversal_error = ret;
-      log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_PROCESS_ENUMERATE_FAILED,
+      log_event(EVENTLOG_ERROR_TYPE, SVP_EVENT_PROCESS_ENUMERATE_FAILED,
                 k->name, error_string(ret), 0);
       k->depth = depth;
       return;

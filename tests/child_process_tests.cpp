@@ -8,7 +8,7 @@
 #include "console.h"
 #include "health_check.h"
 #include "job_object.h"
-#include "nssm_io.h"
+#include "service_io.h"
 #include "notification.h"
 #include "output.h"
 #include "readiness.h"
@@ -166,16 +166,16 @@ void standard_output_bytes_tests() {
 }
 
 void logger_rotation_state_tests() {
-  volatile LONG state = NSSM_ROTATE_ONLINE;
+  volatile LONG state = SVP_ROTATE_ONLINE;
   expect(request_logger_rotation(&state) &&
-             logger_rotation_state(&state) == NSSM_ROTATE_ONLINE_ASAP,
+             logger_rotation_state(&state) == SVP_ROTATE_ONLINE_ASAP,
          L"online logger rotation should be requested atomically");
   expect(claim_logger_rotation(&state, true) &&
-             logger_rotation_state(&state) == NSSM_ROTATE_IN_PROGRESS,
+             logger_rotation_state(&state) == SVP_ROTATE_IN_PROGRESS,
          L"logger should atomically claim a requested rotation");
-  set_logger_rotation_state(&state, NSSM_ROTATE_OFFLINE);
+  set_logger_rotation_state(&state, SVP_ROTATE_OFFLINE);
   finish_logger_rotation(&state);
-  expect(logger_rotation_state(&state) == NSSM_ROTATE_OFFLINE,
+  expect(logger_rotation_state(&state) == SVP_ROTATE_OFFLINE,
          L"rotation completion must not resurrect a logger stopped concurrently");
   expect(! request_logger_rotation(&state),
          L"an offline logger must reject new rotation requests");
@@ -528,7 +528,7 @@ void command_runner_tests() {
 }
 
 void notification_tests() {
-  nssm_service_t service = {};
+  service_runtime_t service = {};
   service_config_t config;
   config.service.account.type = service_account_type_t::user;
   wchar_t current_user[256] = {};

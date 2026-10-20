@@ -7,7 +7,7 @@
 #include "job_object.h"
 #include "health_monitor.h"
 #include "messages.h"
-#include "nssm_io.h"
+#include "service_io.h"
 #include "notification.h"
 #include "process.h"
 #include "readiness.h"
@@ -31,7 +31,7 @@
 static constexpr int kStartHandledByRecovery = -1;
 static constexpr int kStartAwaitingProcessExit = -2;
 
-static void set_service_recovery(nssm_service_t *, SC_HANDLE);
+static void set_service_recovery(service_runtime_t *, SC_HANDLE);
 
 static unsigned long remaining_until(unsigned long long deadline) {
   const unsigned long long now = GetTickCount64();
@@ -56,7 +56,7 @@ class critical_section_guard {
 };
 
 template <typename Mutator>
-void update_service_status(nssm_service_t *service, Mutator mutator) {
+void update_service_status(service_runtime_t *service, Mutator mutator) {
   AcquireSRWLockExclusive(&service->status_lock);
   mutator(service->status);
   report_service_status(service->status_handle, &service->status,
@@ -65,14 +65,14 @@ void update_service_status(nssm_service_t *service, Mutator mutator) {
 }
 
 static bool run_lifecycle_commands(
-    nssm_service_t *service, const std::vector<command_config_t> &commands,
+    service_runtime_t *service, const std::vector<command_config_t> &commands,
     const wchar_t *phase, wchar_t *environment, HANDLE cancellation_event,
     unsigned long long deadline, bool failure_is_fatal) {
   for (size_t index = 0; index < commands.size(); ++index) {
     const unsigned long remaining = remaining_until(deadline);
     if (! remaining) {
       log_event(failure_is_fatal ? EVENTLOG_ERROR_TYPE : EVENTLOG_WARNING_TYPE,
-                NSSM_EVENT_LIFECYCLE_COMMAND_FAILED, service->name, phase,
+                SVP_EVENT_LIFECYCLE_COMMAND_FAILED, service->name, phase,
                 L"lifecycle deadline expired", 0);
       return false;
     }
@@ -87,7 +87,7 @@ static bool run_lifecycle_commands(
       std::wstring detail = L"command " + std::to_wstring(index + 1) +
                             L": " + result.detail;
       log_event(failure_is_fatal ? EVENTLOG_ERROR_TYPE : EVENTLOG_WARNING_TYPE,
-                NSSM_EVENT_LIFECYCLE_COMMAND_FAILED, service->name, phase,
+                SVP_EVENT_LIFECYCLE_COMMAND_FAILED, service->name, phase,
                 detail.c_str(), 0);
       return false;
     }
@@ -103,7 +103,7 @@ static bool start_detached_thread(LPTHREAD_START_ROUTINE function,
   return true;
 }
 
-static void terminate_after_monitor_start_failure(nssm_service_t *service) {
+static void terminate_after_monitor_start_failure(service_runtime_t *service) {
   EnterCriticalSection(&service->health_section);
   if (! service->stopping && service->job_handle) {
     terminate_service_job(service->job_handle, ERROR_NOT_READY, nullptr);
@@ -111,27 +111,27 @@ static void terminate_after_monitor_start_failure(nssm_service_t *service) {
   LeaveCriticalSection(&service->health_section);
 }
 
-static bool restart_allowed(nssm_service_t *service) {
+static bool restart_allowed(service_runtime_t *service) {
   EnterCriticalSection(&service->health_section);
   const bool allowed = service->allow_restart;
   LeaveCriticalSection(&service->health_section);
   return allowed;
 }
 
-static void set_restart_allowed(nssm_service_t *service, bool allowed) {
+static void set_restart_allowed(service_runtime_t *service, bool allowed) {
   EnterCriticalSection(&service->health_section);
   service->allow_restart = allowed;
   LeaveCriticalSection(&service->health_section);
 }
 
-static void reset_throttle(nssm_service_t *service, bool wake_waiter) {
+static void reset_throttle(service_runtime_t *service, bool wake_waiter) {
   EnterCriticalSection(&service->throttle_section);
   service->throttle = 0;
   if (wake_waiter) WakeConditionVariable(&service->throttle_condition);
   LeaveCriticalSection(&service->throttle_section);
 }
 
-static bool prepare_child_launch(nssm_service_t *service,
+static bool prepare_child_launch(service_runtime_t *service,
                                  std::wstring *command_line,
                                  std::vector<wchar_t> *environment) {
   std::wstring error;
@@ -139,14 +139,14 @@ static bool prepare_child_launch(nssm_service_t *service,
                                  &error) ||
       ! build_child_environment(service->initial_env, service->env,
                                 service->env_extra, environment, &error)) {
-    log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_CREATEPROCESS_FAILED,
+    log_event(EVENTLOG_ERROR_TYPE, SVP_EVENT_CREATEPROCESS_FAILED,
               service->name, service->exe, error.c_str(), 0);
     return false;
   }
   return true;
 }
 
-static int finish_service_start(nssm_service_t *service,
+static int finish_service_start(service_runtime_t *service,
                                 wchar_t *environment,
                                 unsigned long long deadline) {
   if (service->config->lifecycle.notify) {
@@ -154,7 +154,7 @@ static int finish_service_start(nssm_service_t *service,
     std::wstring detail;
     if (! remaining ||
         ! wait_for_ready_notification(service, remaining, &detail)) {
-      log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_READINESS_FAILED,
+      log_event(EVENTLOG_ERROR_TYPE, SVP_EVENT_READINESS_FAILED,
                 service->name, detail.c_str(), 0);
       if (service->job_handle) {
         terminate_service_job(service->job_handle, ERROR_NOT_READY, nullptr);
@@ -162,7 +162,7 @@ static int finish_service_start(nssm_service_t *service,
       return kStartAwaitingProcessExit;
     }
     reset_throttle(service, false);
-    log_event(EVENTLOG_INFORMATION_TYPE, NSSM_EVENT_READINESS_READY,
+    log_event(EVENTLOG_INFORMATION_TYPE, SVP_EVENT_READINESS_READY,
               service->name, detail.c_str(), 0);
   }
   else if (service->config->readiness.enabled()) {
@@ -179,7 +179,7 @@ static int finish_service_start(nssm_service_t *service,
       if (readiness.state == readiness_state_t::cancelled) {
         return kStartHandledByRecovery;
       }
-      log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_READINESS_FAILED,
+      log_event(EVENTLOG_ERROR_TYPE, SVP_EVENT_READINESS_FAILED,
                 service->name, readiness.detail.c_str(), 0);
       if (readiness.state != readiness_state_t::process_exited &&
           service->job_handle) {
@@ -190,7 +190,7 @@ static int finish_service_start(nssm_service_t *service,
       return kStartAwaitingProcessExit;
     }
     reset_throttle(service, false);
-    log_event(EVENTLOG_INFORMATION_TYPE, NSSM_EVENT_READINESS_READY,
+    log_event(EVENTLOG_INFORMATION_TYPE, SVP_EVENT_READINESS_READY,
               service->name, readiness.detail.c_str(), 0);
   }
   else {
@@ -233,7 +233,7 @@ static int finish_service_start(nssm_service_t *service,
   return 0;
 }
 
-static void close_failed_child_launch(nssm_service_t *service,
+static void close_failed_child_launch(service_runtime_t *service,
                                       HANDLE thread_handle) {
   if (thread_handle) CloseHandle(thread_handle);
   if (service->process_handle) CloseHandle(service->process_handle);
@@ -243,11 +243,11 @@ static void close_failed_child_launch(nssm_service_t *service,
   service->pid = 0;
 }
 
-static bool configure_service_job(nssm_service_t *service) {
+static bool configure_service_job(service_runtime_t *service) {
   unsigned long error = ERROR_SUCCESS;
   service->job_handle = create_service_job(&error);
   if (! service->job_handle) {
-    log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_CREATE_JOB_FAILED,
+    log_event(EVENTLOG_ERROR_TYPE, SVP_EVENT_CREATE_JOB_FAILED,
               service->name, error_string(error), 0);
     return false;
   }
@@ -256,7 +256,7 @@ static bool configure_service_job(nssm_service_t *service) {
           service->job_handle,
           service->config->resources.maximum_processes,
           service->config->resources.memory_limit_bytes, &error)) {
-    log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_CONFIGURE_JOB_FAILED,
+    log_event(EVENTLOG_ERROR_TYPE, SVP_EVENT_CONFIGURE_JOB_FAILED,
               service->name, error_string(error), 0);
     CloseHandle(service->job_handle);
     service->job_handle = nullptr;
@@ -266,7 +266,7 @@ static bool configure_service_job(nssm_service_t *service) {
 }
 
 static bool create_suspended_service_process(
-    nssm_service_t *service, STARTUPINFOW *startup_info,
+    service_runtime_t *service, STARTUPINFOW *startup_info,
     std::wstring *command_line, wchar_t *environment,
     PROCESS_INFORMATION *process_info) {
   const bool inherit_handles =
@@ -279,7 +279,7 @@ static bool create_suspended_service_process(
                       inherit_handles, flags, environment, service->dir,
                       startup_info, process_info)) {
     const unsigned long error = GetLastError();
-    log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_CREATEPROCESS_FAILED,
+    log_event(EVENTLOG_ERROR_TYPE, SVP_EVENT_CREATEPROCESS_FAILED,
               service->name, service->exe, error_string(error), 0);
     return false;
   }
@@ -290,14 +290,14 @@ static bool create_suspended_service_process(
   return true;
 }
 
-static bool assign_service_process_to_job(nssm_service_t *service,
+static bool assign_service_process_to_job(service_runtime_t *service,
                                           HANDLE thread_handle) {
   unsigned long error = ERROR_SUCCESS;
   if (assign_process_to_service_job(service->job_handle,
                                     service->process_handle, &error)) {
     return true;
   }
-  log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_ASSIGN_JOB_FAILED, service->name,
+  log_event(EVENTLOG_ERROR_TYPE, SVP_EVENT_ASSIGN_JOB_FAILED, service->name,
             error_string(error), 0);
   TerminateProcess(service->process_handle, error);
   WaitForSingleObject(service->process_handle, kServiceStatusDeadlineMs);
@@ -305,7 +305,7 @@ static bool assign_service_process_to_job(nssm_service_t *service,
   return false;
 }
 
-static bool resume_service_process(nssm_service_t *service,
+static bool resume_service_process(service_runtime_t *service,
                                    HANDLE thread_handle) {
   if (ResumeThread(thread_handle) != static_cast<unsigned long>(-1)) {
     CloseHandle(thread_handle);
@@ -313,7 +313,7 @@ static bool resume_service_process(nssm_service_t *service,
   }
 
   const unsigned long error = GetLastError();
-  log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_RESUME_PROCESS_FAILED,
+  log_event(EVENTLOG_ERROR_TYPE, SVP_EVENT_RESUME_PROCESS_FAILED,
             service->name, error_string(error), 0);
   terminate_service_job(service->job_handle, error, nullptr);
   WaitForSingleObject(service->process_handle, kServiceStatusDeadlineMs);
@@ -333,7 +333,7 @@ static inline unsigned long throttle_milliseconds(unsigned long throttle) {
   control immediately.
 */
 static unsigned long WINAPI shutdown_service(void *arg) {
-  return stop_service((nssm_service_t *) arg, 0);
+  return stop_service((service_runtime_t *) arg, 0);
 }
 
 /*
@@ -341,11 +341,11 @@ static unsigned long WINAPI shutdown_service(void *arg) {
  immediately.
 */
 static unsigned long WINAPI launch_service(void *arg) {
-  return monitor_service((nssm_service_t *) arg);
+  return monitor_service((service_runtime_t *) arg);
 }
 
 static unsigned long WINAPI reload_service(void *arg) {
-  auto *service = static_cast<nssm_service_t *>(arg);
+  auto *service = static_cast<service_runtime_t *>(arg);
   critical_section_guard lifecycle_guard(&service->lifecycle_section);
   if (! service->config || service->config->lifecycle.exec_reload.empty() ||
       ! service->process_handle ||
@@ -371,15 +371,15 @@ static unsigned long WINAPI reload_service(void *arg) {
 /* About to install the service */
 /* Service initialisation */
 void WINAPI service_main(unsigned long argc, wchar_t **argv) {
-  nssm_service_t *service = alloc_nssm_service();
+  service_runtime_t *service = allocate_service_runtime();
   if (! service) return;
-  set_nssm_service_defaults(service);
+  set_service_runtime_defaults(service);
 
   (void) argc;
 
   if (_snwprintf_s(service->name, _countof(service->name), _TRUNCATE, L"%ls", argv[0]) < 0) {
-    log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_OUT_OF_MEMORY, L"service->name", L"service_main()", 0);
-    cleanup_nssm_service(service);
+    log_event(EVENTLOG_ERROR_TYPE, SVP_EVENT_OUT_OF_MEMORY, L"service->name", L"service_main()", 0);
+    cleanup_service_runtime(service);
     return;
   }
 
@@ -413,9 +413,9 @@ void WINAPI service_main(unsigned long argc, wchar_t **argv) {
   service->stop_event = CreateEventW(nullptr, TRUE, FALSE, nullptr);
   service->service_done_event = CreateEventW(nullptr, TRUE, FALSE, nullptr);
   if (! service->stop_event || ! service->service_done_event) {
-    log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_CREATEEVENT_FAILED,
+    log_event(EVENTLOG_ERROR_TYPE, SVP_EVENT_CREATEEVENT_FAILED,
               service->name, error_string(GetLastError()), 0);
-    cleanup_nssm_service(service);
+    cleanup_service_runtime(service);
     return;
   }
   service->allow_restart = true;
@@ -424,8 +424,8 @@ void WINAPI service_main(unsigned long argc, wchar_t **argv) {
   service->status_handle = RegisterServiceCtrlHandlerExW(
       kProductName, service_control_handler, service);
   if (! service->status_handle) {
-    log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_REGISTERSERVICECTRLHANDER_FAILED, error_string(GetLastError()), 0);
-    cleanup_nssm_service(service);
+    log_event(EVENTLOG_ERROR_TYPE, SVP_EVENT_REGISTERSERVICECTRLHANDER_FAILED, error_string(GetLastError()), 0);
+    cleanup_service_runtime(service);
     return;
   }
 
@@ -451,10 +451,10 @@ void WINAPI service_main(unsigned long argc, wchar_t **argv) {
   service->initial_env = copy_environment();
   if (! service->initial_env) {
     const unsigned long error = GetLastError();
-    log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_CONFIG_LOAD_FAILED,
+    log_event(EVENTLOG_ERROR_TYPE, SVP_EVENT_CONFIG_LOAD_FAILED,
               service->name, error_string(error), 0);
     stop_service(service, 2);
-    cleanup_nssm_service(service);
+    cleanup_service_runtime(service);
     return;
   }
 
@@ -465,25 +465,25 @@ void WINAPI service_main(unsigned long argc, wchar_t **argv) {
       if (! details.empty()) details.append(L"; ");
       details.append(error);
     }
-    log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_CONFIG_LOAD_FAILED, service->name,
+    log_event(EVENTLOG_ERROR_TYPE, SVP_EVENT_CONFIG_LOAD_FAILED, service->name,
               details.c_str(), 0);
     stop_service(service, 2);
-    cleanup_nssm_service(service);
+    cleanup_service_runtime(service);
     return;
   }
   if (! create_status_snapshot(service)) {
-    log_event(EVENTLOG_WARNING_TYPE, NSSM_EVENT_STATUS_SNAPSHOT_FAILED,
+    log_event(EVENTLOG_WARNING_TYPE, SVP_EVENT_STATUS_SNAPSHOT_FAILED,
               service->name, error_string(GetLastError()), 0);
   }
 
   /* Remember our creation time. */
-  if (get_process_creation_time(GetCurrentProcess(), &service->nssm_creation_time)) ZeroMemory(&service->nssm_creation_time, sizeof(service->nssm_creation_time));
+  if (get_process_creation_time(GetCurrentProcess(), &service->wrapper_creation_time)) ZeroMemory(&service->wrapper_creation_time, sizeof(service->wrapper_creation_time));
 
   if (WaitForSingleObject(service->stop_event, 0) == WAIT_OBJECT_0) return;
   if (! start_detached_thread(launch_service, service)) {
-    log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_CREATETHREAD_FAILED, error_string(GetLastError()), 0);
+    log_event(EVENTLOG_ERROR_TYPE, SVP_EVENT_CREATETHREAD_FAILED, error_string(GetLastError()), 0);
     stop_service(service, 0);
-    cleanup_nssm_service(service);
+    cleanup_service_runtime(service);
     return;
   }
 
@@ -498,7 +498,7 @@ void WINAPI service_main(unsigned long argc, wchar_t **argv) {
 }
 
 /* Make sure service recovery actions are taken where necessary */
-static void set_service_recovery(nssm_service_t *service,
+static void set_service_recovery(service_runtime_t *service,
                                  SC_HANDLE service_handle) {
   SERVICE_FAILURE_ACTIONS_FLAG flag;
   ZeroMemory(&flag, sizeof(flag));
@@ -508,12 +508,12 @@ static void set_service_recovery(nssm_service_t *service,
                              SERVICE_CONFIG_FAILURE_ACTIONS_FLAG, &flag)) {
     unsigned long error = GetLastError();
     log_event(EVENTLOG_ERROR_TYPE,
-              NSSM_EVENT_SERVICE_CONFIG_FAILURE_ACTIONS_FAILED,
+              SVP_EVENT_SERVICE_CONFIG_FAILURE_ACTIONS_FAILED,
               service->name, error_string(error), 0);
   }
 }
 
-int monitor_service(nssm_service_t *service) {
+int monitor_service(service_runtime_t *service) {
   /* Set service status to started */
   int ret = start_service(service);
   if (ret == kStartHandledByRecovery) return 0;
@@ -521,7 +521,7 @@ int monitor_service(nssm_service_t *service) {
   if (ret && ! awaiting_process_exit) {
     wchar_t code[16];
     _snwprintf_s(code, _countof(code), _TRUNCATE, L"%d", ret);
-    log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_START_SERVICE_FAILED,
+    log_event(EVENTLOG_ERROR_TYPE, SVP_EVENT_START_SERVICE_FAILED,
               service->exe, service->name, code, 0);
     return ret;
   }
@@ -534,13 +534,13 @@ int monitor_service(nssm_service_t *service) {
     const unsigned long error = GetLastError();
     if (error == ERROR_OPERATION_ABORTED) return 0;
     log_event(EVENTLOG_ERROR_TYPE,
-              NSSM_EVENT_REGISTERWAITFORSINGLEOBJECT_FAILED, service->name,
+              SVP_EVENT_REGISTERWAITFORSINGLEOBJECT_FAILED, service->name,
               service->exe, error_string(error), 0);
     return stop_service(service, 3);
   }
   if (awaiting_process_exit) return 0;
 
-  log_event(EVENTLOG_INFORMATION_TYPE, NSSM_EVENT_STARTED_SERVICE,
+  log_event(EVENTLOG_INFORMATION_TYPE, SVP_EVENT_STARTED_SERVICE,
             service->exe, service->flags, service->name, service->dir, 0);
   if (! start_notification_watchdog(service)) {
     terminate_after_monitor_start_failure(service);
@@ -549,14 +549,14 @@ int monitor_service(nssm_service_t *service) {
   if (! start_health_monitor(service)) {
     const unsigned long error = GetLastError();
     if (error == ERROR_OPERATION_ABORTED) return 0;
-    log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_HEALTH_MONITOR_START_FAILED,
+    log_event(EVENTLOG_ERROR_TYPE, SVP_EVENT_HEALTH_MONITOR_START_FAILED,
               service->name, error_string(error), 0);
     terminate_after_monitor_start_failure(service);
   }
   else if (! start_resource_monitor(service)) {
     const unsigned long error = GetLastError();
     if (error == ERROR_OPERATION_ABORTED) return 0;
-    log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_RESOURCE_MONITOR_START_FAILED,
+    log_event(EVENTLOG_ERROR_TYPE, SVP_EVENT_RESOURCE_MONITOR_START_FAILED,
               service->name, error_string(error), 0);
     terminate_after_monitor_start_failure(service);
   }
@@ -568,7 +568,7 @@ int monitor_service(nssm_service_t *service) {
 unsigned long WINAPI service_control_handler(unsigned long control, unsigned long event, void *data, void *context) {
   (void) event;
   (void) data;
-  nssm_service_t *service = (nssm_service_t *) context;
+  service_runtime_t *service = (service_runtime_t *) context;
 
   switch (control) {
     case SERVICE_CONTROL_INTERROGATE:
@@ -594,7 +594,7 @@ unsigned long WINAPI service_control_handler(unsigned long control, unsigned lon
         while we acknowledge the request.
       */
       if (! start_detached_thread(shutdown_service, context)) {
-        log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_CREATETHREAD_FAILED, error_string(GetLastError()), 0);
+        log_event(EVENTLOG_ERROR_TYPE, SVP_EVENT_CREATETHREAD_FAILED, error_string(GetLastError()), 0);
 
         /*
           We couldn't create a thread to tidy up so we'll have to force the tidyup
@@ -613,7 +613,7 @@ unsigned long WINAPI service_control_handler(unsigned long control, unsigned lon
       reset_throttle(service, true);
       const unsigned long wait_hint =
           throttle_milliseconds(0) + kServiceWaitHintMarginMs;
-      log_event(EVENTLOG_INFORMATION_TYPE, NSSM_EVENT_RESET_THROTTLE, service->name, 0);
+      log_event(EVENTLOG_INFORMATION_TYPE, SVP_EVENT_RESET_THROTTLE, service->name, 0);
       update_service_status(service, [wait_hint](SERVICE_STATUS &status) {
         if (status.dwCurrentState != SERVICE_RUNNING) {
           status.dwCurrentState = SERVICE_CONTINUE_PENDING;
@@ -655,7 +655,7 @@ unsigned long WINAPI service_control_handler(unsigned long control, unsigned lon
 }
 
 /* Start the service */
-int start_service(nssm_service_t *service) {
+int start_service(service_runtime_t *service) {
   critical_section_guard lifecycle_guard(&service->lifecycle_section);
   service->stop_post_ran = false;
   if (service->health_section_initialised) {
@@ -723,7 +723,7 @@ int start_service(nssm_service_t *service) {
   if (restart_allowed(service)) {
     /* Set up I/O redirection. */
     if (get_output_handles(service, &si)) {
-      log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_GET_OUTPUT_HANDLES_FAILED, service->name, 0);
+      log_event(EVENTLOG_ERROR_TYPE, SVP_EVENT_GET_OUTPUT_HANDLES_FAILED, service->name, 0);
       FreeConsole();
       close_output_handles(&si);
       return stop_service(service, 4);
@@ -759,16 +759,16 @@ int start_service(nssm_service_t *service) {
 }
 
 /* Stop the service */
-int stop_service(nssm_service_t *service, unsigned long exitcode) {
+int stop_service(service_runtime_t *service, unsigned long exitcode) {
   set_restart_allowed(service, false);
   if (service->stop_event) SetEvent(service->stop_event);
   unregister_service_process_wait(service, true);
   critical_section_guard lifecycle_guard(&service->lifecycle_section);
 
   set_logger_rotation_state(&service->rotate_stdout_online,
-                            NSSM_ROTATE_OFFLINE);
+                            SVP_ROTATE_OFFLINE);
   set_logger_rotation_state(&service->rotate_stderr_online,
-                            NSSM_ROTATE_OFFLINE);
+                            SVP_ROTATE_OFFLINE);
 
   /* Signal we are stopping */
   update_service_status(service, [](SERVICE_STATUS &status) {
@@ -803,7 +803,7 @@ int stop_service(nssm_service_t *service, unsigned long exitcode) {
     }
     else {
     /* Shut down service */
-    log_event(EVENTLOG_INFORMATION_TYPE, NSSM_EVENT_TERMINATEPROCESS, service->name, service->exe, 0);
+    log_event(EVENTLOG_INFORMATION_TYPE, SVP_EVENT_TERMINATEPROCESS, service->name, service->exe, 0);
     kill_t k;
     service_kill_t(service, &k);
     k.exitcode = 0;
@@ -814,7 +814,7 @@ int stop_service(nssm_service_t *service, unsigned long exitcode) {
     kill_process(&k);
     }
   }
-  else log_event(EVENTLOG_INFORMATION_TYPE, NSSM_EVENT_PROCESS_ALREADY_STOPPED, service->name, service->exe, 0);
+  else log_event(EVENTLOG_INFORMATION_TYPE, SVP_EVENT_PROCESS_ALREADY_STOPPED, service->name, service->exe, 0);
 
   end_service((void *) service, true);
 
@@ -849,7 +849,7 @@ int stop_service(nssm_service_t *service, unsigned long exitcode) {
   if (exitcode && service->config) {
     unsigned long failure_error = ERROR_SUCCESS;
     if (! write_persistent_failure(service->name, exitcode, &failure_error)) {
-      log_event(EVENTLOG_WARNING_TYPE, NSSM_EVENT_PERSIST_FAILURE_FAILED,
+      log_event(EVENTLOG_WARNING_TYPE, SVP_EVENT_PERSIST_FAILURE_FAILED,
                 service->name, error_string(failure_error), 0);
     }
   }
@@ -861,7 +861,7 @@ int stop_service(nssm_service_t *service, unsigned long exitcode) {
 
 /* Callback function triggered when the server exits */
 void CALLBACK end_service(void *arg, unsigned char why) {
-  nssm_service_t *service = (nssm_service_t *) arg;
+  service_runtime_t *service = (service_runtime_t *) arg;
   critical_section_guard lifecycle(&service->lifecycle_section);
 
   if (service->health_section_initialised) {
@@ -882,9 +882,9 @@ void CALLBACK end_service(void *arg, unsigned char why) {
   stop_notification_listener(service);
 
   set_logger_rotation_state(&service->rotate_stdout_online,
-                            NSSM_ROTATE_OFFLINE);
+                            SVP_ROTATE_OFFLINE);
   set_logger_rotation_state(&service->rotate_stderr_online,
-                            NSSM_ROTATE_OFFLINE);
+                            SVP_ROTATE_OFFLINE);
 
   /* Use now as a dummy exit time. */
   GetSystemTimeAsFileTime(&service->exit_time);
@@ -896,7 +896,7 @@ void CALLBACK end_service(void *arg, unsigned char why) {
     if (! GetExitCodeProcess(service->process_handle, &exitcode)) {
       const unsigned long error = GetLastError();
       exitcode = error ? error : ERROR_GEN_FAILURE;
-      log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_GETEXITCODEPROCESS_FAILED,
+      log_event(EVENTLOG_ERROR_TYPE, SVP_EVENT_GETEXITCODEPROCESS_FAILED,
                 service->name, error_string(exitcode), 0);
     }
     service->exitcode = exitcode;
@@ -913,7 +913,7 @@ void CALLBACK end_service(void *arg, unsigned char why) {
   */
   if (! why) {
     _snwprintf_s(code, _countof(code), _TRUNCATE, L"%lu", exitcode);
-    log_event(EVENTLOG_INFORMATION_TYPE, NSSM_EVENT_ENDED_SERVICE, service->exe, service->name, code, 0);
+    log_event(EVENTLOG_INFORMATION_TYPE, SVP_EVENT_ENDED_SERVICE, service->exe, service->name, code, 0);
   }
 
   /* Clean up. */
@@ -921,7 +921,7 @@ void CALLBACK end_service(void *arg, unsigned char why) {
   if (service->job_handle) {
     unsigned long job_error = ERROR_SUCCESS;
     if (! terminate_service_job(service->job_handle, exitcode, &job_error)) {
-      log_event(EVENTLOG_WARNING_TYPE, NSSM_EVENT_TERMINATE_JOB_FAILED,
+      log_event(EVENTLOG_WARNING_TYPE, SVP_EVENT_TERMINATE_JOB_FAILED,
                 service->name, error_string(job_error), 0);
     }
     CloseHandle(service->job_handle);
@@ -987,13 +987,13 @@ void CALLBACK end_service(void *arg, unsigned char why) {
     log_event(decision.result == recovery_result_t::clean_exit
                   ? EVENTLOG_INFORMATION_TYPE
                   : EVENTLOG_WARNING_TYPE,
-              NSSM_EVENT_RECOVERY_STOPPED,
+              SVP_EVENT_RECOVERY_STOPPED,
               service->name, reason, 0);
     if (decision.result != recovery_result_t::clean_exit) {
       unsigned long failure_error = ERROR_SUCCESS;
       if (! write_persistent_failure(service->name, exitcode,
                                      &failure_error)) {
-        log_event(EVENTLOG_WARNING_TYPE, NSSM_EVENT_PERSIST_FAILURE_FAILED,
+        log_event(EVENTLOG_WARNING_TYPE, SVP_EVENT_PERSIST_FAILURE_FAILED,
                   service->name, error_string(failure_error), 0);
       }
     }
@@ -1001,12 +1001,12 @@ void CALLBACK end_service(void *arg, unsigned char why) {
     return;
   }
   service->next_restart_delay_ms = decision.delay_ms;
-  log_event(EVENTLOG_INFORMATION_TYPE, NSSM_EVENT_EXIT_RESTART,
+  log_event(EVENTLOG_INFORMATION_TYPE, SVP_EVENT_EXIT_RESTART,
             service->name, code, L"Restart",
             service->exe, 0);
   while (monitor_service(service)) {
     if (WaitForSingleObject(service->stop_event, 0) == WAIT_OBJECT_0) break;
-    log_event(EVENTLOG_WARNING_TYPE, NSSM_EVENT_RESTART_SERVICE_FAILED,
+    log_event(EVENTLOG_WARNING_TYPE, SVP_EVENT_RESTART_SERVICE_FAILED,
               service->exe, service->name, 0);
     if (WaitForSingleObject(service->stop_event, 30000) == WAIT_OBJECT_0) {
       break;
@@ -1014,7 +1014,7 @@ void CALLBACK end_service(void *arg, unsigned char why) {
   }
 }
 
-void throttle_restart(nssm_service_t *service) {
+void throttle_restart(service_runtime_t *service) {
   unsigned long ms = service->next_restart_delay_ms;
   service->next_restart_delay_ms = 0;
   if (! ms) return;

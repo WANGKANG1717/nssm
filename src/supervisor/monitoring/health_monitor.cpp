@@ -14,25 +14,25 @@ namespace {
 
 constexpr unsigned long kHealthWatchdogExitCode = 0xE0010001UL;
 
-unsigned long fail_health_monitor(nssm_service_t *service,
+unsigned long fail_health_monitor(service_runtime_t *service,
                                   unsigned long error,
                                   const wchar_t *operation) {
   std::wstring detail = std::wstring(operation) + L" failed with error " +
                         std::to_wstring(error);
-  log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_HEALTH_WATCHDOG,
+  log_event(EVENTLOG_ERROR_TYPE, SVP_EVENT_HEALTH_WATCHDOG,
             service->name, detail.c_str(), 0);
   unsigned long termination_error = ERROR_SUCCESS;
   if (service->job_handle &&
       ! terminate_service_job(service->job_handle, kHealthWatchdogExitCode,
                               &termination_error)) {
-    log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_TERMINATE_JOB_FAILED,
+    log_event(EVENTLOG_ERROR_TYPE, SVP_EVENT_TERMINATE_JOB_FAILED,
               service->name, error_string(termination_error), 0);
   }
   return kHealthWatchdogExitCode;
 }
 
 unsigned long WINAPI health_monitor_thread(void *argument) {
-  auto *service = static_cast<nssm_service_t *>(argument);
+  auto *service = static_cast<service_runtime_t *>(argument);
   const health_check_config_t &config = service->config->health;
   HANDLE stop_event = service->health_stop_event;
 
@@ -97,25 +97,25 @@ unsigned long WINAPI health_monitor_thread(void *argument) {
     LeaveCriticalSection(&service->health_section);
 
     if (recovered) {
-      log_event(EVENTLOG_INFORMATION_TYPE, NSSM_EVENT_HEALTH_RECOVERED,
+      log_event(EVENTLOG_INFORMATION_TYPE, SVP_EVENT_HEALTH_RECOVERED,
                 service->name, detail.c_str(), 0);
     }
     if (first_failure) {
       wchar_t count[32] = {};
       _snwprintf_s(count, _countof(count), _TRUNCATE, L"%lu",
                    failure_count);
-      log_event(EVENTLOG_WARNING_TYPE, NSSM_EVENT_HEALTH_FAILED,
+      log_event(EVENTLOG_WARNING_TYPE, SVP_EVENT_HEALTH_FAILED,
                 service->name, detail.c_str(), count, 0);
     }
     publish_status_snapshot(service);
     if (watchdog) {
-      log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_HEALTH_WATCHDOG,
+      log_event(EVENTLOG_ERROR_TYPE, SVP_EVENT_HEALTH_WATCHDOG,
                 service->name, detail.c_str(), 0);
       unsigned long error = ERROR_SUCCESS;
       if (service->job_handle &&
           ! terminate_service_job(service->job_handle,
                                   kHealthWatchdogExitCode, &error)) {
-        log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_TERMINATE_JOB_FAILED,
+        log_event(EVENTLOG_ERROR_TYPE, SVP_EVENT_TERMINATE_JOB_FAILED,
                   service->name, error_string(error), 0);
       }
       return kHealthWatchdogExitCode;
@@ -132,7 +132,7 @@ unsigned long WINAPI health_monitor_thread(void *argument) {
 
 }  // namespace
 
-bool start_health_monitor(nssm_service_t *service) {
+bool start_health_monitor(service_runtime_t *service) {
   if (! service || ! service->config ||
       service->config->health.type == health_check_type_t::disabled) {
     return true;
@@ -165,7 +165,7 @@ bool start_health_monitor(nssm_service_t *service) {
   return true;
 }
 
-void stop_health_monitor(nssm_service_t *service) {
+void stop_health_monitor(service_runtime_t *service) {
   if (! service || ! service->health_section_initialised) return;
   EnterCriticalSection(&service->health_section);
   HANDLE thread = service->health_thread;

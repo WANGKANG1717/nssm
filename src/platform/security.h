@@ -1,5 +1,5 @@
-#ifndef NSSM_SECURITY_H
-#define NSSM_SECURITY_H
+#ifndef SVP_SECURITY_H
+#define SVP_SECURITY_H
 
 #include <windows.h>
 

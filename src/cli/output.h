@@ -1,5 +1,5 @@
-#ifndef NSSM_CLI_OUTPUT_H
-#define NSSM_CLI_OUTPUT_H
+#ifndef SVP_CLI_OUTPUT_H
+#define SVP_CLI_OUTPUT_H
 
 #include <cstdio>
 #include <string>

@@ -17,7 +17,7 @@ int create_messages(const wchar_t *executable_path) {
       REG_OPTION_NON_VOLATILE,
       KEY_WRITE, nullptr, key.put(), nullptr);
   if (error != ERROR_SUCCESS) {
-    log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_OPENKEY_FAILED,
+    log_event(EVENTLOG_ERROR_TYPE, SVP_EVENT_OPENKEY_FAILED,
               kEventLogRegistryPath,
               error_string(error), 0);
     return 2;
@@ -31,7 +31,7 @@ int create_messages(const wchar_t *executable_path) {
       key.get(), L"EventMessageFile", 0, REG_SZ,
       reinterpret_cast<const unsigned char *>(path), bytes);
   if (result != ERROR_SUCCESS) {
-    log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_SETVALUE_FAILED,
+    log_event(EVENTLOG_ERROR_TYPE, SVP_EVENT_SETVALUE_FAILED,
               L"EventMessageFile", error_string(result), 0);
     return 3;
   }
@@ -41,7 +41,7 @@ int create_messages(const wchar_t *executable_path) {
                           reinterpret_cast<const unsigned char *>(&types),
                           sizeof(types));
   if (result != ERROR_SUCCESS) {
-    log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_SETVALUE_FAILED,
+    log_event(EVENTLOG_ERROR_TYPE, SVP_EVENT_SETVALUE_FAILED,
               L"TypesSupported", error_string(result), 0);
     return 4;
   }

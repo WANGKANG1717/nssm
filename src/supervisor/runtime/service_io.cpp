@@ -4,7 +4,7 @@
 #include "service.h"
 #include "service_constants.h"
 #include "string_utils.h"
-#include "nssm_io.h"
+#include "service_io.h"
 #include "utf8.h"
 #include "win32_handle.h"
 
@@ -22,7 +22,7 @@ static int dup_handle(HANDLE source_handle, HANDLE *dest_handle_ptr,
   if (! dest_handle_ptr) return 1;
 
   if (! DuplicateHandle(GetCurrentProcess(), source_handle, GetCurrentProcess(), dest_handle_ptr, 0, true, flags)) {
-    log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_DUPLICATEHANDLE_FAILED, source_description, dest_description, error_string(GetLastError()), 0);
+    log_event(EVENTLOG_ERROR_TYPE, SVP_EVENT_DUPLICATEHANDLE_FAILED, source_description, dest_description, error_string(GetLastError()), 0);
     return 2;
   }
   return 0;
@@ -48,21 +48,21 @@ void set_logger_rotation_state(volatile LONG *state, LONG value) {
 }
 
 bool request_logger_rotation(volatile LONG *state) {
-  return InterlockedCompareExchange(state, NSSM_ROTATE_ONLINE_ASAP,
-                                    NSSM_ROTATE_ONLINE) ==
-         NSSM_ROTATE_ONLINE;
+  return InterlockedCompareExchange(state, SVP_ROTATE_ONLINE_ASAP,
+                                    SVP_ROTATE_ONLINE) ==
+         SVP_ROTATE_ONLINE;
 }
 
 bool claim_logger_rotation(volatile LONG *state, bool requested) {
-  const LONG expected = requested ? NSSM_ROTATE_ONLINE_ASAP
-                                  : NSSM_ROTATE_ONLINE;
-  return InterlockedCompareExchange(state, NSSM_ROTATE_IN_PROGRESS,
+  const LONG expected = requested ? SVP_ROTATE_ONLINE_ASAP
+                                  : SVP_ROTATE_ONLINE;
+  return InterlockedCompareExchange(state, SVP_ROTATE_IN_PROGRESS,
                                     expected) == expected;
 }
 
 void finish_logger_rotation(volatile LONG *state) {
-  InterlockedCompareExchange(state, NSSM_ROTATE_ONLINE,
-                             NSSM_ROTATE_IN_PROGRESS);
+  InterlockedCompareExchange(state, SVP_ROTATE_ONLINE,
+                             SVP_ROTATE_IN_PROGRESS);
 }
 
 static HANDLE create_logging_thread(wchar_t *service_name, wchar_t *path, unsigned long sharing, unsigned long disposition, unsigned long flags, HANDLE *read_handle_ptr, HANDLE *pipe_handle_ptr, HANDLE *write_handle_ptr, unsigned long rotate_bytes_low, unsigned long rotate_bytes_high, unsigned long rotate_delay, unsigned long *tid_ptr, volatile LONG *rotate_online, HANDLE stop_event, bool timestamp_log, bool copy_and_truncate) {
@@ -79,14 +79,14 @@ static HANDLE create_logging_thread(wchar_t *service_name, wchar_t *path, unsign
           CloseHandle(*pipe_handle_ptr);
           *read_handle_ptr = nullptr;
           *pipe_handle_ptr = nullptr;
-          log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_CREATEPIPE_FAILED,
+          log_event(EVENTLOG_ERROR_TYPE, SVP_EVENT_CREATEPIPE_FAILED,
                     service_name, path, error_string(error), 0);
           SetLastError(error);
           return nullptr;
         }
       }
       else {
-        log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_CREATEPIPE_FAILED,
+        log_event(EVENTLOG_ERROR_TYPE, SVP_EVENT_CREATEPIPE_FAILED,
                   service_name, path, error_string(GetLastError()), 0);
         return (HANDLE) 0;
       }
@@ -95,7 +95,7 @@ static HANDLE create_logging_thread(wchar_t *service_name, wchar_t *path, unsign
 
   logger_t *logger = (logger_t *) HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(logger_t));
   if (! logger) {
-    log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_OUT_OF_MEMORY, L"logger", L"create_logging_thread()", 0);
+    log_event(EVENTLOG_ERROR_TYPE, SVP_EVENT_OUT_OF_MEMORY, L"logger", L"create_logging_thread()", 0);
     return (HANDLE) 0;
   }
 
@@ -121,7 +121,7 @@ static HANDLE create_logging_thread(wchar_t *service_name, wchar_t *path, unsign
 
   HANDLE thread_handle = CreateThread(NULL, 0, log_and_rotate, (void *) logger, 0, logger->tid_ptr);
   if (! thread_handle) {
-    log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_CREATETHREAD_FAILED, error_string(GetLastError()), 0);
+    log_event(EVENTLOG_ERROR_TYPE, SVP_EVENT_CREATETHREAD_FAILED, error_string(GetLastError()), 0);
     HeapFree(GetProcessHeap(), 0, logger);
   }
 
@@ -137,7 +137,7 @@ static inline void write_bom(logger_t *logger, unsigned long *out) {
   *out = 0;
   wchar_t bom = L'\ufeff';
   if (! WriteFile(logger->write_handle, (void *) &bom, sizeof(bom), out, 0)) {
-    log_event(EVENTLOG_WARNING_TYPE, NSSM_EVENT_SOMEBODY_SET_UP_US_THE_BOM, logger->service_name, logger->path, error_string(GetLastError()), 0);
+    log_event(EVENTLOG_WARNING_TYPE, SVP_EVENT_SOMEBODY_SET_UP_US_THE_BOM, logger->service_name, logger->path, error_string(GetLastError()), 0);
   }
 }
 
@@ -159,7 +159,7 @@ HANDLE write_to_file(wchar_t *path, unsigned long sharing, SECURITY_ATTRIBUTES *
 
   const unsigned long error = GetLastError();
   file.reset();
-  log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_CREATEFILE_FAILED, path,
+  log_event(EVENTLOG_ERROR_TYPE, SVP_EVENT_CREATEFILE_FAILED, path,
             error_string(error), 0);
   SetLastError(error);
   return INVALID_HANDLE_VALUE;
@@ -205,7 +205,7 @@ void rotate_file(wchar_t *service_name, wchar_t *path, unsigned long seconds, un
   else {
     error = GetLastError();
     if (error == ERROR_FILE_NOT_FOUND) return;
-    log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_ROTATE_FILE_FAILED, service_name, path, L"CreateFileW()", path, error_string(error), 0);
+    log_event(EVENTLOG_ERROR_TYPE, SVP_EVENT_ROTATE_FILE_FAILED, service_name, path, L"CreateFileW()", path, error_string(error), 0);
     /* Reuse current time for rotation timestamp. */
     seconds = low = high = 0;
     SystemTimeToFileTime(&st, &info.ftLastWriteTime);
@@ -243,7 +243,7 @@ void rotate_file(wchar_t *service_name, wchar_t *path, unsigned long seconds, un
   if (copy_and_truncate) {
     function = L"CopyFileW()";
     if (CopyFileW(path, rotated, TRUE)) {
-      file = write_to_file(path, NSSM_STDOUT_SHARING, 0, NSSM_STDOUT_DISPOSITION, NSSM_STDOUT_FLAGS);
+      file = write_to_file(path, SVP_STDOUT_SHARING, 0, SVP_STDOUT_DISPOSITION, SVP_STDOUT_FLAGS);
       if (file == INVALID_HANDLE_VALUE) ok = false;
       else {
         Sleep(delay);
@@ -259,17 +259,17 @@ void rotate_file(wchar_t *service_name, wchar_t *path, unsigned long seconds, un
     if (! MoveFileW(path, rotated)) ok = false;
   }
   if (ok) {
-    log_event(EVENTLOG_INFORMATION_TYPE, NSSM_EVENT_ROTATED, service_name, path, rotated, 0);
+    log_event(EVENTLOG_INFORMATION_TYPE, SVP_EVENT_ROTATED, service_name, path, rotated, 0);
     return;
   }
   error = GetLastError();
 
   if (error == ERROR_FILE_NOT_FOUND) return;
-  log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_ROTATE_FILE_FAILED, service_name, path, function, rotated, error_string(error), 0);
+  log_event(EVENTLOG_ERROR_TYPE, SVP_EVENT_ROTATE_FILE_FAILED, service_name, path, function, rotated, error_string(error), 0);
   return;
 }
 
-int get_output_handles(nssm_service_t *service, STARTUPINFOW *si) {
+int get_output_handles(service_runtime_t *service, STARTUPINFOW *si) {
   if (! si) return 1;
   bool inherit_handles = false;
 
@@ -280,7 +280,7 @@ int get_output_handles(nssm_service_t *service, STARTUPINFOW *si) {
   if (service->stdin_path[0]) {
     si->hStdInput = CreateFileW(service->stdin_path, FILE_READ_DATA, service->stdin_sharing, 0, service->stdin_disposition, service->stdin_flags, 0);
     if (si->hStdInput == INVALID_HANDLE_VALUE) {
-      log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_CREATEFILE_FAILED, service->stdin_path, error_string(GetLastError()), 0);
+      log_event(EVENTLOG_ERROR_TYPE, SVP_EVENT_CREATEFILE_FAILED, service->stdin_path, error_string(GetLastError()), 0);
       return 2;
     }
 
@@ -301,7 +301,7 @@ int get_output_handles(nssm_service_t *service, STARTUPINFOW *si) {
 
     if (service->use_stdout_pipe) {
       set_logger_rotation_state(&service->rotate_stdout_online,
-                                NSSM_ROTATE_ONLINE);
+                                SVP_ROTATE_ONLINE);
       service->stdout_pipe = si->hStdOutput = 0;
       service->stdout_thread = create_logging_thread(service->name, service->stdout_path, service->stdout_sharing, service->stdout_disposition, service->stdout_flags, &service->stdout_pipe, &service->stdout_si, &stdout_handle, service->rotate_bytes_low, service->rotate_bytes_high, service->rotate_delay, &service->stdout_tid, &service->rotate_stdout_online, service->stop_event, service->timestamp_log, service->stdout_copy_and_truncate);
       if (! service->stdout_thread) {
@@ -318,7 +318,7 @@ int get_output_handles(nssm_service_t *service, STARTUPINFOW *si) {
                      L"stdout",
                      DUPLICATE_CLOSE_SOURCE | DUPLICATE_SAME_ACCESS)) return 4;
       set_logger_rotation_state(&service->rotate_stdout_online,
-                                NSSM_ROTATE_OFFLINE);
+                                SVP_ROTATE_OFFLINE);
     }
 
     if (dup_handle(service->stdout_si, &si->hStdOutput, L"stdout_si",
@@ -339,7 +339,7 @@ int get_output_handles(nssm_service_t *service, STARTUPINFOW *si) {
       service->stderr_disposition = service->stdout_disposition;
       service->stderr_flags = service->stdout_flags;
       set_logger_rotation_state(&service->rotate_stderr_online,
-                                NSSM_ROTATE_OFFLINE);
+                                SVP_ROTATE_OFFLINE);
 
       /* A shared path derives the same pipe mode from the common log policy. */
       if (dup_handle(service->stdout_si, &service->stderr_si, L"stdout", L"stderr")) return 6;
@@ -357,7 +357,7 @@ int get_output_handles(nssm_service_t *service, STARTUPINFOW *si) {
 
       if (service->use_stderr_pipe) {
         set_logger_rotation_state(&service->rotate_stderr_online,
-                                  NSSM_ROTATE_ONLINE);
+                                  SVP_ROTATE_ONLINE);
         service->stderr_pipe = si->hStdError = 0;
         service->stderr_thread = create_logging_thread(service->name, service->stderr_path, service->stderr_sharing, service->stderr_disposition, service->stderr_flags, &service->stderr_pipe, &service->stderr_si, &stderr_handle, service->rotate_bytes_low, service->rotate_bytes_high, service->rotate_delay, &service->stderr_tid, &service->rotate_stderr_online, service->stop_event, service->timestamp_log, service->stderr_copy_and_truncate);
         if (! service->stderr_thread) {
@@ -374,7 +374,7 @@ int get_output_handles(nssm_service_t *service, STARTUPINFOW *si) {
                        L"stderr file", L"stderr",
                        DUPLICATE_CLOSE_SOURCE | DUPLICATE_SAME_ACCESS)) return 7;
         set_logger_rotation_state(&service->rotate_stderr_online,
-                                  NSSM_ROTATE_OFFLINE);
+                                  SVP_ROTATE_OFFLINE);
       }
     }
 
@@ -402,7 +402,7 @@ void close_output_handles(STARTUPINFOW *si) {
   if (si->hStdError) CloseHandle(si->hStdError);
 }
 
-void cleanup_loggers(nssm_service_t *service) {
+void cleanup_loggers(service_runtime_t *service) {
   unsigned long interval = kLoggerCleanupDeadlineMs;
   HANDLE thread_handle = service->stdout_thread;
   service->stdout_thread = nullptr;
@@ -476,8 +476,8 @@ static int try_read(logger_t *logger, void *address, unsigned long bufsize, unsi
 
 complain_read:
   /* Ignore the error if we've been requested to exit anyway. */
-  if (logger_rotation_state(logger->rotate_online) != NSSM_ROTATE_ONLINE) return ret;
-  if (! (*complained & COMPLAINED_READ)) log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_READFILE_FAILED, logger->service_name, logger->path, error_string(error), 0);
+  if (logger_rotation_state(logger->rotate_online) != SVP_ROTATE_ONLINE) return ret;
+  if (! (*complained & COMPLAINED_READ)) log_event(EVENTLOG_ERROR_TYPE, SVP_EVENT_READFILE_FAILED, logger->service_name, logger->path, error_string(error), 0);
   *complained |= COMPLAINED_READ;
   return ret;
 }
@@ -528,10 +528,10 @@ static int try_write(logger_t *logger, void *address, unsigned long bufsize, uns
   }
 
 complain_write:
-  if (logger_rotation_state(logger->rotate_online) == NSSM_ROTATE_OFFLINE) {
+  if (logger_rotation_state(logger->rotate_online) == SVP_ROTATE_OFFLINE) {
     return ret;
   }
-  if (! (*complained & COMPLAINED_WRITE)) log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_WRITEFILE_FAILED, logger->service_name, logger->path, error_string(error), 0);
+  if (! (*complained & COMPLAINED_WRITE)) log_event(EVENTLOG_ERROR_TYPE, SVP_EVENT_WRITEFILE_FAILED, logger->service_name, logger->path, error_string(error), 0);
   *complained |= COMPLAINED_WRITE;
   return ret;
 }
@@ -645,7 +645,7 @@ unsigned long WINAPI log_and_rotate(void *arg) {
 
     const LONG rotation_state = logger_rotation_state(logger->rotate_online);
     const bool requested_rotation =
-        rotation_state == NSSM_ROTATE_ONLINE_ASAP;
+        rotation_state == SVP_ROTATE_ONLINE_ASAP;
     const bool size_rotation =
         logger->size && size + (__int64) in >= logger->size;
     if (requested_rotation || size_rotation) {
@@ -692,7 +692,7 @@ unsigned long WINAPI log_and_rotate(void *arg) {
           if (logger->copy_and_truncate) {
             function = L"CopyFileW()";
             if (CopyFileW(logger->path, rotated, TRUE)) {
-              HANDLE file = write_to_file(logger->path, NSSM_STDOUT_SHARING, 0, NSSM_STDOUT_DISPOSITION, NSSM_STDOUT_FLAGS);
+              HANDLE file = write_to_file(logger->path, SVP_STDOUT_SHARING, 0, SVP_STDOUT_DISPOSITION, SVP_STDOUT_FLAGS);
               if (file == INVALID_HANDLE_VALUE) ok = false;
               else {
                 if (logger->stop_event) {
@@ -712,13 +712,13 @@ unsigned long WINAPI log_and_rotate(void *arg) {
             if (! MoveFileW(logger->path, rotated)) ok = false;
           }
           if (ok) {
-            log_event(EVENTLOG_INFORMATION_TYPE, NSSM_EVENT_ROTATED, logger->service_name, logger->path, rotated, 0);
+            log_event(EVENTLOG_INFORMATION_TYPE, SVP_EVENT_ROTATED, logger->service_name, logger->path, rotated, 0);
             size = 0LL;
           }
           else {
             error = GetLastError();
             if (error != ERROR_FILE_NOT_FOUND) {
-              if (! (complained & COMPLAINED_ROTATE)) log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_ROTATE_FILE_FAILED, logger->service_name, logger->path, function, rotated, error_string(error), 0);
+              if (! (complained & COMPLAINED_ROTATE)) log_event(EVENTLOG_ERROR_TYPE, SVP_EVENT_ROTATE_FILE_FAILED, logger->service_name, logger->path, function, rotated, error_string(error), 0);
               complained |= COMPLAINED_ROTATE;
               /* We can at least try to re-open the existing file. */
               logger->disposition = OPEN_ALWAYS;
@@ -729,7 +729,7 @@ unsigned long WINAPI log_and_rotate(void *arg) {
           logger->write_handle = write_to_file(logger->path, logger->sharing, 0, logger->disposition, logger->flags);
           if (logger->write_handle == INVALID_HANDLE_VALUE) {
             error = GetLastError();
-            log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_CREATEFILE_FAILED, logger->path, error_string(error), 0);
+            log_event(EVENTLOG_ERROR_TYPE, SVP_EVENT_CREATEFILE_FAILED, logger->path, error_string(error), 0);
             /* Oh dear.  Now we can't log anything further. */
             close_handle(&logger->read_handle);
             close_handle(&logger->write_handle);

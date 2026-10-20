@@ -109,7 +109,7 @@ struct process_collection_t {
   unsigned long error = ERROR_SUCCESS;
 };
 
-int collect_process(nssm_service_t *, kill_t *process) {
+int collect_process(service_runtime_t *, kill_t *process) {
   auto *collection = static_cast<process_collection_t *>(process->user_data);
   if (! collection || ! collection->entries) return 1;
   if (collection->error) return 1;

@@ -5,7 +5,7 @@
 #include "config_registration.h"
 #include "config_security.h"
 #include "recovery.h"
-#include "nssm_io.h"
+#include "service_io.h"
 #include "service.h"
 #include "string_utils.h"
 
@@ -32,7 +32,7 @@ bool copy_checked(const std::wstring &source, wchar_t *destination,
 }
 
 bool copy_config_environment(const application_config_t &application,
-                             nssm_service_t *service,
+                             service_runtime_t *service,
                              config_validation_t *validation) {
   const wchar_t empty_environment[] = {L'\0', L'\0'};
   std::vector<wchar_t> block;
@@ -63,7 +63,7 @@ bool copy_config_environment(const application_config_t &application,
 
 }  // namespace
 
-bool load_registered_service_config(nssm_service_t *service,
+bool load_registered_service_config(service_runtime_t *service,
                                     config_validation_t *validation) {
   if (! service || ! validation) return false;
 
@@ -131,12 +131,12 @@ bool load_registered_service_config(nssm_service_t *service,
   service->rotate_files = config->logging.maximum_bytes != 0;
   set_logger_rotation_state(&service->rotate_stdout_online,
       ! config->logging.stdout_path.empty() && service->rotate_files
-          ? NSSM_ROTATE_ONLINE
-          : NSSM_ROTATE_OFFLINE);
+          ? SVP_ROTATE_ONLINE
+          : SVP_ROTATE_OFFLINE);
   set_logger_rotation_state(&service->rotate_stderr_online,
       ! config->logging.stderr_path.empty() && service->rotate_files
-          ? NSSM_ROTATE_ONLINE
-          : NSSM_ROTATE_OFFLINE);
+          ? SVP_ROTATE_ONLINE
+          : SVP_ROTATE_OFFLINE);
   service->use_stdout_pipe = ! config->logging.stdout_path.empty() &&
                              (service->rotate_files || service->timestamp_log);
   service->use_stderr_pipe = ! config->logging.stderr_path.empty() &&

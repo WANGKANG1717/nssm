@@ -1,4 +1,4 @@
-function(nssm_configure_compiler target)
+function(svp_configure_compiler target)
   target_compile_options(${target} PRIVATE
     -Wall
     -Wextra

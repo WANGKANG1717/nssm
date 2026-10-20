@@ -1,11 +1,11 @@
-#ifndef NSSM_STATUS_SNAPSHOT_H
-#define NSSM_STATUS_SNAPSHOT_H
+#ifndef SVP_STATUS_SNAPSHOT_H
+#define SVP_STATUS_SNAPSHOT_H
 
 #include <windows.h>
 
 #include <string>
 
-struct nssm_service_t;
+struct service_runtime_t;
 
 enum class runtime_health_t : unsigned long {
   unknown,
@@ -30,9 +30,9 @@ struct status_snapshot_t {
   unsigned long long memory_bytes = 0;
 };
 
-bool create_status_snapshot(nssm_service_t *service);
-void publish_status_snapshot(nssm_service_t *service);
-void close_status_snapshot(nssm_service_t *service);
+bool create_status_snapshot(service_runtime_t *service);
+void publish_status_snapshot(service_runtime_t *service);
+void close_status_snapshot(service_runtime_t *service);
 bool read_status_snapshot(const std::wstring &service_name,
                           status_snapshot_t *snapshot,
                           unsigned long *error = nullptr);

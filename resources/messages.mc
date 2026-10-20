@@ -5,7 +5,7 @@ Chinese=0x0804:MSG00804
 )
 
 MessageId = 501
-SymbolicName = NSSM_MESSAGE_USAGE
+SymbolicName = SVP_MESSAGE_USAGE
 Severity = Informational
 Language = English
 SvcPilot: Windows service supervisor
@@ -89,7 +89,7 @@ SvcPilot：Windows 服务监督器
 .
 
 MessageId = +1
-SymbolicName = NSSM_MESSAGE_NOT_ADMINISTRATOR_CANNOT_INSTALL
+SymbolicName = SVP_MESSAGE_NOT_ADMINISTRATOR_CANNOT_INSTALL
 Severity = Informational
 Language = English
 Administrator access is needed to install a service.
@@ -99,7 +99,7 @@ Language = Chinese
 .
 
 MessageId = +1
-SymbolicName = NSSM_MESSAGE_NOT_ADMINISTRATOR_CANNOT_REMOVE
+SymbolicName = SVP_MESSAGE_NOT_ADMINISTRATOR_CANNOT_REMOVE
 Severity = Informational
 Language = English
 Administrator access is needed to remove a service.
@@ -109,7 +109,7 @@ Language = Chinese
 .
 
 MessageId = +1
-SymbolicName = NSSM_MESSAGE_PRE_REMOVE_SERVICE
+SymbolicName = SVP_MESSAGE_PRE_REMOVE_SERVICE
 Severity = Informational
 Language = English
 To remove a service, confirm explicitly: svp remove <servicename> confirm
@@ -119,7 +119,7 @@ Language = Chinese
 .
 
 MessageId = +1
-SymbolicName = NSSM_MESSAGE_ENUMSERVICESSTATUS_FAILED
+SymbolicName = SVP_MESSAGE_ENUMSERVICESSTATUS_FAILED
 Severity = Informational
 Language = English
 Can't open service!
@@ -131,7 +131,7 @@ EnumServicesStatus()：%ls
 .
 
 MessageId = +1
-SymbolicName = NSSM_MESSAGE_SERVICE_REMOVED
+SymbolicName = SVP_MESSAGE_SERVICE_REMOVED
 Severity = Informational
 Language = English
 Service "%ls" removed successfully!
@@ -141,7 +141,7 @@ Language = Chinese
 .
 
 MessageId = +1
-SymbolicName = NSSM_MESSAGE_BAD_CONTROL_RESPONSE
+SymbolicName = SVP_MESSAGE_BAD_CONTROL_RESPONSE
 Severity = Informational
 Language = English
 %ls: Unexpected status %ls in response to %ls control.
@@ -151,7 +151,7 @@ Language = Chinese
 .
 
 MessageId = 1001
-SymbolicName = NSSM_EVENT_DISPATCHER_FAILED
+SymbolicName = SVP_EVENT_DISPATCHER_FAILED
 Severity = Error
 Language = English
 StartServiceCtrlDispatcher() failed:
@@ -163,7 +163,7 @@ StartServiceCtrlDispatcher() 失败：
 .
 
 MessageId = +1
-SymbolicName = NSSM_EVENT_OUT_OF_MEMORY
+SymbolicName = SVP_EVENT_OUT_OF_MEMORY
 Severity = Error
 Language = English
 Out of memory for %1 in %2!
@@ -173,7 +173,7 @@ Language = Chinese
 .
 
 MessageId = +1
-SymbolicName = NSSM_EVENT_REGISTERSERVICECTRLHANDER_FAILED
+SymbolicName = SVP_EVENT_REGISTERSERVICECTRLHANDER_FAILED
 Severity = Error
 Language = English
 RegisterServiceCtrlHandlerEx() failed:
@@ -185,7 +185,7 @@ RegisterServiceCtrlHandlerEx() 失败：
 .
 
 MessageId = +1
-SymbolicName = NSSM_EVENT_START_SERVICE_FAILED
+SymbolicName = SVP_EVENT_START_SERVICE_FAILED
 Severity = Error
 Language = English
 Can't start %1 for service %2.
@@ -197,7 +197,7 @@ Language = Chinese
 .
 
 MessageId = +1
-SymbolicName = NSSM_EVENT_RESTART_SERVICE_FAILED
+SymbolicName = SVP_EVENT_RESTART_SERVICE_FAILED
 Severity = Warning
 Language = English
 Failed to restart %1 for service %2.
@@ -209,7 +209,7 @@ Language = Chinese
 .
 
 MessageId = +1
-SymbolicName = NSSM_EVENT_STARTED_SERVICE
+SymbolicName = SVP_EVENT_STARTED_SERVICE
 Severity = Informational
 Language = English
 Started %1 %2 for service %3 in %4.
@@ -219,7 +219,7 @@ Language = Chinese
 .
 
 MessageId = +1
-SymbolicName = NSSM_EVENT_REGISTERWAITFORSINGLEOBJECT_FAILED
+SymbolicName = SVP_EVENT_REGISTERWAITFORSINGLEOBJECT_FAILED
 Severity = Warning
 Language = English
 Service %1 may claim to be still running when %2 exits.
@@ -233,7 +233,7 @@ RegisterWaitForSingleObject() 失败：
 .
 
 MessageId = +1
-SymbolicName = NSSM_EVENT_CREATEPROCESS_FAILED
+SymbolicName = SVP_EVENT_CREATEPROCESS_FAILED
 Severity = Error
 Language = English
 Failed to start service %1.  Program %2 couldn't be launched.
@@ -247,7 +247,7 @@ CreateProcess() 失败：
 .
 
 MessageId = +1
-SymbolicName = NSSM_EVENT_TERMINATEPROCESS
+SymbolicName = SVP_EVENT_TERMINATEPROCESS
 Severity = Informational
 Language = English
 Killing process %2 because service %1 is stopping.
@@ -257,7 +257,7 @@ Language = Chinese
 .
 
 MessageId = +1
-SymbolicName = NSSM_EVENT_PROCESS_ALREADY_STOPPED
+SymbolicName = SVP_EVENT_PROCESS_ALREADY_STOPPED
 Severity = Informational
 Language = English
 Requested stop of service %1.  No action is required as program %2 is not running.
@@ -267,7 +267,7 @@ Language = Chinese
 .
 
 MessageId = +1
-SymbolicName = NSSM_EVENT_ENDED_SERVICE
+SymbolicName = SVP_EVENT_ENDED_SERVICE
 Severity = Informational
 Language = English
 Program %1 for service %2 exited with return code %3.
@@ -277,7 +277,7 @@ Language = Chinese
 .
 
 MessageId = +1
-SymbolicName = NSSM_EVENT_EXIT_RESTART
+SymbolicName = SVP_EVENT_EXIT_RESTART
 Severity = Informational
 Language = English
 Service %1 action for exit code %2 is %3.
@@ -289,7 +289,7 @@ Language = Chinese
 .
 
 MessageId = +1
-SymbolicName = NSSM_EVENT_OPENKEY_FAILED
+SymbolicName = SVP_EVENT_OPENKEY_FAILED
 Severity = Error
 Language = English
 Failed to open registry key HKLM\%1:
@@ -301,7 +301,7 @@ Language = Chinese
 .
 
 MessageId = +1
-SymbolicName = NSSM_EVENT_SETVALUE_FAILED
+SymbolicName = SVP_EVENT_SETVALUE_FAILED
 Severity = Error
 Language = English
 Failed to write registry value %1:
@@ -313,7 +313,7 @@ Language = Chinese
 .
 
 MessageId = +1
-SymbolicName = NSSM_EVENT_KILLING
+SymbolicName = SVP_EVENT_KILLING
 Severity = Informational
 Language = English
 Killing process tree of process %2 for service %1 with exit code %3
@@ -323,7 +323,7 @@ Language = Chinese
 .
 
 MessageId = +1
-SymbolicName = NSSM_EVENT_CREATETOOLHELP32SNAPSHOT_PROCESS_FAILED
+SymbolicName = SVP_EVENT_CREATETOOLHELP32SNAPSHOT_PROCESS_FAILED
 Severity = Error
 Language = English
 Failed to create snapshot of running processes when terminating service %1:
@@ -335,7 +335,7 @@ Language = Chinese
 .
 
 MessageId = +1
-SymbolicName = NSSM_EVENT_PROCESS_ENUMERATE_FAILED
+SymbolicName = SVP_EVENT_PROCESS_ENUMERATE_FAILED
 Severity = Error
 Language = English
 Failed to enumerate running processes when terminating service %1:
@@ -347,7 +347,7 @@ Language = Chinese
 .
 
 MessageId = +1
-SymbolicName = NSSM_EVENT_OPENPROCESS_FAILED
+SymbolicName = SVP_EVENT_OPENPROCESS_FAILED
 Severity = Error
 Language = English
 Failed to open process handle for process with PID %1 when terminating service %2:
@@ -359,7 +359,7 @@ Language = Chinese
 .
 
 MessageId = +1
-SymbolicName = NSSM_EVENT_KILL_PROCESS_TREE
+SymbolicName = SVP_EVENT_KILL_PROCESS_TREE
 Severity = Informational
 Language = English
 Killing PID %1 in process tree of PID %2 because service %3 is stopping.
@@ -369,7 +369,7 @@ Language = Chinese
 .
 
 MessageId = +1
-SymbolicName = NSSM_EVENT_TERMINATEPROCESS_FAILED
+SymbolicName = SVP_EVENT_TERMINATEPROCESS_FAILED
 Severity = Error
 Language = English
 Failed to terminate process with PID %1 for service %2:
@@ -381,7 +381,7 @@ Language = Chinese
 .
 
 MessageId = +1
-SymbolicName = NSSM_EVENT_CREATETOOLHELP32SNAPSHOT_THREAD_FAILED
+SymbolicName = SVP_EVENT_CREATETOOLHELP32SNAPSHOT_THREAD_FAILED
 Severity = Error
 Language = English
 Failed to create snapshot of running threads when terminating service %1:
@@ -393,7 +393,7 @@ Language = Chinese
 .
 
 MessageId = +1
-SymbolicName = NSSM_EVENT_THREAD_ENUMERATE_FAILED
+SymbolicName = SVP_EVENT_THREAD_ENUMERATE_FAILED
 Severity = Error
 Language = English
 Failed to enumerate running threads when terminating service %1:
@@ -405,7 +405,7 @@ Language = Chinese
 .
 
 MessageId = +1
-SymbolicName = NSSM_EVENT_RESET_THROTTLE
+SymbolicName = SVP_EVENT_RESET_THROTTLE
 Severity = Informational
 Language = English
 Request to resume service %1.  Throttling of restart attempts will be reset.
@@ -415,7 +415,7 @@ Language = Chinese
 .
 
 MessageId = +1
-SymbolicName = NSSM_EVENT_SERVICE_CONTROL_HANDLED
+SymbolicName = SVP_EVENT_SERVICE_CONTROL_HANDLED
 Severity = Informational
 Language = English
 Service %1 received %2 control, which will be handled.
@@ -425,7 +425,7 @@ Language = Chinese
 .
 
 MessageId = +1
-SymbolicName = NSSM_EVENT_SERVICE_CONTROL_NOT_HANDLED
+SymbolicName = SVP_EVENT_SERVICE_CONTROL_NOT_HANDLED
 Severity = Informational
 Language = English
 Service %1 received unsupported %2 control, which will not be handled.
@@ -435,7 +435,7 @@ Language = Chinese
 .
 
 MessageId = +1
-SymbolicName = NSSM_EVENT_SERVICE_CONTROL_UNKNOWN
+SymbolicName = SVP_EVENT_SERVICE_CONTROL_UNKNOWN
 Severity = Informational
 Language = English
 Service %1 received unknown service control message %2, which will be ignored.
@@ -445,7 +445,7 @@ Language = Chinese
 .
 
 MessageId = +1
-SymbolicName = NSSM_EVENT_SERVICE_CONFIG_FAILURE_ACTIONS_FAILED
+SymbolicName = SVP_EVENT_SERVICE_CONFIG_FAILURE_ACTIONS_FAILED
 Severity = Informational
 Language = English
 Error configuring service failure actions for service %1.  The service will not be subject to recovery actions if it exits gracefully with a non-zero exit code.
@@ -460,7 +460,7 @@ ChangeServiceConfig2() 失败：
 .
 
 MessageId = +1
-SymbolicName = NSSM_EVENT_GETPROCESSTIMES_FAILED
+SymbolicName = SVP_EVENT_GETPROCESSTIMES_FAILED
 Severity = Error
 Language = English
 GetProcessTimes() failed:
@@ -472,7 +472,7 @@ GetProcessTimes() 失败：
 .
 
 MessageId = +1
-SymbolicName = NSSM_EVENT_GETEXITCODEPROCESS_FAILED
+SymbolicName = SVP_EVENT_GETEXITCODEPROCESS_FAILED
 Severity = Error
 Language = English
 Failed to read the exit code for service %1.
@@ -486,7 +486,7 @@ GetExitCodeProcess() 失败：
 .
 
 MessageId = +1
-SymbolicName = NSSM_EVENT_UNREGISTERWAIT_FAILED
+SymbolicName = SVP_EVENT_UNREGISTERWAIT_FAILED
 Severity = Error
 Language = English
 Failed to unregister the process wait for service %1:
@@ -498,7 +498,7 @@ Language = Chinese
 .
 
 MessageId = +1
-SymbolicName = NSSM_EVENT_ATTACHCONSOLE_FAILED
+SymbolicName = SVP_EVENT_ATTACHCONSOLE_FAILED
 Severity = Error
 Language = English
 Error attaching to console for service %1.
@@ -512,7 +512,7 @@ AttachConsole() 失败：
 .
 
 MessageId = +1
-SymbolicName = NSSM_EVENT_SETCONSOLECTRLHANDLER_FAILED
+SymbolicName = SVP_EVENT_SETCONSOLECTRLHANDLER_FAILED
 Severity = Error
 Language = English
 Error setting null handler for Control-C events sent to service %1.
@@ -526,7 +526,7 @@ SetConsoleCtrlHandler() 失败：
 .
 
 MessageId = +1
-SymbolicName = NSSM_EVENT_GENERATECONSOLECTRLEVENT_FAILED
+SymbolicName = SVP_EVENT_GENERATECONSOLECTRLEVENT_FAILED
 Severity = Error
 Language = English
 Error generating Control-C event for service %1.
@@ -540,7 +540,7 @@ GenerateConsoleCtrlEvent() 失败：
 .
 
 MessageId = +1
-SymbolicName = NSSM_EVENT_FREECONSOLE_FAILED
+SymbolicName = SVP_EVENT_FREECONSOLE_FAILED
 Severity = Warning
 Language = English
 Error detaching from console for service %1.
@@ -554,7 +554,7 @@ FreeConsole() 失败：
 .
 
 MessageId = +1
-SymbolicName = NSSM_EVENT_CREATEFILE_FAILED
+SymbolicName = SVP_EVENT_CREATEFILE_FAILED
 Severity = Error
 Language = English
 CreateFile() failed to open %1:
@@ -566,7 +566,7 @@ CreateFile() 打开 %1 失败：
 .
 
 MessageId = +1
-SymbolicName = NSSM_EVENT_DUPLICATEHANDLE_FAILED
+SymbolicName = SVP_EVENT_DUPLICATEHANDLE_FAILED
 Severity = Error
 Language = English
 Error duplicating the filehandle previously opened for %1 as %2.
@@ -580,7 +580,7 @@ DuplicateHandle() 失败：
 .
 
 MessageId = +1
-SymbolicName = NSSM_EVENT_GET_OUTPUT_HANDLES_FAILED
+SymbolicName = SVP_EVENT_GET_OUTPUT_HANDLES_FAILED
 Severity = Error
 Language = English
 Error setting up one or more I/O filehandles.  Service %1 will not be started.
@@ -590,7 +590,7 @@ Language = Chinese
 .
 
 MessageId = +1
-SymbolicName = NSSM_EVENT_CREATETHREAD_FAILED
+SymbolicName = SVP_EVENT_CREATETHREAD_FAILED
 Severity = Error
 Language = English
 CreateThread() failed:
@@ -602,7 +602,7 @@ CreateThread() 失败：
 .
 
 MessageId = +1
-SymbolicName = NSSM_EVENT_ROTATE_FILE_FAILED
+SymbolicName = SVP_EVENT_ROTATE_FILE_FAILED
 Severity = Error
 Language = English
 Failed to rotate output file %2 for service %1.
@@ -616,7 +616,7 @@ Language = Chinese
 .
 
 MessageId = +1
-SymbolicName = NSSM_EVENT_CREATE_JOB_FAILED
+SymbolicName = SVP_EVENT_CREATE_JOB_FAILED
 Severity = Error
 Language = English
 Failed to create or configure a Job Object for service %1:
@@ -628,7 +628,7 @@ Language = Chinese
 .
 
 MessageId = +1
-SymbolicName = NSSM_EVENT_ASSIGN_JOB_FAILED
+SymbolicName = SVP_EVENT_ASSIGN_JOB_FAILED
 Severity = Error
 Language = English
 Failed to assign the application process to the Job Object for service %1:
@@ -640,7 +640,7 @@ Language = Chinese
 .
 
 MessageId = +1
-SymbolicName = NSSM_EVENT_TERMINATE_JOB_FAILED
+SymbolicName = SVP_EVENT_TERMINATE_JOB_FAILED
 Severity = Warning
 Language = English
 Failed to terminate the Job Object for service %1:
@@ -652,7 +652,7 @@ Language = Chinese
 .
 
 MessageId = +1
-SymbolicName = NSSM_EVENT_RESUME_PROCESS_FAILED
+SymbolicName = SVP_EVENT_RESUME_PROCESS_FAILED
 Severity = Error
 Language = English
 Failed to resume the application process for service %1:
@@ -664,7 +664,7 @@ Language = Chinese
 .
 
 MessageId = +1
-SymbolicName = NSSM_EVENT_CONFIG_LOAD_FAILED
+SymbolicName = SVP_EVENT_CONFIG_LOAD_FAILED
 Severity = Error
 Language = English
 Failed to load the declarative configuration for service %1:
@@ -676,7 +676,7 @@ Language = Chinese
 .
 
 MessageId = +1
-SymbolicName = NSSM_EVENT_RECOVERY_STOPPED
+SymbolicName = SVP_EVENT_RECOVERY_STOPPED
 Severity = Warning
 Language = English
 Service %1 will not be restarted: %2.
@@ -686,7 +686,7 @@ Language = Chinese
 .
 
 MessageId = +1
-SymbolicName = NSSM_EVENT_HEALTH_MONITOR_START_FAILED
+SymbolicName = SVP_EVENT_HEALTH_MONITOR_START_FAILED
 Severity = Error
 Language = English
 Failed to start the health monitor for service %1: %2.
@@ -696,7 +696,7 @@ Language = Chinese
 .
 
 MessageId = +1
-SymbolicName = NSSM_EVENT_HEALTH_FAILED
+SymbolicName = SVP_EVENT_HEALTH_FAILED
 Severity = Warning
 Language = English
 Health check for service %1 failed: %2 (consecutive failures: %3).
@@ -706,7 +706,7 @@ Language = Chinese
 .
 
 MessageId = +1
-SymbolicName = NSSM_EVENT_HEALTH_RECOVERED
+SymbolicName = SVP_EVENT_HEALTH_RECOVERED
 Severity = Informational
 Language = English
 Health check for service %1 recovered: %2.
@@ -716,7 +716,7 @@ Language = Chinese
 .
 
 MessageId = +1
-SymbolicName = NSSM_EVENT_HEALTH_WATCHDOG
+SymbolicName = SVP_EVENT_HEALTH_WATCHDOG
 Severity = Error
 Language = English
 Health watchdog is restarting service %1 after reaching the failure threshold: %2.
@@ -726,7 +726,7 @@ Language = Chinese
 .
 
 MessageId = +1
-SymbolicName = NSSM_EVENT_RESOURCE_MONITOR_START_FAILED
+SymbolicName = SVP_EVENT_RESOURCE_MONITOR_START_FAILED
 Severity = Error
 Language = English
 Failed to start the resource monitor for service %1: %2.
@@ -736,7 +736,7 @@ Language = Chinese
 .
 
 MessageId = +1
-SymbolicName = NSSM_EVENT_READINESS_READY
+SymbolicName = SVP_EVENT_READINESS_READY
 Severity = Informational
 Language = English
 Service %1 is ready: %2.
@@ -746,7 +746,7 @@ Language = Chinese
 .
 
 MessageId = +1
-SymbolicName = NSSM_EVENT_READINESS_FAILED
+SymbolicName = SVP_EVENT_READINESS_FAILED
 Severity = Error
 Language = English
 Service %1 failed its readiness check: %2.
@@ -756,7 +756,7 @@ Language = Chinese
 .
 
 MessageId = +1
-SymbolicName = NSSM_EVENT_STATUS_SNAPSHOT_FAILED
+SymbolicName = SVP_EVENT_STATUS_SNAPSHOT_FAILED
 Severity = Warning
 Language = English
 Failed to create the runtime status snapshot for service %1: %2.
@@ -766,7 +766,7 @@ Language = Chinese
 .
 
 MessageId = +1
-SymbolicName = NSSM_EVENT_LIFECYCLE_COMMAND_FAILED
+SymbolicName = SVP_EVENT_LIFECYCLE_COMMAND_FAILED
 Severity = Error
 Language = English
 Service %1 lifecycle phase %2 failed: %3.
@@ -776,7 +776,7 @@ Language = Chinese
 .
 
 MessageId = +1
-SymbolicName = NSSM_EVENT_PERSIST_FAILURE_FAILED
+SymbolicName = SVP_EVENT_PERSIST_FAILURE_FAILED
 Severity = Warning
 Language = English
 Failed to persist failure state for service %1: %2.
@@ -786,7 +786,7 @@ Language = Chinese
 .
 
 MessageId = +1
-SymbolicName = NSSM_EVENT_CONFIGURE_JOB_FAILED
+SymbolicName = SVP_EVENT_CONFIGURE_JOB_FAILED
 Severity = Error
 Language = English
 Failed to configure Job Object resource limits for service %1: %2.
@@ -796,7 +796,7 @@ Language = Chinese
 .
 
 MessageId = +1
-SymbolicName = NSSM_EVENT_RESOURCE_EXCEEDED
+SymbolicName = SVP_EVENT_RESOURCE_EXCEEDED
 Severity = Error
 Language = English
 Service %1 exceeded its %2: %3.
@@ -806,7 +806,7 @@ Language = Chinese
 .
 
 MessageId = +1
-SymbolicName = NSSM_EVENT_CREATEPIPE_FAILED
+SymbolicName = SVP_EVENT_CREATEPIPE_FAILED
 Severity = Error
 Language = English
 Failed to set up a pipe to read output from service %1.
@@ -820,7 +820,7 @@ CreatePipe()：%3
 .
 
 MessageId = +1
-SymbolicName = NSSM_EVENT_READFILE_FAILED
+SymbolicName = SVP_EVENT_READFILE_FAILED
 Severity = Error
 Language = English
 Failed to read output for service %1.
@@ -834,7 +834,7 @@ ReadFile()：%3
 .
 
 MessageId = +1
-SymbolicName = NSSM_EVENT_WRITEFILE_FAILED
+SymbolicName = SVP_EVENT_WRITEFILE_FAILED
 Severity = Error
 Language = English
 Failed to write output for service %1 to file %2.
@@ -848,7 +848,7 @@ WriteFile()：%3
 .
 
 MessageId = +1
-SymbolicName = NSSM_EVENT_SOMEBODY_SET_UP_US_THE_BOM
+SymbolicName = SVP_EVENT_SOMEBODY_SET_UP_US_THE_BOM
 Severity = Warning
 Language = English
 Output from service %1 was detected as being in UTF-16 format but an attempt to write an appropriate byte order marker failed.
@@ -863,7 +863,7 @@ WriteFile()：%3
 .
 
 MessageId = +1
-SymbolicName = NSSM_EVENT_ROTATED
+SymbolicName = SVP_EVENT_ROTATED
 Severity = Informational
 Language = English
 Rotated output file %2 for service %1 to %3.
@@ -873,7 +873,7 @@ Language = Chinese
 .
 
 MessageId = +1
-SymbolicName = NSSM_EVENT_AWAITING_SINGLE_HANDLE
+SymbolicName = SVP_EVENT_AWAITING_SINGLE_HANDLE
 Severity = Informational
 Language = English
 %1 has waited %3 of %5 milliseconds for the %2 handle.
@@ -885,7 +885,7 @@ Language = Chinese
 .
 
 MessageId = +1
-SymbolicName = NSSM_EVENT_CREATEEVENT_FAILED
+SymbolicName = SVP_EVENT_CREATEEVENT_FAILED
 Severity = Error
 Language = English
 Failed to create the stop event for service %1:
@@ -897,7 +897,7 @@ Language = Chinese
 .
 
 MessageId = +1
-SymbolicName = NSSM_EVENT_SETSERVICESTATUS_FAILED
+SymbolicName = SVP_EVENT_SETSERVICESTATUS_FAILED
 Severity = Error
 Language = English
 Failed to report service %1 status while %2:

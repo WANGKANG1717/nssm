@@ -22,7 +22,7 @@ wchar_t *copy_environment_block(const wchar_t *environment) {
       HeapAlloc(GetProcessHeap(), 0, length * sizeof(wchar_t)));
   if (! copy) {
     SetLastError(ERROR_NOT_ENOUGH_MEMORY);
-    log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_OUT_OF_MEMORY,
+    log_event(EVENTLOG_ERROR_TYPE, SVP_EVENT_OUT_OF_MEMORY,
               L"environment", L"copy_environment_block()", 0);
     return nullptr;
   }

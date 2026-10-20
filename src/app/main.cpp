@@ -57,8 +57,8 @@ const application_paths_t &application_paths() {
 
 }  // namespace
 
-static const wchar_t *nssm_unquoted_imagepath();
-static const wchar_t *nssm_imagepath();
+static const wchar_t *svp_unquoted_imagepath();
+static const wchar_t *svp_imagepath();
 
 /* User requested us to print our version. */
 static bool is_version(const wchar_t *s) {
@@ -88,18 +88,18 @@ static int elevate(int argc, wchar_t **argv, unsigned long message) {
   SHELLEXECUTEINFOW sei = {};
   sei.cbSize = sizeof(sei);
   sei.lpVerb = L"runas";
-  sei.lpFile = nssm_unquoted_imagepath();
+  sei.lpFile = svp_unquoted_imagepath();
   sei.lpParameters = parameters.c_str();
   sei.nShow = SW_SHOW;
 
   return ShellExecuteExW(&sei) ? 0 : 100;
 }
 
-static const wchar_t *nssm_unquoted_imagepath() {
+static const wchar_t *svp_unquoted_imagepath() {
   return application_paths().unquoted.c_str();
 }
 
-static const wchar_t *nssm_imagepath() {
+static const wchar_t *svp_imagepath() {
   return application_paths().quoted.c_str();
 }
 
@@ -127,8 +127,8 @@ int wmain(int argc, wchar_t **argv) {
     if (strings_equal_ignore_case(argv[1], L"--help") ||
         strings_equal_ignore_case(argv[1], L"-h")) return usage(0);
     if (is_version(argv[1])) {
-      wprintf(L"%ls %ls %ls %ls\n", kProductName, NSSM_VERSION,
-               NSSM_CONFIGURATION, NSSM_DATE);
+      wprintf(L"%ls %ls %ls %ls\n", kProductName, SVP_VERSION,
+               SVP_CONFIGURATION, SVP_DATE);
       return 0;
     }
     if (strings_equal_ignore_case(argv[1], L"validate")) {
@@ -136,7 +136,7 @@ int wmain(int argc, wchar_t **argv) {
     }
     if (strings_equal_ignore_case(argv[1], L"plan")) {
       return plan_service_config_command(argc - 2, argv + 2,
-                                         nssm_imagepath());
+                                         svp_imagepath());
     }
     if (strings_equal_ignore_case(argv[1], L"export")) {
       return export_service_config_command(argc - 2, argv + 2);
@@ -150,14 +150,14 @@ int wmain(int argc, wchar_t **argv) {
           return static_cast<int>(cli_exit_code::permission);
         }
         return elevate(argc, argv,
-                       NSSM_MESSAGE_NOT_ADMINISTRATOR_CANNOT_INSTALL);
+                       SVP_MESSAGE_NOT_ADMINISTRATOR_CANNOT_INSTALL);
       }
-      create_messages(nssm_unquoted_imagepath());
+      create_messages(svp_unquoted_imagepath());
       return apply_service_config_command(argc - 2, argv + 2,
-                                          nssm_imagepath());
+                                          svp_imagepath());
     }
     if (strings_equal_ignore_case(argv[1], L"credential")) {
-      if (! is_admin) return elevate(argc, argv, NSSM_MESSAGE_NOT_ADMINISTRATOR_CANNOT_INSTALL);
+      if (! is_admin) return elevate(argc, argv, SVP_MESSAGE_NOT_ADMINISTRATOR_CANNOT_INSTALL);
       return credential_command(argc - 2, argv + 2);
     }
     if (strings_equal_ignore_case(argv[1], L"logs")) {
@@ -187,7 +187,7 @@ int wmain(int argc, wchar_t **argv) {
     if (strings_equal_ignore_case(argv[1], L"is-active")) return is_active_command(argc - 2, argv + 2);
     if (strings_equal_ignore_case(argv[1], L"is-failed")) return is_failed_command(argc - 2, argv + 2);
     if (strings_equal_ignore_case(argv[1], L"reset-failed")) {
-      if (! is_admin) return elevate(argc, argv, NSSM_MESSAGE_NOT_ADMINISTRATOR_CANNOT_INSTALL);
+      if (! is_admin) return elevate(argc, argv, SVP_MESSAGE_NOT_ADMINISTRATOR_CANNOT_INSTALL);
       return reset_failed_command(argc - 2, argv + 2);
     }
     if (strings_equal_ignore_case(argv[1], L"is-enabled")) return is_enabled_command(argc - 2, argv + 2);
@@ -195,7 +195,7 @@ int wmain(int argc, wchar_t **argv) {
         strings_equal_ignore_case(argv[1], L"disable") ||
         strings_equal_ignore_case(argv[1], L"mask") ||
         strings_equal_ignore_case(argv[1], L"unmask")) {
-      if (! is_admin) return elevate(argc, argv, NSSM_MESSAGE_NOT_ADMINISTRATOR_CANNOT_INSTALL);
+      if (! is_admin) return elevate(argc, argv, SVP_MESSAGE_NOT_ADMINISTRATOR_CANNOT_INSTALL);
       const unsigned long start_type =
           strings_equal_ignore_case(argv[1], L"enable") ? SERVICE_AUTO_START :
           strings_equal_ignore_case(argv[1], L"mask") ? SERVICE_DISABLED :
@@ -206,21 +206,21 @@ int wmain(int argc, wchar_t **argv) {
     if (strings_equal_ignore_case(argv[1], L"remove")) {
       if (! is_admin) {
         return elevate(argc, argv,
-                       NSSM_MESSAGE_NOT_ADMINISTRATOR_CANNOT_REMOVE);
+                       SVP_MESSAGE_NOT_ADMINISTRATOR_CANNOT_REMOVE);
       }
       return pre_remove_service(argc - 2, argv + 2);
     }
   }
 
   /* Register messages */
-  if (is_admin) create_messages(nssm_unquoted_imagepath());
+  if (is_admin) create_messages(svp_unquoted_imagepath());
 
   SERVICE_TABLE_ENTRYW table[] = {
       {const_cast<wchar_t *>(kProductName), service_main}, {nullptr, nullptr}};
   if (! StartServiceCtrlDispatcherW(table)) {
     unsigned long error = GetLastError();
     if (error == ERROR_FAILED_SERVICE_CONTROLLER_CONNECT) return usage(1);
-    log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_DISPATCHER_FAILED,
+    log_event(EVENTLOG_ERROR_TYPE, SVP_EVENT_DISPATCHER_FAILED,
               error_string(error), 0);
     return 100;
   }

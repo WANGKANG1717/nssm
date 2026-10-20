@@ -1,27 +1,27 @@
 #pragma once
 
-#define NSSM_WIDEN_INNER(value) L##value
-#define NSSM_WIDEN(value) NSSM_WIDEN_INNER(value)
+#define SVP_WIDEN_INNER(value) L##value
+#define SVP_WIDEN(value) SVP_WIDEN_INNER(value)
 
-#define NSSM_VERSION L"@PROJECT_VERSION@"
-#define NSSM_VERSIONINFO @PROJECT_VERSION_MAJOR@,@PROJECT_VERSION_MINOR@,@PROJECT_VERSION_PATCH@,0
-#ifndef NSSM_BUILD_LABEL
-#define NSSM_BUILD_LABEL "release"
+#define SVP_VERSION L"@PROJECT_VERSION@"
+#define SVP_VERSIONINFO @PROJECT_VERSION_MAJOR@,@PROJECT_VERSION_MINOR@,@PROJECT_VERSION_PATCH@,0
+#ifndef SVP_BUILD_LABEL
+#define SVP_BUILD_LABEL "release"
 #endif
-#define NSSM_DATE NSSM_WIDEN(NSSM_BUILD_LABEL)
-#define NSSM_ARCHITECTURE L"64-bit"
+#define SVP_DATE SVP_WIDEN(SVP_BUILD_LABEL)
+#define SVP_ARCHITECTURE L"64-bit"
 #ifdef _DEBUG
-#define NSSM_DEBUG L" debug"
+#define SVP_DEBUG L" debug"
 #else
-#define NSSM_DEBUG L""
+#define SVP_DEBUG L""
 #endif
-#define NSSM_CONFIGURATION NSSM_ARCHITECTURE NSSM_DEBUG
-#define NSSM_FILEFLAGS 0L
-#define NSSM_COPYRIGHT L"Public Domain; Author fightroad"
+#define SVP_CONFIGURATION SVP_ARCHITECTURE SVP_DEBUG
+#define SVP_FILEFLAGS 0L
+#define SVP_COPYRIGHT L"Public Domain; Author fightroad"
 
 /* Configurable metadata consumed by the VERSIONINFO resource. */
-#define NSSM_COMPANY L"WANGKANG1717"
-#define NSSM_FILE_DESCRIPTION L"SvcPilot Windows service supervisor"
-#define NSSM_COMMENTS L"https://github.com/WANGKANG1717/nssm"
-#define NSSM_ORIGINAL_FILENAME L"svp.exe"
-#define NSSM_PRODUCT_NAME L"SvcPilot"
+#define SVP_COMPANY L"WANGKANG1717"
+#define SVP_FILE_DESCRIPTION L"SvcPilot Windows service supervisor"
+#define SVP_COMMENTS L"https://github.com/WANGKANG1717/nssm"
+#define SVP_ORIGINAL_FILENAME L"svp.exe"
+#define SVP_PRODUCT_NAME L"SvcPilot"

@@ -1,18 +1,18 @@
 include(CMakeParseArguments)
 
-function(nssm_compile_messages)
+function(svp_compile_messages)
   set(options)
   set(one_value_args SOURCE OUTPUT_DIR OUT_HEADER OUT_RESOURCE OUT_BINARIES)
   cmake_parse_arguments(MSG "${options}" "${one_value_args}" "" ${ARGN})
 
   foreach(required_arg SOURCE OUTPUT_DIR OUT_HEADER OUT_RESOURCE OUT_BINARIES)
     if(NOT MSG_${required_arg})
-      message(FATAL_ERROR "nssm_compile_messages requires ${required_arg}")
+      message(FATAL_ERROR "svp_compile_messages requires ${required_arg}")
     endif()
   endforeach()
 
-  find_program(NSSM_WINDMC_EXECUTABLE NAMES windmc REQUIRED)
-  find_program(NSSM_POWERSHELL_EXECUTABLE NAMES pwsh powershell REQUIRED)
+  find_program(SVP_WINDMC_EXECUTABLE NAMES windmc REQUIRED)
+  find_program(SVP_POWERSHELL_EXECUTABLE NAMES pwsh powershell REQUIRED)
 
   set(converted_source "${MSG_OUTPUT_DIR}/messages.mc")
   set(generated_header "${MSG_OUTPUT_DIR}/messages.h")
@@ -29,7 +29,7 @@ function(nssm_compile_messages)
       ${generated_binaries}
     COMMAND "${CMAKE_COMMAND}" -E make_directory "${MSG_OUTPUT_DIR}"
     COMMAND
-      "${NSSM_POWERSHELL_EXECUTABLE}"
+      "${SVP_POWERSHELL_EXECUTABLE}"
       -NoLogo
       -NoProfile
       -NonInteractive
@@ -38,7 +38,7 @@ function(nssm_compile_messages)
       -InputPath "${MSG_SOURCE}"
       -OutputPath "${converted_source}"
     COMMAND
-      "${NSSM_WINDMC_EXECUTABLE}"
+      "${SVP_WINDMC_EXECUTABLE}"
       -u
       -U
       -h "${MSG_OUTPUT_DIR}"
@@ -52,7 +52,7 @@ function(nssm_compile_messages)
     VERBATIM
   )
 
-  add_custom_target(nssm_messages DEPENDS
+  add_custom_target(svp_messages DEPENDS
     "${generated_header}"
     "${generated_resource}"
     ${generated_binaries}

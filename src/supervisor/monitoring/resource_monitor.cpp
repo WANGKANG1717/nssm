@@ -11,21 +11,21 @@ namespace {
 
 constexpr unsigned long kResourceWatchdogExitCode = 0xE0010002UL;
 
-void terminate_for_resource(nssm_service_t *service, const wchar_t *reason,
+void terminate_for_resource(service_runtime_t *service, const wchar_t *reason,
                             const std::wstring &detail) {
-  log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_RESOURCE_EXCEEDED, service->name,
+  log_event(EVENTLOG_ERROR_TYPE, SVP_EVENT_RESOURCE_EXCEEDED, service->name,
             reason, detail.c_str(), 0);
   unsigned long error = ERROR_SUCCESS;
   if (service->job_handle &&
       ! terminate_service_job(service->job_handle, kResourceWatchdogExitCode,
                               &error)) {
-    log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_TERMINATE_JOB_FAILED,
+    log_event(EVENTLOG_ERROR_TYPE, SVP_EVENT_TERMINATE_JOB_FAILED,
               service->name, error_string(error), 0);
   }
 }
 
 unsigned long WINAPI resource_monitor_thread(void *argument) {
-  auto *service = static_cast<nssm_service_t *>(argument);
+  auto *service = static_cast<service_runtime_t *>(argument);
   const resource_limit_config_t &config = service->config->resources;
   HANDLE stop_event = service->resource_stop_event;
   unsigned long processors = GetActiveProcessorCount(ALL_PROCESSOR_GROUPS);
@@ -119,7 +119,7 @@ unsigned long WINAPI resource_monitor_thread(void *argument) {
 
 }  // namespace
 
-bool start_resource_monitor(nssm_service_t *service) {
+bool start_resource_monitor(service_runtime_t *service) {
   if (! service || ! service->config) {
     return true;
   }
@@ -154,7 +154,7 @@ bool start_resource_monitor(nssm_service_t *service) {
   return true;
 }
 
-void stop_resource_monitor(nssm_service_t *service) {
+void stop_resource_monitor(service_runtime_t *service) {
   if (! service || ! service->resource_section_initialised) return;
   EnterCriticalSection(&service->resource_section);
   HANDLE thread = service->resource_thread;

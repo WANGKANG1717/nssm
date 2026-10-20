@@ -9,7 +9,7 @@ configure_file(
   @ONLY
 )
 
-set(NSSM_BUILD_LABEL "release" CACHE STRING
+set(SVP_BUILD_LABEL "release" CACHE STRING
     "Stable label shown by 'svp version' (avoid timestamps for reproducible builds)")
 
 if(NOT WIN32)
@@ -45,36 +45,36 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(tomlplusplus)
 
-nssm_compile_messages(
+svp_compile_messages(
   SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/resources/messages.mc"
   OUTPUT_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated"
-  OUT_HEADER NSSM_MESSAGES_HEADER
-  OUT_RESOURCE NSSM_MESSAGES_RESOURCE
-  OUT_BINARIES NSSM_MESSAGES_BINARIES
+  OUT_HEADER SVP_MESSAGES_HEADER
+  OUT_RESOURCE SVP_MESSAGES_RESOURCE
+  OUT_BINARIES SVP_MESSAGES_BINARIES
 )
 
-set(NSSM_RESOURCE_SOURCE "${CMAKE_CURRENT_BINARY_DIR}/generated/nssm.rc")
-find_program(NSSM_RESOURCE_POWERSHELL_EXECUTABLE NAMES pwsh powershell REQUIRED)
+set(SVP_RESOURCE_SOURCE "${CMAKE_CURRENT_BINARY_DIR}/generated/svp.rc")
+find_program(SVP_RESOURCE_POWERSHELL_EXECUTABLE NAMES pwsh powershell REQUIRED)
 add_custom_command(
-  OUTPUT "${NSSM_RESOURCE_SOURCE}"
+  OUTPUT "${SVP_RESOURCE_SOURCE}"
   COMMAND "${CMAKE_COMMAND}" -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/generated"
-  COMMAND "${NSSM_RESOURCE_POWERSHELL_EXECUTABLE}"
+  COMMAND "${SVP_RESOURCE_POWERSHELL_EXECUTABLE}"
           -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass
           -File "${CMAKE_CURRENT_SOURCE_DIR}/cmake/ConvertResource.ps1"
-          -InputPath "${CMAKE_CURRENT_SOURCE_DIR}/resources/nssm.rc"
-          -OutputPath "${NSSM_RESOURCE_SOURCE}"
+          -InputPath "${CMAKE_CURRENT_SOURCE_DIR}/resources/svcpilot.rc"
+          -OutputPath "${SVP_RESOURCE_SOURCE}"
   DEPENDS
-    "${CMAKE_CURRENT_SOURCE_DIR}/resources/nssm.rc"
+    "${CMAKE_CURRENT_SOURCE_DIR}/resources/svcpilot.rc"
     "${CMAKE_CURRENT_SOURCE_DIR}/cmake/ConvertResource.ps1"
   COMMENT "Escaping UTF-8 executable resources for windres"
   VERBATIM
 )
 
-set(NSSM_APP_SOURCES
-  src/app/nssm.cpp
+set(SVP_APP_SOURCES
+  src/app/main.cpp
 )
 
-set(NSSM_CLI_SOURCES
+set(SVP_CLI_SOURCES
   src/cli/config_commands.cpp
   src/cli/logs.cpp
   src/cli/output.cpp
@@ -83,7 +83,7 @@ set(NSSM_CLI_SOURCES
   src/cli/usage.cpp
 )
 
-set(NSSM_CONFIG_SOURCES
+set(SVP_CONFIG_SOURCES
   src/config/config.cpp
   src/config/config_loader.cpp
   src/config/config_parse_utils.cpp
@@ -92,7 +92,7 @@ set(NSSM_CONFIG_SOURCES
   src/config/config_service.cpp
 )
 
-set(NSSM_SUPERVISOR_SOURCES
+set(SVP_SUPERVISOR_SOURCES
   src/supervisor/process/job_object.cpp
   src/supervisor/process/process.cpp
   src/supervisor/monitoring/health_check.cpp
@@ -102,7 +102,7 @@ set(NSSM_SUPERVISOR_SOURCES
   src/supervisor/monitoring/resource_monitor.cpp
   src/supervisor/monitoring/status_snapshot.cpp
   src/supervisor/monitoring/status_query.cpp
-  src/supervisor/runtime/nssm_io.cpp
+  src/supervisor/runtime/service_io.cpp
   src/supervisor/runtime/recovery.cpp
   src/supervisor/runtime/service.cpp
   src/supervisor/runtime/service_config.cpp
@@ -114,7 +114,7 @@ set(NSSM_SUPERVISOR_SOURCES
   src/supervisor/runtime/service_wait.cpp
 )
 
-set(NSSM_PLATFORM_SOURCES
+set(SVP_PLATFORM_SOURCES
   src/platform/child_process.cpp
   src/platform/command_runner.cpp
   src/platform/console.cpp
@@ -128,29 +128,29 @@ set(NSSM_PLATFORM_SOURCES
   src/platform/utf8.cpp
 )
 
-set(NSSM_SOURCES
-  ${NSSM_APP_SOURCES}
-  ${NSSM_CLI_SOURCES}
-  ${NSSM_CONFIG_SOURCES}
-  ${NSSM_SUPERVISOR_SOURCES}
-  ${NSSM_PLATFORM_SOURCES}
-  resources/nssm.manifest
-  "${NSSM_RESOURCE_SOURCE}"
+set(SVP_SOURCES
+  ${SVP_APP_SOURCES}
+  ${SVP_CLI_SOURCES}
+  ${SVP_CONFIG_SOURCES}
+  ${SVP_SUPERVISOR_SOURCES}
+  ${SVP_PLATFORM_SOURCES}
+  resources/svcpilot.manifest
+  "${SVP_RESOURCE_SOURCE}"
 )
 
-add_executable(svp ${NSSM_SOURCES})
-add_dependencies(svp nssm_messages)
+add_executable(svp ${SVP_SOURCES})
+add_dependencies(svp svp_messages)
 
 set_property(
-  SOURCE "${NSSM_RESOURCE_SOURCE}"
+  SOURCE "${SVP_RESOURCE_SOURCE}"
   APPEND PROPERTY OBJECT_DEPENDS
-    "${NSSM_MESSAGES_HEADER};${NSSM_MESSAGES_RESOURCE};${NSSM_MESSAGES_BINARIES};${CMAKE_CURRENT_BINARY_DIR}/generated/version.h;${CMAKE_CURRENT_SOURCE_DIR}/resources/resource.h;${CMAKE_CURRENT_SOURCE_DIR}/resources/nssm.ico;${CMAKE_CURRENT_SOURCE_DIR}/resources/nssm.manifest"
+    "${SVP_MESSAGES_HEADER};${SVP_MESSAGES_RESOURCE};${SVP_MESSAGES_BINARIES};${CMAKE_CURRENT_BINARY_DIR}/generated/version.h;${CMAKE_CURRENT_SOURCE_DIR}/resources/resource.h;${CMAKE_CURRENT_SOURCE_DIR}/resources/svcpilot.ico;${CMAKE_CURRENT_SOURCE_DIR}/resources/svcpilot.manifest"
 )
 
 # The generated script is ASCII-only and contains explicit Unicode escapes,
 # so windres no longer depends on the host's active Windows code page.
-set_source_files_properties("${NSSM_RESOURCE_SOURCE}" PROPERTIES GENERATED TRUE)
-set_property(SOURCE "${NSSM_RESOURCE_SOURCE}" APPEND PROPERTY
+set_source_files_properties("${SVP_RESOURCE_SOURCE}" PROPERTIES GENERATED TRUE)
+set_property(SOURCE "${SVP_RESOURCE_SOURCE}" APPEND PROPERTY
              COMPILE_OPTIONS "--codepage=65001")
 
 target_include_directories(svp PRIVATE
@@ -168,13 +168,13 @@ target_include_directories(svp PRIVATE
 target_compile_definitions(svp PRIVATE
   UNICODE
   _UNICODE
-  NSSM_BUILD_LABEL="${NSSM_BUILD_LABEL}"
+  SVP_BUILD_LABEL="${SVP_BUILD_LABEL}"
   WINVER=0x0A00
   _WIN32_WINNT=0x0A00
   NTDDI_VERSION=0x0A000000
 )
 
-nssm_configure_compiler(svp)
+svp_configure_compiler(svp)
 
 target_link_libraries(svp PRIVATE
   advapi32
@@ -201,7 +201,7 @@ if(BUILD_TESTING)
 
   add_test(
     NAME svp.usage
-    COMMAND "${NSSM_RESOURCE_POWERSHELL_EXECUTABLE}"
+    COMMAND "${SVP_RESOURCE_POWERSHELL_EXECUTABLE}"
             -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass
             -File "${CMAKE_CURRENT_SOURCE_DIR}/cmake/VerifyUsage.ps1"
             -Executable $<TARGET_FILE:svp>
@@ -219,7 +219,7 @@ if(BUILD_TESTING)
 
   add_test(
     NAME svp.resources
-    COMMAND "${NSSM_RESOURCE_POWERSHELL_EXECUTABLE}"
+    COMMAND "${SVP_RESOURCE_POWERSHELL_EXECUTABLE}"
             -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass
             -File "${CMAKE_CURRENT_SOURCE_DIR}/cmake/VerifyResources.ps1"
             -Executable $<TARGET_FILE:svp>
@@ -240,14 +240,14 @@ if(BUILD_TESTING)
     src/supervisor/monitoring/readiness.cpp
     src/supervisor/monitoring/notification.cpp
     src/supervisor/runtime/recovery.cpp
-    src/supervisor/runtime/nssm_io.cpp
+    src/supervisor/runtime/service_io.cpp
     src/platform/event.cpp
     src/platform/security.cpp
     src/platform/service_status.cpp
     src/platform/string_utils.cpp
     src/platform/utf8.cpp
   )
-  add_dependencies(svp_unit_tests nssm_messages)
+  add_dependencies(svp_unit_tests svp_messages)
   target_include_directories(svp_unit_tests PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/src/config"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/cli"
@@ -263,7 +263,7 @@ if(BUILD_TESTING)
     WINVER=0x0A00
     _WIN32_WINNT=0x0A00
   )
-  nssm_configure_compiler(svp_unit_tests)
+  svp_configure_compiler(svp_unit_tests)
   target_link_libraries(svp_unit_tests PRIVATE advapi32 shlwapi winhttp ws2_32 tomlplusplus::tomlplusplus)
   add_test(NAME svp.unit COMMAND $<TARGET_FILE:svp_unit_tests>)
   add_test(

@@ -1,19 +1,19 @@
-#ifndef NSSM_IO_H
-#define NSSM_IO_H
+#ifndef SVP_IO_H
+#define SVP_IO_H
 
 #include <windows.h>
 
-struct nssm_service_t;
+struct service_runtime_t;
 
-#define NSSM_STDIN_SHARING FILE_SHARE_WRITE
-#define NSSM_STDIN_DISPOSITION OPEN_EXISTING
-#define NSSM_STDIN_FLAGS FILE_ATTRIBUTE_NORMAL
-#define NSSM_STDOUT_SHARING (FILE_SHARE_READ | FILE_SHARE_WRITE)
-#define NSSM_STDOUT_DISPOSITION OPEN_ALWAYS
-#define NSSM_STDOUT_FLAGS FILE_ATTRIBUTE_NORMAL
-#define NSSM_STDERR_SHARING (FILE_SHARE_READ | FILE_SHARE_WRITE)
-#define NSSM_STDERR_DISPOSITION OPEN_ALWAYS
-#define NSSM_STDERR_FLAGS FILE_ATTRIBUTE_NORMAL
+#define SVP_STDIN_SHARING FILE_SHARE_WRITE
+#define SVP_STDIN_DISPOSITION OPEN_EXISTING
+#define SVP_STDIN_FLAGS FILE_ATTRIBUTE_NORMAL
+#define SVP_STDOUT_SHARING (FILE_SHARE_READ | FILE_SHARE_WRITE)
+#define SVP_STDOUT_DISPOSITION OPEN_ALWAYS
+#define SVP_STDOUT_FLAGS FILE_ATTRIBUTE_NORMAL
+#define SVP_STDERR_SHARING (FILE_SHARE_READ | FILE_SHARE_WRITE)
+#define SVP_STDERR_DISPOSITION OPEN_ALWAYS
+#define SVP_STDERR_FLAGS FILE_ATTRIBUTE_NORMAL
 
 typedef struct {
   wchar_t *service_name;
@@ -36,9 +36,9 @@ typedef struct {
 void close_handle(HANDLE *);
 HANDLE write_to_file(wchar_t *, unsigned long, SECURITY_ATTRIBUTES *, unsigned long, unsigned long);
 void rotate_file(wchar_t *, wchar_t *, unsigned long, unsigned long, unsigned long, unsigned long, bool);
-int get_output_handles(nssm_service_t *, STARTUPINFOW *);
+int get_output_handles(service_runtime_t *, STARTUPINFOW *);
 void close_output_handles(STARTUPINFOW *);
-void cleanup_loggers(nssm_service_t *);
+void cleanup_loggers(service_runtime_t *);
 unsigned long WINAPI log_and_rotate(void *);
 LONG logger_rotation_state(volatile LONG *);
 void set_logger_rotation_state(volatile LONG *, LONG);

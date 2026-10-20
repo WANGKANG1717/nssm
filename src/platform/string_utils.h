@@ -1,5 +1,5 @@
-#ifndef NSSM_STRING_UTILS_H
-#define NSSM_STRING_UTILS_H
+#ifndef SVP_STRING_UTILS_H
+#define SVP_STRING_UTILS_H
 
 #include <string>
 

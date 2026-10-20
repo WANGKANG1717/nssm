@@ -40,7 +40,7 @@ int await_single_handle(SERVICE_STATUS_HANDLE status_handle,
                    _TRUNCATE, L"%lu", waited);
       _snwprintf_s(interval_milliseconds, _countof(interval_milliseconds),
                    _TRUNCATE, L"%lu", interval);
-      log_event(EVENTLOG_INFORMATION_TYPE, NSSM_EVENT_AWAITING_SINGLE_HANDLE,
+      log_event(EVENTLOG_INFORMATION_TYPE, SVP_EVENT_AWAITING_SINGLE_HANDLE,
                 function.c_str(), name, waited_milliseconds,
                 interval_milliseconds, timeout_milliseconds, 0);
     }

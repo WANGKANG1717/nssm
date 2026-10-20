@@ -14,7 +14,7 @@ namespace {
 
 constexpr unsigned long kNotificationWatchdogExitCode = 0xE0010002UL;
 
-std::wstring notification_account(const nssm_service_t *service) {
+std::wstring notification_account(const service_runtime_t *service) {
   const auto &account = service->config->service.account;
   switch (account.type) {
     case service_account_type_t::system: return L"SYSTEM";
@@ -28,7 +28,7 @@ std::wstring notification_account(const nssm_service_t *service) {
   return L"";
 }
 
-bool notification_descriptor(const nssm_service_t *service,
+bool notification_descriptor(const service_runtime_t *service,
                              unique_local_memory<void> *descriptor) {
   const std::wstring account = notification_account(service);
   unsigned long sid_bytes = 0;
@@ -50,7 +50,7 @@ bool notification_descriptor(const nssm_service_t *service,
 }
 
 unsigned long WINAPI notification_thread(void *context) {
-  auto *service = static_cast<nssm_service_t *>(context);
+  auto *service = static_cast<service_runtime_t *>(context);
   while (WaitForSingleObject(service->notification_stop_event, 0) !=
          WAIT_OBJECT_0) {
     unique_local_memory<void> descriptor;
@@ -123,7 +123,7 @@ unsigned long WINAPI notification_thread(void *context) {
 }
 
 unsigned long WINAPI watchdog_thread(void *context) {
-  auto *service = static_cast<nssm_service_t *>(context);
+  auto *service = static_cast<service_runtime_t *>(context);
   const unsigned long timeout = service->config->lifecycle.watchdog_ms;
   HANDLE handles[] = {service->notification_stop_event,
                       service->notification_watchdog_event};
@@ -146,7 +146,7 @@ unsigned long WINAPI watchdog_thread(void *context) {
 
 }  // namespace
 
-bool start_notification_listener(nssm_service_t *service,
+bool start_notification_listener(service_runtime_t *service,
                                  std::wstring *endpoint) {
   if (! service || ! endpoint) return false;
   _snwprintf_s(service->notification_pipe,
@@ -175,7 +175,7 @@ bool start_notification_listener(nssm_service_t *service,
   return true;
 }
 
-void stop_notification_listener(nssm_service_t *service) {
+void stop_notification_listener(service_runtime_t *service) {
   if (! service) return;
   if (service->notification_stop_event) SetEvent(service->notification_stop_event);
   if (service->notification_pipe[0]) {
@@ -211,7 +211,7 @@ void stop_notification_listener(nssm_service_t *service) {
   service->notification_pipe[0] = L'\0';
 }
 
-bool start_notification_watchdog(nssm_service_t *service) {
+bool start_notification_watchdog(service_runtime_t *service) {
   if (! service || ! service->config ||
       ! service->config->lifecycle.watchdog_ms) return true;
   service->notification_watchdog_thread =
@@ -219,7 +219,7 @@ bool start_notification_watchdog(nssm_service_t *service) {
   return service->notification_watchdog_thread != nullptr;
 }
 
-bool wait_for_ready_notification(nssm_service_t *service,
+bool wait_for_ready_notification(service_runtime_t *service,
                                  unsigned long timeout_ms,
                                  std::wstring *detail) {
   HANDLE handles[] = {service->notification_ready_event,

@@ -37,7 +37,7 @@ void print_control_wait_failure(const wchar_t *service_name,
               error_string(query_error));
     return;
   }
-  print_message(stderr, NSSM_MESSAGE_BAD_CONTROL_RESPONSE, service_name,
+  print_message(stderr, SVP_MESSAGE_BAD_CONTROL_RESPONSE, service_name,
                 service_status_text(status.dwCurrentState),
                 service_control_text(control));
 }
@@ -62,7 +62,7 @@ int list_services(int argc, wchar_t **argv) {
                       L"Unable to enumerate Windows services", error);
     }
     else {
-      print_message(stderr, NSSM_MESSAGE_ENUMSERVICESSTATUS_FAILED,
+      print_message(stderr, SVP_MESSAGE_ENUMSERVICESSTATUS_FAILED,
                     error_string(error));
     }
     return static_cast<int>(cli_exit_code::system);
@@ -120,7 +120,7 @@ int service_process_tree(int argc, wchar_t **argv) {
 int pre_remove_service(int argc, wchar_t **argv) {
   if (argc != 2 || ! argv[0] || ! argv[0][0] ||
       ! strings_equal_ignore_case(argv[1], L"confirm")) {
-    print_message(stderr, NSSM_MESSAGE_PRE_REMOVE_SERVICE);
+    print_message(stderr, SVP_MESSAGE_PRE_REMOVE_SERVICE);
     return 100;
   }
   if (wcslen(argv[0]) >= SERVICE_NAME_LENGTH) return usage(1);
@@ -138,7 +138,7 @@ int pre_remove_service(int argc, wchar_t **argv) {
               error_string(error));
     return 5;
   }
-  print_message(stdout, NSSM_MESSAGE_SERVICE_REMOVED, argv[0]);
+  print_message(stdout, SVP_MESSAGE_SERVICE_REMOVED, argv[0]);
   return 0;
 }
 
