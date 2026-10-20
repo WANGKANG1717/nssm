@@ -57,11 +57,31 @@ function Invoke-Svp([string[]]$Arguments, [int[]]$ExpectedExitCodes = @(0)) {
 function Invoke-SvpJson([string[]]$Arguments) {
   $result = Invoke-Svp $Arguments
   try {
-    return $result.Output | ConvertFrom-Json
+    $parsed = $result.Output | ConvertFrom-Json
   }
   catch {
-    throw "svp output was not valid JSON: $($result.Output)"
+    throw "svp $($Arguments -join ' ') output was not valid JSON: $($result.Output)"
   }
+  if ($null -eq $parsed) {
+    throw "svp $($Arguments -join ' ') returned empty JSON: $($result.Output)"
+  }
+  $parsed | Add-Member -NotePropertyName '_svpCommand' `
+    -NotePropertyValue ($Arguments -join ' ') -Force
+  $parsed | Add-Member -NotePropertyName '_svpRawJson' `
+    -NotePropertyValue $result.Output -Force
+  return $parsed
+}
+
+function Get-JsonProperty($Object, [string]$Name) {
+  if ($null -eq $Object) { throw "Cannot read JSON property '$Name' from null." }
+  $property = $Object.PSObject.Properties[$Name]
+  if ($null -eq $property) {
+    $names = @($Object.PSObject.Properties.Name | Where-Object { -not $_.StartsWith('_svp') }) -join ', '
+    $command = $Object.PSObject.Properties['_svpCommand'].Value
+    $raw = $Object.PSObject.Properties['_svpRawJson'].Value
+    throw "svp $command JSON is missing '$Name'. Fields: [$names]. Raw JSON: $raw"
+  }
+  return $property.Value
 }
 
 function Set-SecureAcl([string]$Path, [bool]$Directory) {
@@ -188,10 +208,11 @@ function Wait-ServiceState([string]$ExpectedState, [int]$TimeoutSeconds) {
   $deadline = [DateTime]::UtcNow.AddSeconds($TimeoutSeconds)
   do {
     $status = Invoke-SvpJson @('status', '--output=json', $script:ServiceName)
-    if ($status.state -eq $ExpectedState) { return $status }
+    $state = Get-JsonProperty $status 'state'
+    if ($state -eq $ExpectedState) { return $status }
     Start-Sleep -Milliseconds 250
   } while ([DateTime]::UtcNow -lt $deadline)
-  throw "service did not reach state '$ExpectedState'; last state was '$($status.state)'"
+  throw "service did not reach state '$ExpectedState'; last state was '$state'"
 }
 
 function Remove-ExactTestService([string]$Name) {
@@ -261,7 +282,7 @@ try {
 
   Write-Step 'Validate strict TOML and reject invalid schema'
   $valid = Invoke-SvpJson @('validate', '--output=json', $configPath)
-  Assert-True $valid.ok 'Valid configuration was rejected.'
+  Assert-True (Get-JsonProperty $valid 'ok') 'Valid configuration was rejected.'
   @('Schema = 999', '[Unit]', 'Name = "invalid"') |
     Set-Content -LiteralPath $invalidPath -Encoding utf8
   Set-SecureAcl $invalidPath $false
@@ -302,16 +323,20 @@ try {
 
   Write-Step 'Plan creation, apply service, and verify idempotence'
   $plan = Invoke-SvpJson @('plan', '--output=json', $configPath)
-  Assert-True ($plan.action -eq 'create') "Expected create plan, got $($plan.action)."
+  $planAction = Get-JsonProperty $plan 'action'
+  Assert-True ($planAction -eq 'create') "Expected create plan, got $planAction."
   $applied = Invoke-SvpJson @('apply', '--output=json', $configPath)
-  Assert-True ($applied.ok -and $applied.action -eq 'create') 'Initial apply failed.'
+  Assert-True ((Get-JsonProperty $applied 'ok') -and
+    (Get-JsonProperty $applied 'operation') -eq 'create') 'Initial apply failed.'
   $secondPlan = Invoke-SvpJson @('plan', '--output=json', $configPath)
-  Assert-True ($secondPlan.action -eq 'noChange') "Second plan was not idempotent: $($secondPlan.action)."
+  $secondAction = Get-JsonProperty $secondPlan 'action'
+  Assert-True ($secondAction -eq 'noChange') "Second plan was not idempotent: $secondAction."
   Complete-Step
 
   Write-Step 'List service and exercise enable, disable, mask, and unmask'
   $list = Invoke-SvpJson @('list-units', '--output=json')
-  Assert-True ($list.services.name -contains $script:ServiceName) 'Managed service is missing from list-units.'
+  $services = Get-JsonProperty $list 'services'
+  Assert-True ($services.name -contains $script:ServiceName) 'Managed service is missing from list-units.'
   $state = Invoke-Svp @('is-enabled', $script:ServiceName) @(1)
   Assert-True ($state.Output -eq 'disabled') 'New service is not manual/disabled-at-boot.'
   [void](Invoke-Svp @('enable', $script:ServiceName))
@@ -325,12 +350,15 @@ try {
   Write-Step 'Start service and verify readiness, hooks, runtime status, and process tree'
   [void](Invoke-Svp @('start', $script:ServiceName))
   $running = Wait-ServiceState 'running' 20
-  Assert-True ($running.runtimeAvailable -and $running.childPid -gt 0) 'Runtime snapshot or child PID is unavailable.'
+  Assert-True ((Get-JsonProperty $running 'runtimeAvailable') -and
+    (Get-JsonProperty $running 'childPid') -gt 0) 'Runtime snapshot or child PID is unavailable.'
   Assert-True ((Invoke-Svp @('is-active', $script:ServiceName)).Output -eq 'active') 'is-active did not report active.'
   $show = Invoke-SvpJson @('show', '--output=json', $script:ServiceName)
-  Assert-True ($show.activeState -eq 'active' -and $show.mainPid -eq $running.childPid) 'show returned inconsistent runtime state.'
+  Assert-True ((Get-JsonProperty $show 'activeState') -eq 'active' -and
+    (Get-JsonProperty $show 'mainPid') -eq (Get-JsonProperty $running 'childPid')) 'show returned inconsistent runtime state.'
+  $mainPid = Get-JsonProperty $running 'childPid'
   $processes = Invoke-Svp @('processes', $script:ServiceName)
-  Assert-True ($processes.Output -match "\b$($running.childPid)\b") 'processes did not include the main process.'
+  Assert-True ($processes.Output -match "\b$mainPid\b") 'processes did not include the main process.'
   Assert-True (Test-Path -LiteralPath (Join-Path $script:TestRoot 'start-pre.txt')) 'ExecStartPre did not run.'
   Assert-True (Test-Path -LiteralPath (Join-Path $script:TestRoot 'start-post.txt')) 'ExecStartPost did not run.'
   Complete-Step
@@ -350,17 +378,18 @@ try {
   $deadline = [DateTime]::UtcNow.AddSeconds(5)
   while (-not (Test-Path -LiteralPath $reloadPath) -and [DateTime]::UtcNow -lt $deadline) { Start-Sleep -Milliseconds 100 }
   Assert-True (Test-Path -LiteralPath $reloadPath) 'ExecReload did not run.'
-  $oldPid = $running.childPid
+  $oldPid = Get-JsonProperty $running 'childPid'
   [void](Invoke-Svp @('restart', $script:ServiceName))
   $running = Wait-ServiceState 'running' 20
-  Assert-True ($running.childPid -gt 0 -and $running.childPid -ne $oldPid) 'restart did not replace the main process.'
+  $newPid = Get-JsonProperty $running 'childPid'
+  Assert-True ($newPid -gt 0 -and $newPid -ne $oldPid) 'restart did not replace the main process.'
   Complete-Step
 
   Write-Step 'Export configuration and verify exported TOML'
   $exported = Invoke-SvpJson @('export', '--output=json', $script:ServiceName, $exportPath)
-  Assert-True ($exported.ok -and (Test-Path -LiteralPath $exportPath)) 'export failed.'
+  Assert-True ((Get-JsonProperty $exported 'ok') -and (Test-Path -LiteralPath $exportPath)) 'export failed.'
   $exportValidation = Invoke-SvpJson @('validate', '--output=json', $exportPath)
-  Assert-True $exportValidation.ok 'Exported configuration is invalid.'
+  Assert-True (Get-JsonProperty $exportValidation 'ok') 'Exported configuration is invalid.'
   Complete-Step
 
   Write-Step 'Stop service and verify stop hooks and inactive state'
@@ -374,16 +403,18 @@ try {
   Write-Step 'Apply an update and verify fast failure diagnostics'
   Write-ServiceConfig $failureConfigPath $true 'SvcPilot VM fast-failure test'
   $updatePlan = Invoke-SvpJson @('plan', '--output=json', $failureConfigPath)
-  Assert-True ($updatePlan.action -eq 'update') 'Changed configuration did not produce an update plan.'
+  Assert-True ((Get-JsonProperty $updatePlan 'action') -eq 'update') 'Changed configuration did not produce an update plan.'
   $updated = Invoke-SvpJson @('apply', '--output=json', $failureConfigPath)
-  Assert-True ($updated.ok -and $updated.action -eq 'update') 'Configuration update failed.'
+  Assert-True ((Get-JsonProperty $updated 'ok') -and
+    (Get-JsonProperty $updated 'operation') -eq 'update') 'Configuration update failed.'
   $startedAt = [DateTime]::UtcNow
   [void](Invoke-Svp @('start', $script:ServiceName) @(5))
   Assert-True ((([DateTime]::UtcNow - $startedAt).TotalSeconds) -lt 8) 'Fast startup failure was not reported promptly.'
   $failed = Invoke-Svp @('is-failed', $script:ServiceName)
   Assert-True ($failed.Output -eq 'failed') 'Persistent failure state was not recorded.'
   $failureShow = Invoke-SvpJson @('show', '--output=json', $script:ServiceName)
-  Assert-True ($failureShow.failed -and $failureShow.execMainStatus -eq 7) 'Failure exit code 7 was not preserved.'
+  Assert-True ((Get-JsonProperty $failureShow 'failed') -and
+    (Get-JsonProperty $failureShow 'execMainStatus') -eq 7) 'Failure exit code 7 was not preserved.'
   [void](Invoke-Svp @('reset-failed', $script:ServiceName))
   Assert-True ((Invoke-Svp @('is-failed', $script:ServiceName) @(1)).Output -eq 'inactive') 'reset-failed did not clear state.'
   Complete-Step
