@@ -15,10 +15,25 @@ cli_arguments_t parse_cli_arguments(int argc, wchar_t **argv) {
       parsed.json = true;
     }
     else if (! positional_only &&
-             strings_equal_ignore_case(argv[index], L"--verbose")) {
+             strings_equal_ignore_case(argv[index], L"-o")) {
+      if (index + 1 < argc &&
+          strings_equal_ignore_case(argv[index + 1], L"json")) {
+        parsed.json = true;
+        ++index;
+      }
+      else {
+        parsed.invalid = true;
+        parsed.invalid_option = argv[index];
+      }
+    }
+    else if (! positional_only &&
+             (strings_equal_ignore_case(argv[index], L"--verbose") ||
+              strings_equal_ignore_case(argv[index], L"-v"))) {
       parsed.verbose = true;
     }
-    else if (! positional_only && strings_equal_ignore_case(argv[index], L"--all")) {
+    else if (! positional_only &&
+             (strings_equal_ignore_case(argv[index], L"--all") ||
+              strings_equal_ignore_case(argv[index], L"-a"))) {
       parsed.all = true;
     }
     else if (! positional_only &&

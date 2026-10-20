@@ -96,6 +96,22 @@ void cli_argument_tests() {
              std::wstring(parsed.positional.front()) == L"-worker",
          L"CLI parser should support systemctl-style options and -- separator");
 
+  wchar_t short_output[] = L"-o";
+  wchar_t json[] = L"json";
+  wchar_t short_all[] = L"-a";
+  wchar_t short_verbose[] = L"-v";
+  wchar_t *short_options[] = {short_output, json, short_all, short_verbose};
+  parsed = parse_cli_arguments(4, short_options);
+  expect(parsed.json && parsed.all && parsed.verbose && ! parsed.invalid &&
+             parsed.positional.empty(),
+         L"CLI parser should support conventional short options");
+
+  wchar_t missing_output_value[] = L"-o";
+  wchar_t *missing_output_args[] = {missing_output_value};
+  parsed = parse_cli_arguments(1, missing_output_args);
+  expect(parsed.invalid && parsed.invalid_option == L"-o",
+         L"-o should require the supported json output format");
+
   wchar_t unknown[] = L"--unknown";
   wchar_t *invalid[] = {unknown};
   parsed = parse_cli_arguments(1, invalid);

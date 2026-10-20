@@ -122,7 +122,7 @@ int wmain(int argc, wchar_t **argv) {
       Valid commands are:
       validate, plan, apply, export, start, stop, restart, continue, remove,
       status, show, is-active, is-failed, reset-failed, enable, disable, mask, unmask, rotate,
-      list-units, processes, version
+      list, list-units, processes, version
     */
     if (strings_equal_ignore_case(argv[1], L"--help") ||
         strings_equal_ignore_case(argv[1], L"-h")) return usage(0);
@@ -179,7 +179,10 @@ int wmain(int argc, wchar_t **argv) {
       return inspect_service_status_command(argc - 2, argv + 2);
     }
     if (strings_equal_ignore_case(argv[1], L"rotate")) return control_service(kServiceControlRotate, argc - 2, argv + 2);
-    if (strings_equal_ignore_case(argv[1], L"list-units")) return list_services(argc - 2, argv + 2);
+    if (strings_equal_ignore_case(argv[1], L"list") ||
+        strings_equal_ignore_case(argv[1], L"list-units")) {
+      return list_services(argc - 2, argv + 2);
+    }
     if (strings_equal_ignore_case(argv[1], L"show")) return show_service_command(argc - 2, argv + 2);
     if (strings_equal_ignore_case(argv[1], L"is-active")) return is_active_command(argc - 2, argv + 2);
     if (strings_equal_ignore_case(argv[1], L"is-failed")) return is_failed_command(argc - 2, argv + 2);

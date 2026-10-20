@@ -50,7 +50,7 @@ int list_services(int argc, wchar_t **argv) {
       ! arguments.positional.empty() ||
       (arguments.json && arguments.verbose)) {
     print_cli_error(arguments.json, L"usage",
-                    L"Usage: svp list-units [--all] [--verbose|--output=json]");
+                    L"Usage: svp list [-a|--all] [-v|--verbose|-o json|--output=json]");
     return static_cast<int>(cli_exit_code::usage);
   }
   const bool including_native = arguments.all;

@@ -164,19 +164,19 @@ try {
   }
   & $executablePath disable $serviceName | Out-Null
   if ($LASTEXITCODE -ne 0) { throw 'service disable failed' }
-  $managedServices = @(& $executablePath list-units)
+  $managedServices = @(& $executablePath list)
   if ($LASTEXITCODE -ne 0 -or $managedServices -notcontains $serviceName) {
-    throw 'declaratively managed service was missing from svp list-units'
+    throw 'declaratively managed service was missing from svp list'
   }
   if ($managedServices -contains $unmanagedServiceName) {
     throw 'foreign ConfigPath was misidentified as a SvcPilot registration'
   }
-  $listed = Invoke-SvpJson @('list-units', '--output=json')
+  $listed = Invoke-SvpJson @('list', '-o', 'json')
   if (-not $listed.ok -or $listed.operation -ne 'list' -or
       $listed.services.name -notcontains $serviceName) {
     throw 'JSON service listing did not include the managed service'
   }
-  $verboseServices = @(& $executablePath list-units --verbose)
+  $verboseServices = @(& $executablePath list -v)
   if ($LASTEXITCODE -ne 0 -or
       ($verboseServices -join "`n") -notmatch
         "stopped\s+0\s+$([regex]::Escape($serviceName))") {

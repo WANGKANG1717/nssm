@@ -38,17 +38,17 @@ To manage a service:
 
         svp continue <servicename>
 
-        svp status [--verbose] [--output=json] <servicename>
+        svp status [-v|--verbose] [-o json|--output=json] <servicename>
 
         svp show [--output=json] <servicename>
 
-        svp is-active [--quiet] <servicename> [...]
+        svp is-active [-q|--quiet] <servicename> [...]
 
-        svp is-failed [--quiet] <servicename> [...]
+        svp is-failed [-q|--quiet] <servicename> [...]
 
         svp reset-failed <servicename> [...]
 
-        svp is-enabled [--quiet] <servicename> [...]
+        svp is-enabled [-q|--quiet] <servicename> [...]
 
         svp enable|disable|mask|unmask <servicename> [...]
 
@@ -56,9 +56,9 @@ To manage a service:
 
         svp processes <servicename>
 
-        svp logs [--lines N] [--follow] <servicename>
+        svp logs [-n N|--lines N] [-f|--follow] <servicename>
 
-        svp list-units [--all] [--verbose|--output=json]
+        svp list|list-units [-a|--all] [-v|--verbose|-o json|--output=json]
 .
 Language = Chinese
 SvcPilot：Windows 服务监督器
@@ -76,16 +76,16 @@ SvcPilot：Windows 服务监督器
   管理：
     svp start|stop|restart|continue <服务名>
     svp reload|reload-or-restart <服务名> [...]
-    svp status [--verbose] [--output=json] <服务名>
+    svp status [-v|--verbose] [-o json|--output=json] <服务名>
     svp show [--output=json] <服务名>
-    svp is-active [--quiet] <服务名> [...]
-    svp is-failed [--quiet] <服务名> [...]
+    svp is-active [-q|--quiet] <服务名> [...]
+    svp is-failed [-q|--quiet] <服务名> [...]
     svp reset-failed <服务名> [...]
-    svp is-enabled [--quiet] <服务名> [...]
+    svp is-enabled [-q|--quiet] <服务名> [...]
     svp enable|disable|mask|unmask <服务名> [...]
     svp rotate|processes <服务名>
-    svp logs [--lines N] [--follow] <服务名>
-    svp list-units [--all] [--verbose|--output=json]
+    svp logs [-n N|--lines N] [-f|--follow] <服务名>
+    svp list|list-units [-a|--all] [-v|--verbose|-o json|--output=json]
 .
 
 MessageId = +1

@@ -383,9 +383,9 @@ try {
   Complete-Step
 
   Write-Step 'List service and exercise enable, disable, mask, and unmask'
-  $list = Invoke-SvpJson @('list-units', '--output=json')
+  $list = Invoke-SvpJson @('list', '-o', 'json')
   $services = Get-JsonProperty $list 'services'
-  Assert-True ($services.name -contains $script:ServiceName) 'Managed service is missing from list-units.'
+  Assert-True ($services.name -contains $script:ServiceName) 'Managed service is missing from list.'
   $state = Invoke-Svp @('is-enabled', $script:ServiceName) @(1)
   Assert-True ($state.Output -eq 'disabled') 'New service is not manual/disabled-at-boot.'
   [void](Invoke-Svp @('enable', $script:ServiceName))
@@ -422,7 +422,7 @@ try {
   }
   Assert-True (Test-Path -LiteralPath $logPath) 'Log file was not created.'
   Assert-True ((Get-Item -LiteralPath $logPath).Length -gt 0) 'Log file received no application output.'
-  $logs = Invoke-Svp @('logs', '--lines', '5', $script:ServiceName)
+  $logs = Invoke-Svp @('logs', '-n', '5', $script:ServiceName)
   Assert-True ($logs.Output -match 'SVP_LOG_PROBE') 'logs did not return the expected ASCII probe.'
   [void](Invoke-Svp @('rotate', $script:ServiceName))
   [void](Invoke-Svp @('reload', $script:ServiceName))

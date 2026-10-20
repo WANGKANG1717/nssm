@@ -85,7 +85,8 @@ int logs_command(int argc, wchar_t **argv) {
   bool follow = false; unsigned long lines = 100; std::wstring service;
   for (int i = 0; i < argc; ++i) {
     if (! wcscmp(argv[i], L"--follow") || ! wcscmp(argv[i], L"-f")) follow = true;
-    else if (! wcscmp(argv[i], L"--lines") && i + 1 < argc) {
+    else if ((! wcscmp(argv[i], L"--lines") ||
+              ! wcscmp(argv[i], L"-n")) && i + 1 < argc) {
       wchar_t *end = nullptr; unsigned long value = wcstoul(argv[++i], &end, 10);
       if (! end || *end || value > 100000) return 2;
       lines = value;
@@ -93,7 +94,7 @@ int logs_command(int argc, wchar_t **argv) {
     else if (argv[i][0] == L'-' || ! service.empty()) return 2;
     else service = argv[i];
   }
-  if (service.empty()) { fwprintf(stderr, L"Usage: svp logs [--lines N] [--follow] <service>\n"); return 2; }
+  if (service.empty()) { fwprintf(stderr, L"Usage: svp logs [-n N|--lines N] [-f|--follow] <service>\n"); return 2; }
   std::wstring config_path; unsigned long error = ERROR_SUCCESS;
   service_config_t config; config_validation_t validation;
   if (! read_config_path(service, &config_path, &error) ||

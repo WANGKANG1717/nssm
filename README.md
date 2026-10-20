@@ -25,7 +25,7 @@ SvcPilot（命令名 `svp`）是面向 Windows 10+ 的轻量级服务监督器�
 | 配置工作流 | `validate`、`plan`、`apply`、`export` | 否 | 校验、预览、应用和备份 |
 | 生命周期 | `start`、`stop`、`restart`，支持批量操作 | 否 | 日常启停 |
 | 启动策略 | `enable`、`disable`、`mask`、`unmask` | 否 | 管理自动、手动和禁用启动 |
-| 状态查询 | `status`、`show`、`is-active`、`is-enabled`、`list-units` | 否 | 排障和脚本检查 |
+| 状态查询 | `status`、`show`、`is-active`、`is-enabled`、`list`（`list-units`） | 否 | 排障和脚本检查 |
 | 进程监督 | Job Object 管理完整子进程树 | 否 | 防止孤儿进程和不完整停止 |
 | 基础恢复 | 永不重启、失败重启、始终重启 | 是 | 崩溃后自动恢复 |
 | 基础日志 | stdout/stderr 重定向、可选时间戳 | 是 | 保存应用输出 |
@@ -54,10 +54,10 @@ SvcPilot（命令名 `svp`）是面向 Windows 10+ 的轻量级服务监督器�
 | --- | --- | :---: | --- |
 | 热重载 | `reload`、`reload-or-restart`、`ExecReload` | 是 | 不停止主进程地重载 |
 | 日志轮转 | 按大小轮转和 `rotate` 在线触发 | 是 | 控制日志体积 |
-| 日志查看 | `logs --lines N`、`--follow`、Ctrl+C 停止 | 是 | 直接查看服务日志 |
+| 日志查看 | `logs -n N`、`-f`、Ctrl+C 停止 | 是 | 直接查看服务日志 |
 | 进程树查询 | `processes` | 是 | 查看全部受管子进程 |
 | JSON 接口 | 稳定 JSON 输出和固定退出码 | 是 | PowerShell、CI/CD、未来 Web 端 |
-| SCM 全景列表 | `list-units --all` | 是 | 查看非 SvcPilot 服务 |
+| SCM 全景列表 | `list -a` | 是 | 查看非 SvcPilot 服务 |
 | 多账户类型 | 系统账户、虚拟账户、gMSA、普通用户 | 是 | 适配不同 Windows 身份 |
 
 ## 快速开始
@@ -113,18 +113,18 @@ svp status example-service
 
 | 命令 | 作用 |
 | --- | --- |
-| `status [--verbose] [--output=json] <service>` | 显示服务与监督状态 |
+| `status [-v\|--verbose] [-o json\|--output=json] <service>` | 显示服务与监督状态 |
 | `show [--output=json] <service>` | 输出稳定的详细属性 |
-| `is-active\|is-enabled\|is-failed [--quiet] <service> [...]` | 供人工或脚本判断状态 |
-| `list-units [--all] [--verbose\|--output=json]` | 列出服务；详细模式显示状态和 PID |
+| `is-active\|is-enabled\|is-failed [-q\|--quiet] <service> [...]` | 供人工或脚本判断状态 |
+| `list`（`list-units`）`[-a\|--all] [-v\|--verbose\|-o json\|--output=json]` | 列出服务；详细模式显示状态和 PID |
 | `processes <service>` | 列出监督的进程树 |
-| `logs [--lines N] [--follow] <service>` | 查看并跟随日志 |
+| `logs [-n N\|--lines N] [-f\|--follow] <service>` | 查看并跟随日志 |
 | `rotate <service>` | 请求在线日志轮转 |
 | `credential set <service> <account>` | 隐藏输入并加密保存密码 |
 | `credential delete <service>` | 删除保存的凭据 |
 | `version` | 显示版本、构建类型和架构 |
 
-默认 `list-units` 只列 SvcPilot 服务；`--all` 包含全部 Windows 服务。
+日常使用推荐较短的 `list`；`list-units` 作为 systemd 风格的完整别名保留。默认只列 SvcPilot 服务，`-a`/`--all` 包含全部 Windows 服务。通用短参数为 `-v`（详细）、`-o json`（JSON）、`-q`（静默）、`-n`（日志行数）和 `-f`（持续跟随）。
 
 ## TOML 配置参考
 
