@@ -55,6 +55,7 @@ void cleanup_nssm_service(nssm_service_t *service) {
   if (service->process_handle) CloseHandle(service->process_handle);
   if (service->job_handle) CloseHandle(service->job_handle);
   if (service->stop_event) CloseHandle(service->stop_event);
+  if (service->service_done_event) CloseHandle(service->service_done_event);
   if (service->lifecycle_section_initialised) {
     DeleteCriticalSection(&service->lifecycle_section);
   }

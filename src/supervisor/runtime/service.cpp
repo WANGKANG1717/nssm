@@ -410,7 +410,8 @@ void WINAPI service_main(unsigned long argc, wchar_t **argv) {
   InitializeCriticalSection(&service->resource_section);
   service->resource_section_initialised = true;
   service->stop_event = CreateEventW(nullptr, TRUE, FALSE, nullptr);
-  if (! service->stop_event) {
+  service->service_done_event = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+  if (! service->stop_event || ! service->service_done_event) {
     log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_CREATEEVENT_FAILED,
               service->name, error_string(GetLastError()), 0);
     cleanup_nssm_service(service);
@@ -482,7 +483,17 @@ void WINAPI service_main(unsigned long argc, wchar_t **argv) {
     log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_CREATETHREAD_FAILED, error_string(GetLastError()), 0);
     stop_service(service, 0);
     cleanup_nssm_service(service);
+    return;
   }
+
+  /*
+    A service's ServiceMain function must remain alive for the complete
+    lifetime reported to the SCM.  Returning here left only detached worker
+    threads behind, allowing the dispatcher to tear down the service process
+    during an asynchronous stop before ExecStopPost and SERVICE_STOPPED were
+    reported.
+  */
+  WaitForSingleObject(service->service_done_event, INFINITE);
 }
 
 /* Make sure service recovery actions are taken where necessary */
@@ -841,6 +852,8 @@ int stop_service(nssm_service_t *service, unsigned long exitcode) {
                 service->name, error_string(failure_error), 0);
     }
   }
+
+  if (service->service_done_event) SetEvent(service->service_done_event);
 
   return exitcode;
 }
