@@ -271,7 +271,8 @@ static bool create_suspended_service_process(
     PROCESS_INFORMATION *process_info) {
   const bool inherit_handles =
       (startup_info->dwFlags & STARTF_USESTDHANDLES) != 0;
-  unsigned long flags = CREATE_SUSPENDED | CREATE_UNICODE_ENVIRONMENT;
+  unsigned long flags = CREATE_SUSPENDED | CREATE_UNICODE_ENVIRONMENT |
+                        CREATE_NEW_PROCESS_GROUP;
   if (! service->no_console) flags |= CREATE_NEW_CONSOLE;
 
   if (! CreateProcessW(service->exe, command_line->data(), nullptr, nullptr,

@@ -249,9 +249,13 @@ int kill_console(nssm_service_t *service, kill_t *k) {
     ret = 4;
   }
 
-  /* Send the event. */
+  /*
+    Send CTRL_BREAK only to the process group created for the application.
+    CTRL_C with group 0 is a console-wide broadcast and can terminate the
+    service wrapper itself while it is trying to stop its child.
+  */
   if (! ret) {
-    if (! GenerateConsoleCtrlEvent(CTRL_C_EVENT, 0)) {
+    if (! GenerateConsoleCtrlEvent(CTRL_BREAK_EVENT, k->pid)) {
       log_event(EVENTLOG_ERROR_TYPE, NSSM_EVENT_GENERATECONSOLECTRLEVENT_FAILED, k->name, error_string(GetLastError()), 0);
       ret = 5;
     }
