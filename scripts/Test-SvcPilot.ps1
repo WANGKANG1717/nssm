@@ -116,8 +116,8 @@ function Write-ServiceConfig([string]$Path, [bool]$FailImmediately,
                              [string]$Description) {
   $systemDirectory = [Environment]::SystemDirectory
   $cmd = Join-Path $systemDirectory 'cmd.exe'
-  $ping = Join-Path $systemDirectory 'ping.exe'
   $logPath = Join-Path $script:TestRoot 'service.log'
+  $workloadPath = Join-Path $script:TestRoot 'workload.cmd'
   $startPre = Join-Path $script:TestRoot 'start-pre.txt'
   $startPost = Join-Path $script:TestRoot 'start-post.txt'
   $stop = Join-Path $script:TestRoot 'stop.txt'
@@ -129,8 +129,17 @@ function Write-ServiceConfig([string]$Path, [bool]$FailImmediately,
     $arguments = 'Arguments = ["/d", "/c", "exit 7"]'
   }
   else {
-    $application = $ping
-    $arguments = 'Arguments = ["-t", "127.0.0.1"]'
+    @(
+      '@echo off',
+      ':loop',
+      'echo SVP_LOG_PROBE',
+      'ping.exe -n 2 127.0.0.1 >nul',
+      'goto loop'
+    ) | Set-Content -LiteralPath $workloadPath -Encoding ascii
+    Set-SecureAcl $workloadPath $false
+    $application = $cmd
+    $arguments = 'Arguments = ["/d", "/q", "/c", {0}]' -f `
+      (ConvertTo-TomlString $workloadPath)
   }
 
   $lines = @(
@@ -406,12 +415,15 @@ try {
   Write-Step 'Verify logging, rotation control, reload, and restart'
   $logPath = Join-Path $script:TestRoot 'service.log'
   $deadline = [DateTime]::UtcNow.AddSeconds(10)
-  while ((-not (Test-Path -LiteralPath $logPath) -or (Get-Item -LiteralPath $logPath -ErrorAction SilentlyContinue).Length -eq 0) -and [DateTime]::UtcNow -lt $deadline) {
+  while ((-not (Test-Path -LiteralPath $logPath) -or
+      (Get-Item -LiteralPath $logPath -ErrorAction SilentlyContinue).Length -eq 0) -and
+      [DateTime]::UtcNow -lt $deadline) {
     Start-Sleep -Milliseconds 250
   }
   Assert-True (Test-Path -LiteralPath $logPath) 'Log file was not created.'
+  Assert-True ((Get-Item -LiteralPath $logPath).Length -gt 0) 'Log file received no application output.'
   $logs = Invoke-Svp @('logs', '--lines', '5', $script:ServiceName)
-  Assert-True (-not [string]::IsNullOrWhiteSpace($logs.Output)) 'logs returned no application output.'
+  Assert-True ($logs.Output -match 'SVP_LOG_PROBE') 'logs did not return the expected ASCII probe.'
   [void](Invoke-Svp @('rotate', $script:ServiceName))
   [void](Invoke-Svp @('reload', $script:ServiceName))
   $reloadPath = Join-Path $script:TestRoot 'reload.txt'
