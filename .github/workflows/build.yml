@@ -98,7 +98,7 @@ jobs:
           .\cmake\PackageRelease.ps1
           -Executable .\out\Release\win64\svp.exe
           -OutputDirectory .\out\package
-          -Version 3.1.4
+          -Version 3.2.0
           -SourceDirectory .
 
       - name: Upload executable
@@ -114,6 +114,6 @@ jobs:
         with:
           name: svcpilot-win64-release-bundle
           path: |
-            out/package/svcpilot-3.1.4-win64.zip
-            out/package/svcpilot-3.1.4-win64.zip.sha256
+            out/package/svcpilot-3.2.0-win64.zip
+            out/package/svcpilot-3.2.0-win64.zip.sha256
           if-no-files-found: error
