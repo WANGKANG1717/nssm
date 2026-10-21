@@ -207,7 +207,7 @@ Readiness 支持 `InitialDelaySec`、`IntervalSec`、`TimeoutSec`、`StartupTime
 - 只读共享内存发布 PID、运行时长、就绪、健康、重启数和资源统计。
 - 失败状态会持久化故障类型、生命周期阶段、退出码、Win32 错误、详情和恢复次数；服务停止后仍可通过 `status`/`show` 查询，使用 `reset-failed` 清除。
 - `apply` 和启动时审计配置、程序、目录、钩子、探针及日志路径 ACL，拒绝可被非受信主体修改的高权限路径。
-- 推荐虚拟账户和 Service SID。TOML 与命令行不接受密码；普通账户密码经 DPAPI machine scope 加密并绑定服务名和账户名，注册表仅 SYSTEM/Administrators 可访问。
+- 推荐虚拟账户和 Service SID。TOML 与普通命令参数不接受密码；`credential set` 仅从隐藏控制台输入读取，普通账户密码经 DPAPI machine scope 加密并绑定服务名和账户名。凭据键创建时即使用仅 SYSTEM/Administrators 可访问的保护 ACL，移除服务会一并删除凭据。
 - SvcPilot 是本机单用户/管理员工具，不提供多租户权限或远程控制面。
 
 ## JSON 与退出码

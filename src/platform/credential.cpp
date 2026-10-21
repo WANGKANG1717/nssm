@@ -14,13 +14,31 @@ std::wstring key_path(const std::wstring &service) {
   return L"SOFTWARE\\SvcPilot\\Credentials\\" + service;
 }
 
+bool credential_security_attributes(
+    unique_local_memory<void> *descriptor,
+    SECURITY_ATTRIBUTES *attributes, unsigned long *error) {
+  if (! ConvertStringSecurityDescriptorToSecurityDescriptorW(
+          L"D:P(A;;KA;;;SY)(A;;KA;;;BA)", SDDL_REVISION_1,
+          descriptor->put(), nullptr)) {
+    if (error) *error = GetLastError();
+    return false;
+  }
+  *attributes = {sizeof(*attributes), descriptor->get(), FALSE};
+  return true;
+}
+
 bool open_key(const std::wstring &service, REGSAM access, bool create,
               unique_registry_key *key, unsigned long *error) {
   long result = ERROR_SUCCESS;
   if (create) {
+    unique_local_memory<void> descriptor;
+    SECURITY_ATTRIBUTES attributes = {};
+    if (! credential_security_attributes(&descriptor, &attributes, error)) {
+      return false;
+    }
     unsigned long disposition = 0;
     result = RegCreateKeyExW(HKEY_LOCAL_MACHINE, key_path(service).c_str(), 0,
-                             nullptr, 0, access, nullptr, key->put(),
+                             nullptr, 0, access, &attributes, key->put(),
                              &disposition);
   }
   else result = RegOpenKeyExW(HKEY_LOCAL_MACHINE, key_path(service).c_str(), 0,
@@ -57,27 +75,6 @@ bool store_service_credential(const std::wstring &service,
   unique_registry_key key;
   if (! open_key(service, KEY_SET_VALUE | WRITE_DAC | READ_CONTROL, true, &key,
                  error)) return false;
-  PSECURITY_DESCRIPTOR descriptor = nullptr;
-  if (! ConvertStringSecurityDescriptorToSecurityDescriptorW(
-          L"D:P(A;;KA;;;SY)(A;;KA;;;BA)", SDDL_REVISION_1, &descriptor,
-          nullptr)) {
-    if (error) *error = GetLastError();
-    return false;
-  }
-  unique_local_memory<void> protected_descriptor(descriptor);
-  BOOL dacl_present = FALSE, defaulted = FALSE;
-  PACL dacl = nullptr;
-  if (! GetSecurityDescriptorDacl(descriptor, &dacl_present, &dacl,
-                                  &defaulted) || ! dacl_present) {
-    if (error) *error = GetLastError();
-    return false;
-  }
-  const long security_result =
-      RegSetKeySecurity(key.get(), DACL_SECURITY_INFORMATION, descriptor);
-  if (security_result != ERROR_SUCCESS) {
-    if (error) *error = security_result;
-    return false;
-  }
   long result = RegSetValueExW(key.get(), kCredentialValue, 0, REG_BINARY,
                                output.pbData, output.cbData);
   if (result == ERROR_SUCCESS) {
@@ -139,15 +136,14 @@ bool load_service_credential(const std::wstring &service,
 }
 
 bool delete_service_credential(const std::wstring &service, unsigned long *error) {
-  unique_registry_key key;
-  if (! open_key(service, KEY_SET_VALUE, false, &key, error)) return false;
-  long a = RegDeleteValueW(key.get(), kCredentialValue);
-  long b = RegDeleteValueW(key.get(), kCredentialAccountValue);
-  if (a == ERROR_FILE_NOT_FOUND) a = ERROR_SUCCESS;
-  if (b == ERROR_FILE_NOT_FOUND) b = ERROR_SUCCESS;
-  const long result = a == ERROR_SUCCESS ? b : a;
-  if (error) *error = result;
-  return result == ERROR_SUCCESS;
+  const long result = RegDeleteTreeW(HKEY_LOCAL_MACHINE,
+                                     key_path(service).c_str());
+  const long normalized = result == ERROR_FILE_NOT_FOUND ||
+                                  result == ERROR_PATH_NOT_FOUND
+                              ? ERROR_SUCCESS
+                              : result;
+  if (error) *error = normalized;
+  return normalized == ERROR_SUCCESS;
 }
 
 bool service_credential_exists(const std::wstring &service,

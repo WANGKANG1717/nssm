@@ -1,6 +1,7 @@
 #include "service_operations.h"
 
 #include "config_registration.h"
+#include "credential.h"
 #include "service_constants.h"
 #include "process.h"
 #include "security.h"
@@ -296,6 +297,11 @@ service_removal_status_t remove_managed_service(
   }
   if (! DeleteService(service.get())) {
     if (error) *error = GetLastError();
+    return service_removal_status_t::system_error;
+  }
+  unsigned long credential_error = ERROR_SUCCESS;
+  if (! delete_service_credential(service_name, &credential_error)) {
+    if (error) *error = credential_error;
     return service_removal_status_t::system_error;
   }
   if (error) *error = ERROR_SUCCESS;
