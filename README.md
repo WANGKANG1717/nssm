@@ -249,6 +249,19 @@ Set-ExecutionPolicy -Scope Process Bypass
 
 验收覆盖配置校验和安全 ACL、plan/apply 幂等性、服务创建与删除、启动策略、启停重启、Readiness/Health、生命周期钩子、运行时状态、进程树、日志与轮转、reload、export、快速失败、持久失败状态及清理。
 
+### 隔离虚拟机可靠性测试
+
+压力、反复 SCM 操作和长期运行测试不会作为开发机常规测试执行。只在可随时还原快照的管理员 Windows 虚拟机中运行：
+
+```powershell
+.\Test-SvcPilot-Reliability.ps1 `
+  -IUnderstandThisMustRunInDisposableVM `
+  -Iterations 25 `
+  -SoakHours 8
+```
+
+脚本反复执行完整的随机服务名验收流程，每轮均验证无 SCM 和临时目录残留，并生成 `SvcPilot-Reliability-Report.json`。缺少显式 VM 确认参数时脚本拒绝运行。
+
 在 MSYS2 UCRT64 安装工具链：
 
 ```sh
