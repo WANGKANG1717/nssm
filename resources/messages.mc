@@ -18,7 +18,7 @@ To validate or apply a declarative TOML configuration:
 
         svp plan [--output=json] <config.toml>
 
-        svp apply [--output=json] <config.toml>
+        svp apply [--output=json] <config.toml> [...]
 
         svp export [--output=json] <servicename> <destination.toml>
 
@@ -58,6 +58,8 @@ To manage a service:
 
         svp logs [-n N|--lines N] [-f|--follow] <servicename>
 
+        svp events [-n N|--lines N] [-o json|--output=json] <servicename>
+
         svp list|list-units [-a|--all] [-v|--verbose|-o json|--output=json]
 .
 Language = Chinese
@@ -68,7 +70,7 @@ SvcPilot：Windows 服务监督器
 常用命令：
   验证配置：svp validate <配置文件.toml>
   预览变更：svp plan [--output=json] <配置文件.toml>
-  安装或更新：svp apply [--output=json] <配置文件.toml>
+  安装或更新：svp apply [--output=json] <配置文件.toml> [...]
   原子导出：svp export [--output=json] <服务名> <目标文件.toml>
 
   移除（显式确认）: svp remove <服务名> confirm
@@ -85,6 +87,7 @@ SvcPilot：Windows 服务监督器
     svp enable|disable|mask|unmask <服务名> [...]
     svp rotate|processes <服务名>
     svp logs [-n N|--lines N] [-f|--follow] <服务名>
+    svp events [-n N|--lines N] [-o json|--output=json] <服务名>
     svp list|list-units [-a|--all] [-v|--verbose|-o json|--output=json]
 .
 
