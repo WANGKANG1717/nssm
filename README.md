@@ -8,7 +8,7 @@ SvcPilot（命令名 `svp`）是面向 Windows 10+ 的轻量级服务监督器�
 
 ## 当前成熟度
 
-项目尚未投入生产。普通构建、单元测试、GitHub Actions 管理员 SCM 集成测试和 Windows 虚拟机 13 步验收均已通过；异常注入、长期运行和压力测试仍待在隔离虚拟机执行。在此之前，不建议用于关键生产服务。
+项目尚未投入生产。普通构建、单元测试、GitHub Actions 管理员 SCM 集成测试和此前的 Windows 虚拟机基础验收均已通过；扩展后的全功能非交互验收脚本已经加入，仍待在隔离虚拟机完成本轮回归。异常注入、长期运行和压力测试同样只能在可丢弃虚拟机执行。在此之前，不建议用于关键生产服务。
 
 技术基线：Windows 10+、x64、Unicode、C++20、CMake 3.25+、Ninja、MinGW-w64 GCC 14+、`windmc`、`windres`。仅提供 CLI，无 GUI、MSVC 和 32 位版本。
 
@@ -218,7 +218,7 @@ Readiness 支持 `InitialDelaySec`、`IntervalSec`、`TimeoutSec`、`StartupTime
 
 ## 当前限制
 
-- 管理员 SCM 自动化和虚拟机 13 步验收已通过；异常注入、长期运行和压力测试尚未完成。
+- 管理员 SCM 自动化和此前的基础虚拟机验收已通过；扩展后的全功能验收、异常注入、长期运行和压力测试仍需在可丢弃虚拟机完成。
 - 正式 `vMAJOR.MINOR.PATCH` tag 发布强制要求 Authenticode 证书、时间戳和签名校验；普通 CI 构建仍可能未签名，不应当作正式发布包分发。
 - `reload` 会等待 `ExecReload` 完成，并按真实成功、失败或超时返回退出码；`reload-or-restart` 仅在服务不支持 reload 时回退到重启。
 - `logs --follow` 要求 stdout/stderr 共用路径；MoveFile 轮转后可能继续读取旧句柄，需要重启命令。
@@ -235,7 +235,7 @@ Readiness 支持 `InitialDelaySec`、`IntervalSec`、`TimeoutSec`、`StartupTime
 
 ### 虚拟机一键验收
 
-在全新的 Windows 10/11 x64 虚拟机中，以管理员身份打开 PowerShell，在发布包目录执行：
+此脚本会真实创建、启动、更新和删除随机命名的 Windows 服务，只应在可随时还原快照的 Windows 10/11 x64 虚拟机中运行。以管理员身份打开 Windows PowerShell 5.1 或 PowerShell 7，在发布包目录执行：
 
 ```powershell
 Set-ExecutionPolicy -Scope Process Bypass
@@ -248,9 +248,11 @@ Set-ExecutionPolicy -Scope Process Bypass
 .\scripts\Test-SvcPilot.ps1 -Executable .\out\Release\win64\svp.exe
 ```
 
-脚本退出码为 `0` 且最后显示 `PASS`，才表示全部通过。任何异常、断言失败或非预期退出码都会返回 `1`。测试使用随机 GUID 服务名，只创建自己的受管服务和一个用于验证删除保护的临时外部服务；`finally` 清理只针对这两个精确名称及其独立 `%ProgramData%\SvcPilotTest-*` 目录，不会停止、修改或删除既有服务。
+脚本退出码为 `0` 且最后显示 `PASS`，才表示全部通过。任何异常、断言失败或非预期退出码都会返回 `1`。测试使用随机 GUID 服务名；`finally` 只清理本次随机 GUID 登记的全部精确测试名称，以及独立 `%ProgramData%\SvcPilotTest-*` 目录，不会停止、修改或删除既有服务。
 
-验收覆盖配置校验和安全 ACL、plan/apply 幂等性、服务创建与删除、启动策略、启停重启、Readiness/Health、生命周期钩子、运行时状态、进程树、日志与轮转、reload、export、快速失败、持久失败状态及清理。
+验收覆盖 CLI 帮助与退出码、严格 TOML 校验、路径 ACL、删除保护、`plan/apply/export/remove`、批量依赖排序与循环拒绝、启用/禁用/掩码、服务和资源状态、完整进程树、日志查看与跟随、在线轮转、reload 与回退、事件查询、配置漂移、command/file/TCP/HTTP Readiness、Health、notify 就绪与 watchdog 超时、`never/on-failure/always` 重启策略、恢复退避与 `continue`、内存/CPU/进程数上限、生命周期钩子成功与失败、停止超时后的强制清理、虚拟账户与 restricted Service SID、快速失败诊断和持久失败状态。失败时诊断文件会保留在桌面供排查，同时在 `finally` 中按精确名称清理测试服务和临时目录。
+
+`credential set` 使用 `_getwch()` 从交互式控制台隐藏读取密码，不能由无桌面的自动测试可靠模拟；该命令仍采用测试前后的幂等 `credential delete` 验证。gMSA 和需要真实密码的普通用户账户也应在目标域/测试账户环境中单独验收。
 
 ### 隔离虚拟机可靠性测试
 
