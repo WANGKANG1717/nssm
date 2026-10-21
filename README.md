@@ -265,6 +265,20 @@ Set-ExecutionPolicy -Scope Process Bypass
 
 脚本反复执行完整的随机服务名验收流程，每轮均验证无 SCM 和临时目录残留，并生成 `SvcPilot-Reliability-Report.json`。缺少显式 VM 确认参数时脚本拒绝运行。
 
+### 可信升级
+
+正式发布包内提供显式升级脚本；它不会后台联网、自动停止服务或静默降级：
+
+```powershell
+.\Update-SvcPilot.ps1 `
+  -Archive .\svcpilot-3.3.0-win64.zip `
+  -Sha256File .\svcpilot-3.3.0-win64.zip.sha256 `
+  -InstallDirectory C:\Tools\SvcPilot `
+  -ExpectedSignerSubject 'CN=Your trusted publisher'
+```
+
+脚本校验发布包 SHA-256、`svp.exe` Authenticode 签名、可选签名主体和版本单调递增；若仍有服务使用目标二进制则拒绝更新。替换前会保留带旧版本号的 `.bak` 备份。
+
 在 MSYS2 UCRT64 安装工具链：
 
 ```sh

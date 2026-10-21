@@ -21,6 +21,7 @@ Copy-Item -LiteralPath (Join-Path $source 'README.md') -Destination $stage
 Copy-Item -LiteralPath (Join-Path $source 'THIRD_PARTY_NOTICES.md') -Destination $stage
 Copy-Item -LiteralPath (Join-Path $source 'scripts\Test-SvcPilot.ps1') -Destination $stage
 Copy-Item -LiteralPath (Join-Path $source 'scripts\Test-SvcPilot-Reliability.ps1') -Destination $stage
+Copy-Item -LiteralPath (Join-Path $source 'scripts\Update-SvcPilot.ps1') -Destination $stage
 
 $binaryHash = (Get-FileHash -Algorithm SHA256 -LiteralPath (Join-Path $stage 'svp.exe')).Hash.ToLowerInvariant()
 $sbom = [ordered]@{
