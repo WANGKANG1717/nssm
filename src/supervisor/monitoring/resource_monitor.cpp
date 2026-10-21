@@ -1,5 +1,6 @@
 #include "config.h"
 #include "event.h"
+#include "failure.h"
 #include "job_object.h"
 #include "messages.h"
 #include "service.h"
@@ -9,12 +10,21 @@
 
 namespace {
 
-constexpr unsigned long kResourceWatchdogExitCode = 0xE0010002UL;
+constexpr unsigned long kResourceWatchdogExitCode = 0xE0010003UL;
 
 void terminate_for_resource(service_runtime_t *service, const wchar_t *reason,
                             const std::wstring &detail) {
   log_event(EVENTLOG_ERROR_TYPE, SVP_EVENT_RESOURCE_EXCEEDED, service->name,
             reason, detail.c_str(), 0);
+  failure_kind_t kind = failure_kind_t::internal;
+  if (wcscmp(reason, L"memory limit") == 0) {
+    kind = failure_kind_t::resource_memory;
+  }
+  else if (wcscmp(reason, L"CPU limit") == 0) {
+    kind = failure_kind_t::resource_cpu;
+  }
+  record_runtime_failure(service, kind, L"resource",
+                         kResourceWatchdogExitCode, ERROR_SUCCESS, detail);
   unsigned long error = ERROR_SUCCESS;
   if (service->job_handle &&
       ! terminate_service_job(service->job_handle, kResourceWatchdogExitCode,

@@ -18,6 +18,7 @@ void set_service_runtime_defaults(service_runtime_t *service) {
   InitializeSRWLock(&service->status_snapshot_lock);
   InitializeSRWLock(&service->status_lock);
   InitializeSRWLock(&service->wait_lock);
+  InitializeSRWLock(&service->failure_lock);
   service->stdin_sharing = SVP_STDIN_SHARING;
   service->stdin_disposition = SVP_STDIN_DISPOSITION;
   service->stdin_flags = SVP_STDIN_FLAGS;

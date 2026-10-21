@@ -57,6 +57,17 @@ int inspect_service_status_command(int argc, wchar_t **argv) {
       fwprintf(stdout, L"Runtime snapshot: unavailable (Windows error %lu)\n",
                status.windows_error);
     }
+    if (status.failed) {
+      fwprintf(stdout,
+               L"Failure: %ls (phase=%ls, exit=%lu, win32=%lu, restarts=%lu)\n",
+               failure_kind_text(status.failure.kind),
+               status.failure.phase.empty() ? L"-" : status.failure.phase.c_str(),
+               status.failure.exit_code, status.failure.windows_error,
+               status.failure.restart_attempts);
+      if (! status.failure.message.empty()) {
+        fwprintf(stdout, L"Failure detail: %ls\n", status.failure.message.c_str());
+      }
+    }
   }
   else {
     fputws(L"{\"ok\":true,\"operation\":\"status\",\"service\":", stdout);
@@ -68,10 +79,20 @@ int inspect_service_status_command(int argc, wchar_t **argv) {
              status.wrapper_pid, status.child_pid, status.uptime_ms);
     fputws(L",\"health\":", stdout);
     write_json_string(stdout, health);
+    fputws(L",\"failureKind\":", stdout);
+    write_json_string(stdout, failure_kind_text(status.failure.kind));
+    fputws(L",\"failurePhase\":", stdout);
+    write_json_string(stdout, status.failure.phase);
+    fputws(L",\"failureMessage\":", stdout);
+    write_json_string(stdout, status.failure.message);
     fwprintf(stdout,
-             L",\"restartCount\":%lu,\"cpuPercent\":%lu,\"memoryBytes\":%llu,\"processCount\":%lu,\"runtimeAvailable\":%ls}\n",
+             L",\"restartCount\":%lu,\"cpuPercent\":%lu,\"memoryBytes\":%llu,\"processCount\":%lu,\"failed\":%ls,\"failureExitCode\":%lu,\"failureWindowsError\":%lu,\"failureTime\":%llu,\"failureRestartAttempts\":%lu,\"runtimeAvailable\":%ls}\n",
              status.restart_count, status.cpu_percent, status.memory_bytes,
              status.process_count,
+             status.failed ? L"true" : L"false",
+             status.failure.exit_code, status.failure.windows_error,
+             status.failure.timestamp_100ns,
+             status.failure.restart_attempts,
              status.runtime_available ? L"true" : L"false");
   }
   return static_cast<int>(cli_exit_code::success);

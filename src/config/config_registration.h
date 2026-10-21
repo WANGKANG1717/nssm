@@ -1,6 +1,8 @@
 #ifndef CONFIG_REGISTRATION_H
 #define CONFIG_REGISTRATION_H
 
+#include "failure.h"
+
 #include <string>
 
 struct config_validation_t;
@@ -15,11 +17,10 @@ bool registered_service_config_path(const wchar_t *service_name,
 
 struct persistent_failure_t {
   bool failed = false;
-  unsigned long exit_code = 0;
-  unsigned long long timestamp_100ns = 0;
+  failure_record_t record;
 };
 
-bool write_persistent_failure(const std::wstring &, unsigned long,
+bool write_persistent_failure(const std::wstring &, const failure_record_t &,
                               unsigned long *);
 bool read_persistent_failure(const std::wstring &, persistent_failure_t *,
                              unsigned long *);

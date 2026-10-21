@@ -2,6 +2,7 @@
 #define SERVICE_H
 
 #include "windows_limits.h"
+#include "failure.h"
 
 #include <windows.h>
 
@@ -123,6 +124,13 @@ typedef struct service_runtime_t {
   wchar_t *initial_env;
   unsigned long next_restart_delay_ms;
   unsigned long long process_started_ms;
+  SRWLOCK failure_lock;
+  failure_kind_t failure_kind;
+  wchar_t failure_phase[64];
+  unsigned long failure_exit_code;
+  unsigned long failure_windows_error;
+  wchar_t failure_message[512];
+  unsigned long failure_restart_attempts;
 } service_runtime_t;
 
 void WINAPI service_main(unsigned long, wchar_t **);

@@ -1,6 +1,7 @@
 #ifndef STATUS_QUERY_H
 #define STATUS_QUERY_H
 
+#include "failure.h"
 #include "status_snapshot.h"
 
 #include <string>
@@ -18,8 +19,7 @@ struct service_status_query_t {
   runtime_health_t health = runtime_health_t::unknown;
   bool runtime_available = false;
   bool failed = false;
-  unsigned long exit_code = 0;
-  unsigned long long failure_time_100ns = 0;
+  failure_record_t failure;
 };
 
 bool query_service_runtime_status(const std::wstring &,

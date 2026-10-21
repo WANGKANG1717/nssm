@@ -4,6 +4,7 @@
 #include "config_registration.h"
 #include "env.h"
 #include "event.h"
+#include "failure.h"
 #include "job_object.h"
 #include "health_monitor.h"
 #include "messages.h"
@@ -71,6 +72,11 @@ static bool run_lifecycle_commands(
   for (size_t index = 0; index < commands.size(); ++index) {
     const unsigned long remaining = remaining_until(deadline);
     if (! remaining) {
+      if (failure_is_fatal) {
+        record_runtime_failure(service, failure_kind_t::lifecycle, phase,
+                               ERROR_TIMEOUT, ERROR_TIMEOUT,
+                               L"lifecycle deadline expired");
+      }
       log_event(failure_is_fatal ? EVENTLOG_ERROR_TYPE : EVENTLOG_WARNING_TYPE,
                 SVP_EVENT_LIFECYCLE_COMMAND_FAILED, service->name, phase,
                 L"lifecycle deadline expired", 0);
@@ -86,6 +92,10 @@ static bool run_lifecycle_commands(
     if (! result.succeeded()) {
       std::wstring detail = L"command " + std::to_wstring(index + 1) +
                             L": " + result.detail;
+      if (failure_is_fatal) {
+        record_runtime_failure(service, failure_kind_t::lifecycle, phase,
+                               result.exit_code, result.windows_error, detail);
+      }
       log_event(failure_is_fatal ? EVENTLOG_ERROR_TYPE : EVENTLOG_WARNING_TYPE,
                 SVP_EVENT_LIFECYCLE_COMMAND_FAILED, service->name, phase,
                 detail.c_str(), 0);
@@ -156,6 +166,8 @@ static int finish_service_start(service_runtime_t *service,
         ! wait_for_ready_notification(service, remaining, &detail)) {
       log_event(EVENTLOG_ERROR_TYPE, SVP_EVENT_READINESS_FAILED,
                 service->name, detail.c_str(), 0);
+      record_runtime_failure(service, failure_kind_t::readiness, L"readiness",
+                             ERROR_NOT_READY, ERROR_NOT_READY, detail);
       if (service->job_handle) {
         terminate_service_job(service->job_handle, ERROR_NOT_READY, nullptr);
       }
@@ -181,6 +193,9 @@ static int finish_service_start(service_runtime_t *service,
       }
       log_event(EVENTLOG_ERROR_TYPE, SVP_EVENT_READINESS_FAILED,
                 service->name, readiness.detail.c_str(), 0);
+      record_runtime_failure(service, failure_kind_t::readiness, L"readiness",
+                             ERROR_NOT_READY, readiness.error,
+                             readiness.detail);
       if (readiness.state != readiness_state_t::process_exited &&
           service->job_handle) {
         terminate_service_job(service->job_handle, ERROR_NOT_READY, nullptr);
@@ -666,6 +681,7 @@ int start_service(service_runtime_t *service) {
   else service->stopping = false;
 
   if (service->process_handle) return 0;
+  reset_runtime_failure(service);
   const unsigned long long start_deadline =
       GetTickCount64() + service->config->lifecycle.timeout_start_ms;
   /* Allocate a STARTUPINFO structure for a new process */
@@ -680,12 +696,19 @@ int start_service(service_runtime_t *service) {
   std::wstring command_line;
   std::vector<wchar_t> child_environment;
   if (! prepare_child_launch(service, &command_line, &child_environment)) {
+    record_runtime_failure(service, failure_kind_t::start_failure,
+                           L"prepare", 2, ERROR_INVALID_DATA,
+                           L"failed to prepare the child process");
     return stop_service(service, 2);
   }
 
   if (service->config->lifecycle.notify) {
     std::wstring endpoint;
     if (! start_notification_listener(service, &endpoint)) {
+      const unsigned long error = GetLastError();
+      record_runtime_failure(service, failure_kind_t::start_failure,
+                             L"notification", 3, error,
+                             L"failed to start the notification listener");
       return stop_service(service, 3);
     }
     std::vector<environment_entry_t> notification_environment = {
@@ -696,6 +719,9 @@ int start_service(service_runtime_t *service) {
                                    notification_environment, &extended,
                                    &environment_error)) {
       stop_notification_listener(service);
+      record_runtime_failure(service, failure_kind_t::start_failure,
+                             L"environment", 3, ERROR_INVALID_ENVIRONMENT,
+                             environment_error);
       return stop_service(service, 3);
     }
     child_environment = std::move(extended);
@@ -723,24 +749,38 @@ int start_service(service_runtime_t *service) {
   if (restart_allowed(service)) {
     /* Set up I/O redirection. */
     if (get_output_handles(service, &si)) {
+      const unsigned long error = GetLastError();
       log_event(EVENTLOG_ERROR_TYPE, SVP_EVENT_GET_OUTPUT_HANDLES_FAILED, service->name, 0);
       FreeConsole();
       close_output_handles(&si);
+      record_runtime_failure(service, failure_kind_t::start_failure,
+                             L"stdio", 4, error,
+                             L"failed to configure standard I/O");
       return stop_service(service, 4);
     }
     FreeConsole();
 
     if (! configure_service_job(service)) {
+      record_runtime_failure(service, failure_kind_t::start_failure,
+                             L"job", 3, GetLastError(),
+                             L"failed to configure the Job Object");
       close_output_handles(&si);
       return stop_service(service, 3);
     }
     if (! create_suspended_service_process(
             service, &si, &command_line, child_environment.data(), &pi)) {
+      const unsigned long error = GetLastError();
       close_output_handles(&si);
       close_failed_child_launch(service, nullptr);
+      record_runtime_failure(service, failure_kind_t::start_failure,
+                             L"process", 3, error,
+                             L"failed to create the child process");
       return stop_service(service, 3);
     }
     if (! assign_service_process_to_job(service, pi.hThread)) {
+      record_runtime_failure(service, failure_kind_t::start_failure,
+                             L"job", 3, GetLastError(),
+                             L"failed to assign the child process to its Job Object");
       close_output_handles(&si);
       return stop_service(service, 3);
     }
@@ -750,6 +790,9 @@ int start_service(service_runtime_t *service) {
     close_output_handles(&si);
 
     if (! resume_service_process(service, pi.hThread)) {
+      record_runtime_failure(service, failure_kind_t::start_failure,
+                             L"process", 3, GetLastError(),
+                             L"failed to resume the child process");
       return stop_service(service, 3);
     }
   }
@@ -847,8 +890,17 @@ int stop_service(service_runtime_t *service, unsigned long exitcode) {
   });
 
   if (exitcode && service->config) {
+    failure_record_t failure = runtime_failure(service);
+    if (failure.kind == failure_kind_t::none) {
+      failure.kind = failure_kind_t::process_exit;
+      failure.phase = L"main";
+      failure.exit_code = exitcode;
+      failure.message = L"main process exited with code " +
+                        std::to_wstring(exitcode);
+    }
+    else if (! failure.exit_code) failure.exit_code = exitcode;
     unsigned long failure_error = ERROR_SUCCESS;
-    if (! write_persistent_failure(service->name, exitcode, &failure_error)) {
+    if (! write_persistent_failure(service->name, failure, &failure_error)) {
       log_event(EVENTLOG_WARNING_TYPE, SVP_EVENT_PERSIST_FAILURE_FAILED,
                 service->name, error_string(failure_error), 0);
     }
@@ -990,11 +1042,13 @@ void CALLBACK end_service(void *arg, unsigned char why) {
               SVP_EVENT_RECOVERY_STOPPED,
               service->name, reason, 0);
     if (decision.result != recovery_result_t::clean_exit) {
-      unsigned long failure_error = ERROR_SUCCESS;
-      if (! write_persistent_failure(service->name, exitcode,
-                                     &failure_error)) {
-        log_event(EVENTLOG_WARNING_TYPE, SVP_EVENT_PERSIST_FAILURE_FAILED,
-                  service->name, error_string(failure_error), 0);
+      if (decision.result == recovery_result_t::rate_limited) {
+        const unsigned long attempts = service->recovery_state
+                                           ? service->recovery_state->consecutive_restarts
+                                           : 0;
+        record_runtime_failure(service, failure_kind_t::restart_rate_limit,
+                               L"recovery", exitcode, ERROR_RETRY,
+                               L"restart rate limit reached", attempts);
       }
     }
     stop_service(service, exitcode);

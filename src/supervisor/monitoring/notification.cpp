@@ -1,6 +1,7 @@
 #include "notification.h"
 
 #include "config.h"
+#include "failure.h"
 #include "service.h"
 #include "job_object.h"
 #include "win32_handle.h"
@@ -133,6 +134,9 @@ unsigned long WINAPI watchdog_thread(void *context) {
     if (wait == WAIT_OBJECT_0) return 0;
     if (wait == WAIT_OBJECT_0 + 1) continue;
     if (wait == WAIT_TIMEOUT) {
+      record_runtime_failure(service, failure_kind_t::watchdog, L"watchdog",
+                             kNotificationWatchdogExitCode, ERROR_TIMEOUT,
+                             L"notification watchdog deadline expired");
       unsigned long error = ERROR_SUCCESS;
       if (service->job_handle) {
         terminate_service_job(service->job_handle,

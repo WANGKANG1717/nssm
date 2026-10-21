@@ -371,10 +371,19 @@ int show_service_command(int argc, wchar_t **argv) {
              status.wrapper_pid, status.child_pid, status.uptime_ms);
     fputws(L",\"health\":", stdout);
     write_json_string(stdout, runtime_health_text(status.health));
-    fwprintf(stdout, L",\"cpuPercent\":%lu,\"memoryCurrent\":%llu,\"tasksCurrent\":%lu,\"nRestarts\":%lu,\"execMainStatus\":%lu,\"failed\":%ls,\"runtimeAvailable\":%ls}\n",
+    fputws(L",\"failureKind\":", stdout);
+    write_json_string(stdout, failure_kind_text(status.failure.kind));
+    fputws(L",\"failurePhase\":", stdout);
+    write_json_string(stdout, status.failure.phase);
+    fputws(L",\"failureMessage\":", stdout);
+    write_json_string(stdout, status.failure.message);
+    fwprintf(stdout, L",\"cpuPercent\":%lu,\"memoryCurrent\":%llu,\"tasksCurrent\":%lu,\"nRestarts\":%lu,\"execMainStatus\":%lu,\"failed\":%ls,\"failureWindowsError\":%lu,\"failureTime\":%llu,\"failureRestartAttempts\":%lu,\"runtimeAvailable\":%ls}\n",
              status.cpu_percent, status.memory_bytes, status.process_count,
-             status.restart_count, status.exit_code,
+             status.restart_count, status.failure.exit_code,
              status.failed ? L"true" : L"false",
+             status.failure.windows_error,
+             status.failure.timestamp_100ns,
+             status.failure.restart_attempts,
              status.runtime_available ? L"true" : L"false");
   }
   else {
@@ -386,8 +395,17 @@ int show_service_command(int argc, wchar_t **argv) {
     fwprintf(stdout, L"CPUPercent=%lu\nMemoryCurrent=%llu\nTasksCurrent=%lu\nNRestarts=%lu\n",
              status.cpu_percent, status.memory_bytes, status.process_count,
              status.restart_count);
-    fwprintf(stdout, L"ExecMainStatus=%lu\nFailed=%ls\n", status.exit_code,
+    fwprintf(stdout, L"ExecMainStatus=%lu\nFailed=%ls\n", status.failure.exit_code,
              status.failed ? L"yes" : L"no");
+    if (status.failed) {
+      fwprintf(stdout,
+               L"FailureKind=%ls\nFailurePhase=%ls\nFailureWindowsError=%lu\nFailureTime=%llu\nFailureRestartAttempts=%lu\nFailureMessage=%ls\n",
+               failure_kind_text(status.failure.kind),
+               status.failure.phase.c_str(), status.failure.windows_error,
+               status.failure.timestamp_100ns,
+               status.failure.restart_attempts,
+               status.failure.message.c_str());
+    }
   }
   return 0;
 }

@@ -103,6 +103,7 @@ set(SVP_SUPERVISOR_SOURCES
   src/supervisor/monitoring/status_snapshot.cpp
   src/supervisor/monitoring/status_query.cpp
   src/supervisor/runtime/service_io.cpp
+  src/supervisor/runtime/failure.cpp
   src/supervisor/runtime/recovery.cpp
   src/supervisor/runtime/service.cpp
   src/supervisor/runtime/service_config.cpp
@@ -240,6 +241,7 @@ if(BUILD_TESTING)
     src/supervisor/monitoring/readiness.cpp
     src/supervisor/monitoring/notification.cpp
     src/supervisor/runtime/recovery.cpp
+    src/supervisor/runtime/failure.cpp
     src/supervisor/runtime/service_io.cpp
     src/platform/event.cpp
     src/platform/security.cpp

@@ -68,7 +68,6 @@ bool query_service_runtime_status(const std::wstring &name,
     return false;
   }
   result->failed = failure.failed;
-  result->exit_code = failure.exit_code;
-  result->failure_time_100ns = failure.timestamp_100ns;
+  result->failure = failure.record;
   return true;
 }

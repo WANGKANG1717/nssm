@@ -3,6 +3,7 @@
 #include "health_check.h"
 #include "job_object.h"
 #include "event.h"
+#include "failure.h"
 #include "messages.h"
 #include "service.h"
 #include "status_snapshot.h"
@@ -21,6 +22,8 @@ unsigned long fail_health_monitor(service_runtime_t *service,
                         std::to_wstring(error);
   log_event(EVENTLOG_ERROR_TYPE, SVP_EVENT_HEALTH_WATCHDOG,
             service->name, detail.c_str(), 0);
+  record_runtime_failure(service, failure_kind_t::health, L"health",
+                         kHealthWatchdogExitCode, error, detail);
   unsigned long termination_error = ERROR_SUCCESS;
   if (service->job_handle &&
       ! terminate_service_job(service->job_handle, kHealthWatchdogExitCode,
@@ -111,6 +114,8 @@ unsigned long WINAPI health_monitor_thread(void *argument) {
     if (watchdog) {
       log_event(EVENTLOG_ERROR_TYPE, SVP_EVENT_HEALTH_WATCHDOG,
                 service->name, detail.c_str(), 0);
+      record_runtime_failure(service, failure_kind_t::health, L"health",
+                             kHealthWatchdogExitCode, result.error, detail);
       unsigned long error = ERROR_SUCCESS;
       if (service->job_handle &&
           ! terminate_service_job(service->job_handle,

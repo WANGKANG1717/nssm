@@ -6,6 +6,7 @@
 #include "config.h"
 #include "config_security.h"
 #include "console.h"
+#include "failure.h"
 #include "health_check.h"
 #include "job_object.h"
 #include "service_io.h"
@@ -611,6 +612,36 @@ void recovery_tests() {
          L"jitter must never exceed the configured maximum delay");
 }
 
+void failure_tests() {
+  expect(std::wstring(failure_kind_text(failure_kind_t::readiness)) ==
+             L"readiness",
+         L"failure kinds should have stable machine-readable names");
+  expect(parse_failure_kind(L"resourceCpu") ==
+             failure_kind_t::resource_cpu,
+         L"known persisted failure kinds should round-trip");
+  expect(parse_failure_kind(L"futureKind") == failure_kind_t::internal,
+         L"unknown persisted failure kinds should degrade safely");
+
+  service_runtime_t service = {};
+  InitializeSRWLock(&service.failure_lock);
+  expect(record_runtime_failure(&service, failure_kind_t::health, L"health",
+                                17, ERROR_TIMEOUT, L"probe timed out", 2),
+         L"the first concrete runtime failure should be recorded");
+  expect(! record_runtime_failure(&service, failure_kind_t::process_exit,
+                                  L"main", 18, 0, L"generic exit"),
+         L"a generic exit must not overwrite the concrete root cause");
+  failure_record_t record = runtime_failure(&service);
+  expect(record.kind == failure_kind_t::health &&
+             record.phase == L"health" && record.exit_code == 17 &&
+             record.windows_error == ERROR_TIMEOUT &&
+             record.message == L"probe timed out" &&
+             record.restart_attempts == 2,
+         L"runtime failure fields should be returned intact");
+  reset_runtime_failure(&service);
+  expect(runtime_failure(&service).kind == failure_kind_t::none,
+         L"runtime failures should reset before a fresh start");
+}
+
 SOCKET create_loopback_listener(unsigned short *port) {
   SOCKET listener = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
   expect(listener != INVALID_SOCKET, L"loopback listener socket should open");
@@ -891,6 +922,7 @@ int wmain() {
   command_runner_tests();
   notification_tests();
   recovery_tests();
+  failure_tests();
   health_probe_tests();
   readiness_tests();
   path_security_tests();
