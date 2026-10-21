@@ -31,6 +31,7 @@ struct status_snapshot_t {
   unsigned long reload_requested = 0;
   unsigned long reload_completed = 0;
   unsigned long reload_result = 0;
+  unsigned long long config_fingerprint = 0;
 };
 
 bool create_status_snapshot(service_runtime_t *service);

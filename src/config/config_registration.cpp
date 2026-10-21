@@ -10,6 +10,7 @@
 namespace {
 
 constexpr wchar_t kConfigPathValue[] = L"ConfigPath";
+constexpr wchar_t kConfigFingerprintValue[] = L"ConfigFingerprint";
 constexpr wchar_t kFailureExitCodeValue[] = L"FailureExitCode";
 constexpr wchar_t kFailureTimeValue[] = L"FailureTime";
 constexpr wchar_t kFailureKindValue[] = L"FailureKind";
@@ -76,6 +77,84 @@ long read_optional_dword(HKEY key, const wchar_t *name,
 }
 
 }  // namespace
+
+bool config_file_fingerprint(const std::wstring &path,
+                             unsigned long long *fingerprint,
+                             unsigned long *error) {
+  if (! fingerprint) {
+    if (error) *error = ERROR_INVALID_PARAMETER;
+    return false;
+  }
+  unique_handle file(CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ,
+                                 nullptr, OPEN_EXISTING,
+                                 FILE_ATTRIBUTE_NORMAL, nullptr));
+  if (! file) {
+    if (error) *error = GetLastError();
+    return false;
+  }
+  constexpr unsigned long long kOffset = 14695981039346656037ULL;
+  constexpr unsigned long long kPrime = 1099511628211ULL;
+  unsigned long long value = kOffset;
+  unsigned char buffer[16384];
+  while (true) {
+    unsigned long read = 0;
+    if (! ReadFile(file.get(), buffer, sizeof(buffer), &read, nullptr)) {
+      if (error) *error = GetLastError();
+      return false;
+    }
+    for (unsigned long index = 0; index < read; ++index) {
+      value ^= buffer[index];
+      value *= kPrime;
+    }
+    if (! read) break;
+  }
+  *fingerprint = value;
+  if (error) *error = ERROR_SUCCESS;
+  return true;
+}
+
+bool write_config_fingerprint(const std::wstring &service_name,
+                              unsigned long long fingerprint,
+                              unsigned long *error) {
+  unique_registry_key key;
+  if (! open_registration_key(service_name, KEY_SET_VALUE, &key, error)) {
+    return false;
+  }
+  const long result = RegSetValueExW(
+      key.get(), kConfigFingerprintValue, 0, REG_QWORD,
+      reinterpret_cast<const unsigned char *>(&fingerprint),
+      sizeof(fingerprint));
+  if (error) *error = static_cast<unsigned long>(result);
+  return result == ERROR_SUCCESS;
+}
+
+bool read_config_fingerprint(const std::wstring &service_name,
+                             unsigned long long *fingerprint,
+                             unsigned long *error) {
+  if (! fingerprint) {
+    if (error) *error = ERROR_INVALID_PARAMETER;
+    return false;
+  }
+  unique_registry_key key;
+  if (! open_registration_key(service_name, KEY_QUERY_VALUE, &key, error)) {
+    return false;
+  }
+  unsigned long type = 0;
+  unsigned long bytes = sizeof(*fingerprint);
+  const long result = RegQueryValueExW(
+      key.get(), kConfigFingerprintValue, nullptr, &type,
+      reinterpret_cast<unsigned char *>(fingerprint), &bytes);
+  if (result != ERROR_SUCCESS || type != REG_QWORD ||
+      bytes != sizeof(*fingerprint)) {
+    if (error) {
+      *error = result == ERROR_SUCCESS ? ERROR_INVALID_DATA
+                                       : static_cast<unsigned long>(result);
+    }
+    return false;
+  }
+  if (error) *error = ERROR_SUCCESS;
+  return true;
+}
 
 bool full_config_path(const wchar_t *path, std::wstring *full,
                       config_validation_t *validation) {

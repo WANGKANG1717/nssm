@@ -14,6 +14,12 @@ bool read_config_path(const std::wstring &, std::wstring *, unsigned long *);
 bool registered_service_config_path(const wchar_t *service_name,
                                     std::wstring *path,
                                     unsigned long *error);
+bool config_file_fingerprint(const std::wstring &, unsigned long long *,
+                             unsigned long *);
+bool write_config_fingerprint(const std::wstring &, unsigned long long,
+                              unsigned long *);
+bool read_config_fingerprint(const std::wstring &, unsigned long long *,
+                             unsigned long *);
 
 struct persistent_failure_t {
   bool failed = false;

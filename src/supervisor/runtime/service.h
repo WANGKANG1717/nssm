@@ -134,6 +134,7 @@ typedef struct service_runtime_t {
   volatile LONG reload_requested;
   volatile LONG reload_completed;
   volatile LONG reload_result;
+  unsigned long long config_fingerprint;
 } service_runtime_t;
 
 void WINAPI service_main(unsigned long, wchar_t **);

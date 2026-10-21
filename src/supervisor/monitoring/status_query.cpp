@@ -72,5 +72,21 @@ bool query_service_runtime_status(const std::wstring &name,
   }
   result->failed = failure.failed;
   result->failure = failure.record;
+
+  std::wstring config_path;
+  unsigned long drift_error = ERROR_SUCCESS;
+  unsigned long long applied_fingerprint = 0;
+  unsigned long long current_fingerprint = 0;
+  if (read_config_path(name, &config_path, &drift_error) &&
+      config_file_fingerprint(config_path, &current_fingerprint,
+                              &drift_error)) {
+    const bool has_applied_fingerprint = read_config_fingerprint(
+        name, &applied_fingerprint, &drift_error);
+    result->config_drift = ! has_applied_fingerprint ||
+                           current_fingerprint != applied_fingerprint;
+    result->restart_required =
+        result->runtime_available &&
+        snapshot.config_fingerprint != current_fingerprint;
+  }
   return true;
 }

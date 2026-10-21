@@ -452,6 +452,8 @@ config_operation_result_t plan_service_config(
   const std::wstring expected_account = account.empty() ? L"LocalSystem" : account;
   const bool scm_matches =
       state.service_type == SERVICE_WIN32_OWN_PROCESS &&
+      state.start_type == service_start_type(desired.service.startup) &&
+      state.error_control == SERVICE_ERROR_NORMAL &&
       strings_equal_ignore_case(state.binary_path.c_str(),
                                 wrapper_image_path.c_str()) &&
       state.dependencies == make_dependencies(desired.service.dependencies) &&
@@ -459,8 +461,19 @@ config_operation_result_t plan_service_config(
                                 expected_account.c_str()) &&
       state.display_name == desired.service.display_name &&
       state.description == desired.service.description &&
+      state.delayed == (desired.service.startup == service_startup_t::delayed) &&
       state.service_sid_type == service_sid_type(desired.security.service_sid);
   if (! scm_matches) changes.emplace_back(L"scm");
+  unsigned long long applied_fingerprint = 0;
+  unsigned long long desired_fingerprint = 0;
+  unsigned long fingerprint_error = ERROR_SUCCESS;
+  if (! read_config_fingerprint(desired.service.name, &applied_fingerprint,
+                                &fingerprint_error) ||
+      ! config_file_fingerprint(desired_path, &desired_fingerprint,
+                               &fingerprint_error) ||
+      applied_fingerprint != desired_fingerprint) {
+    changes.emplace_back(L"configContent");
+  }
   config_operation_result_t result;
   result.service = desired.service.name;
   result.action = changes.empty() ? L"noChange" : L"update";
@@ -488,6 +501,13 @@ config_operation_result_t apply_service_config(
   }
   if (! audit_service_paths(path, config, &validation)) {
     return validation_failure(validation, config_operation_status_t::security);
+  }
+  unsigned long long fingerprint = 0;
+  unsigned long fingerprint_error = ERROR_SUCCESS;
+  if (! config_file_fingerprint(path, &fingerprint, &fingerprint_error)) {
+    return operation_failure(config_operation_status_t::system,
+                             L"Unable to fingerprint the configuration",
+                             fingerprint_error);
   }
   credential_guard_t credential;
   const bool custom_user =
@@ -556,7 +576,7 @@ config_operation_result_t apply_service_config(
     }
     if (! ChangeServiceConfigW(
             service.get(), SERVICE_WIN32_OWN_PROCESS,
-            SERVICE_NO_CHANGE, SERVICE_ERROR_NORMAL,
+            service_start_type(config.service.startup), SERVICE_ERROR_NORMAL,
             wrapper_image_path.c_str(), nullptr, nullptr, dependencies.data(),
             account.empty() ? L"LocalSystem" : account.c_str(), password,
             config.service.display_name.c_str())) {
@@ -591,10 +611,10 @@ config_operation_result_t apply_service_config(
         error);
   }
 
-  SERVICE_DELAYED_AUTO_START_INFO delayed = {FALSE};
-  if (created && ! ChangeServiceConfig2W(
-                     service.get(), SERVICE_CONFIG_DELAYED_AUTO_START_INFO,
-                     &delayed)) {
+  SERVICE_DELAYED_AUTO_START_INFO delayed = {
+      config.service.startup == service_startup_t::delayed};
+  if (! ChangeServiceConfig2W(
+          service.get(), SERVICE_CONFIG_DELAYED_AUTO_START_INFO, &delayed)) {
     unsigned long error = GetLastError();
     bool restored = rollback();
     return operation_failure(
@@ -622,6 +642,15 @@ config_operation_result_t apply_service_config(
         config_operation_status_t::system,
         restored ? L"Storing configuration path failed"
                  : L"Storing configuration path failed and rollback failed",
+        registry_error);
+  }
+  if (! write_config_fingerprint(config.service.name, fingerprint,
+                                 &registry_error)) {
+    bool restored = rollback();
+    return operation_failure(
+        config_operation_status_t::system,
+        restored ? L"Storing configuration fingerprint failed"
+                 : L"Storing configuration fingerprint failed and rollback failed",
         registry_error);
   }
 

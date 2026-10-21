@@ -23,6 +23,7 @@ SvcPilot（命令名 `svp`）是面向 Windows 10+ 的轻量级服务监督器�
 | 服务包装 | 将可执行文件及参数注册为原生 Windows 服务 | 否 | 让普通程序随系统运行 |
 | 声明式配置 | 严格 TOML Schema 1、注释、未知字段拒绝、UTF-8 | 否 | 配置可读、可审查、可版本化 |
 | 配置工作流 | `validate`、`plan`、`apply`、`export` | 否 | 校验、预览、应用和备份 |
+| 配置漂移 | `plan`、`status`、`show` 检查 TOML、SCM 和运行实例 | 否 | 提示重新 apply 或 restart |
 | 生命周期 | `start`、`stop`、`restart`，支持批量操作 | 否 | 日常启停 |
 | 启动策略 | `enable`、`disable`、`mask`、`unmask` | 否 | 管理自动、手动和禁用启动 |
 | 状态查询 | `status`、`show`、`is-active`、`is-enabled`、`list`（`list-units`） | 否 | 排障和脚本检查 |

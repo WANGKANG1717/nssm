@@ -426,9 +426,11 @@ int show_service_command(int argc, wchar_t **argv) {
     write_json_string(stdout, status.failure.phase);
     fputws(L",\"failureMessage\":", stdout);
     write_json_string(stdout, status.failure.message);
-    fwprintf(stdout, L",\"cpuPercent\":%lu,\"memoryCurrent\":%llu,\"tasksCurrent\":%lu,\"nRestarts\":%lu,\"execMainStatus\":%lu,\"failed\":%ls,\"failureWindowsError\":%lu,\"failureTime\":%llu,\"failureRestartAttempts\":%lu,\"runtimeAvailable\":%ls}\n",
+    fwprintf(stdout, L",\"cpuPercent\":%lu,\"memoryCurrent\":%llu,\"tasksCurrent\":%lu,\"nRestarts\":%lu,\"execMainStatus\":%lu,\"configDrift\":%ls,\"restartRequired\":%ls,\"failed\":%ls,\"failureWindowsError\":%lu,\"failureTime\":%llu,\"failureRestartAttempts\":%lu,\"runtimeAvailable\":%ls}\n",
              status.cpu_percent, status.memory_bytes, status.process_count,
              status.restart_count, status.failure.exit_code,
+             status.config_drift ? L"true" : L"false",
+             status.restart_required ? L"true" : L"false",
              status.failed ? L"true" : L"false",
              status.failure.windows_error,
              status.failure.timestamp_100ns,
@@ -446,6 +448,9 @@ int show_service_command(int argc, wchar_t **argv) {
              status.restart_count);
     fwprintf(stdout, L"ExecMainStatus=%lu\nFailed=%ls\n", status.failure.exit_code,
              status.failed ? L"yes" : L"no");
+    fwprintf(stdout, L"ConfigDrift=%ls\nRestartRequired=%ls\n",
+             status.config_drift ? L"yes" : L"no",
+             status.restart_required ? L"yes" : L"no");
     if (status.failed) {
       fwprintf(stdout,
                L"FailureKind=%ls\nFailurePhase=%ls\nFailureWindowsError=%lu\nFailureTime=%llu\nFailureRestartAttempts=%lu\nFailureMessage=%ls\n",

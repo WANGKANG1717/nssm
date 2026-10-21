@@ -53,6 +53,9 @@ int inspect_service_status_command(int argc, wchar_t **argv) {
              L"Restarts: %lu\nCPU: %lu%%\nMemory: %llu bytes\nProcesses: %lu\n",
              status.restart_count, status.cpu_percent, status.memory_bytes,
              status.process_count);
+    fwprintf(stdout, L"Config drift: %ls\nRestart required: %ls\n",
+             status.config_drift ? L"yes" : L"no",
+             status.restart_required ? L"yes" : L"no");
     if (! status.runtime_available && status.state != SERVICE_STOPPED) {
       fwprintf(stdout, L"Runtime snapshot: unavailable (Windows error %lu)\n",
                status.windows_error);
@@ -86,9 +89,11 @@ int inspect_service_status_command(int argc, wchar_t **argv) {
     fputws(L",\"failureMessage\":", stdout);
     write_json_string(stdout, status.failure.message);
     fwprintf(stdout,
-             L",\"restartCount\":%lu,\"cpuPercent\":%lu,\"memoryBytes\":%llu,\"processCount\":%lu,\"failed\":%ls,\"failureExitCode\":%lu,\"failureWindowsError\":%lu,\"failureTime\":%llu,\"failureRestartAttempts\":%lu,\"runtimeAvailable\":%ls}\n",
+             L",\"restartCount\":%lu,\"cpuPercent\":%lu,\"memoryBytes\":%llu,\"processCount\":%lu,\"configDrift\":%ls,\"restartRequired\":%ls,\"failed\":%ls,\"failureExitCode\":%lu,\"failureWindowsError\":%lu,\"failureTime\":%llu,\"failureRestartAttempts\":%lu,\"runtimeAvailable\":%ls}\n",
              status.restart_count, status.cpu_percent, status.memory_bytes,
              status.process_count,
+             status.config_drift ? L"true" : L"false",
+             status.restart_required ? L"true" : L"false",
              status.failed ? L"true" : L"false",
              status.failure.exit_code, status.failure.windows_error,
              status.failure.timestamp_100ns,

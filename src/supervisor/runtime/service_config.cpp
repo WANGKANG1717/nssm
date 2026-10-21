@@ -96,6 +96,12 @@ bool load_registered_service_config(service_runtime_t *service,
     delete config;
     return false;
   }
+  if (! config_file_fingerprint(path, &service->config_fingerprint, &error)) {
+    validation->add(L"Unable to fingerprint the service configuration (Windows error " +
+                    std::to_wstring(error) + L")");
+    delete config;
+    return false;
+  }
 
   std::wstring arguments =
       join_windows_arguments(config->application.arguments);

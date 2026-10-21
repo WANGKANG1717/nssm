@@ -23,6 +23,8 @@ struct service_status_query_t {
   unsigned long reload_requested = 0;
   unsigned long reload_completed = 0;
   unsigned long reload_result = 0;
+  bool config_drift = false;
+  bool restart_required = false;
 };
 
 bool query_service_runtime_status(const std::wstring &,
