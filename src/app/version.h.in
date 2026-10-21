@@ -22,6 +22,6 @@
 /* Configurable metadata consumed by the VERSIONINFO resource. */
 #define SVP_COMPANY L"WANGKANG1717"
 #define SVP_FILE_DESCRIPTION L"SvcPilot Windows service supervisor"
-#define SVP_COMMENTS L"https://github.com/WANGKANG1717/nssm"
+#define SVP_COMMENTS L"https://github.com/WANGKANG1717/svp"
 #define SVP_ORIGINAL_FILENAME L"svp.exe"
 #define SVP_PRODUCT_NAME L"SvcPilot"

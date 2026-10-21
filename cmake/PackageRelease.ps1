@@ -27,7 +27,7 @@ $sbom = [ordered]@{
   dataLicense = 'CC0-1.0'
   SPDXID = 'SPDXRef-DOCUMENT'
   name = "svcpilot-$Version-win64"
-  documentNamespace = "https://github.com/WANGKANG1717/nssm/releases/download/v$Version/svcpilot-$Version-win64.spdx.json"
+  documentNamespace = "https://github.com/WANGKANG1717/svp/releases/download/v$Version/svcpilot-$Version-win64.spdx.json"
   creationInfo = [ordered]@{ creators = @('Tool: SvcPilot-PackageRelease'); created = '1970-01-01T00:00:00Z' }
   packages = @(
     [ordered]@{
