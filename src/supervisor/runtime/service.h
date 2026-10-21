@@ -131,6 +131,9 @@ typedef struct service_runtime_t {
   unsigned long failure_windows_error;
   wchar_t failure_message[512];
   unsigned long failure_restart_attempts;
+  volatile LONG reload_requested;
+  volatile LONG reload_completed;
+  volatile LONG reload_result;
 } service_runtime_t;
 
 void WINAPI service_main(unsigned long, wchar_t **);

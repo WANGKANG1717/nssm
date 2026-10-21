@@ -51,6 +51,9 @@ bool query_service_runtime_status(const std::wstring &name,
     result->memory_bytes = snapshot.memory_bytes;
     result->process_count = snapshot.process_count;
     result->health = static_cast<runtime_health_t>(snapshot.health);
+    result->reload_requested = snapshot.reload_requested;
+    result->reload_completed = snapshot.reload_completed;
+    result->reload_result = snapshot.reload_result;
     if (snapshot.child_pid && snapshot.process_started_ms) {
       const unsigned long long now = GetTickCount64();
       result->uptime_ms = now >= snapshot.process_started_ms

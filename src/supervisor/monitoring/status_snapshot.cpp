@@ -14,7 +14,7 @@
 namespace {
 
 constexpr unsigned long kStatusMagic = 0x4D53534E;
-constexpr unsigned long kStatusVersion = 1;
+constexpr unsigned long kStatusVersion = 2;
 static_assert(std::is_trivially_copyable_v<status_snapshot_t>);
 
 std::wstring mapping_name(const std::wstring &service_name) {
@@ -58,6 +58,12 @@ void publish_status_snapshot_unlocked(service_runtime_t *service) {
   snapshot->memory_bytes = service->resource_memory_bytes;
   LeaveCriticalSection(&service->resource_section);
   snapshot->process_started_ms = service->process_started_ms;
+  snapshot->reload_requested = static_cast<unsigned long>(
+      InterlockedCompareExchange(&service->reload_requested, 0, 0));
+  snapshot->reload_completed = static_cast<unsigned long>(
+      InterlockedCompareExchange(&service->reload_completed, 0, 0));
+  snapshot->reload_result = static_cast<unsigned long>(
+      InterlockedCompareExchange(&service->reload_result, 0, 0));
   MemoryBarrier();
   InterlockedIncrement(&snapshot->sequence);
 }

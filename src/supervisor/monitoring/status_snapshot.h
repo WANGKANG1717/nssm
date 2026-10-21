@@ -28,6 +28,9 @@ struct status_snapshot_t {
   unsigned long process_count = 0;
   unsigned long long process_started_ms = 0;
   unsigned long long memory_bytes = 0;
+  unsigned long reload_requested = 0;
+  unsigned long reload_completed = 0;
+  unsigned long reload_result = 0;
 };
 
 bool create_status_snapshot(service_runtime_t *service);

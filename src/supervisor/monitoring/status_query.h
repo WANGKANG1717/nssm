@@ -20,6 +20,9 @@ struct service_status_query_t {
   bool runtime_available = false;
   bool failed = false;
   failure_record_t failure;
+  unsigned long reload_requested = 0;
+  unsigned long reload_completed = 0;
+  unsigned long reload_result = 0;
 };
 
 bool query_service_runtime_status(const std::wstring &,

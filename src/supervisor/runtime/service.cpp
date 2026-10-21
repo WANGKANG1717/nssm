@@ -26,6 +26,8 @@
 #include "win32_handle.h"
 
 #include <algorithm>
+#include <memory>
+#include <new>
 #include <string>
 #include <vector>
 
@@ -68,11 +70,12 @@ void update_service_status(service_runtime_t *service, Mutator mutator) {
 static bool run_lifecycle_commands(
     service_runtime_t *service, const std::vector<command_config_t> &commands,
     const wchar_t *phase, wchar_t *environment, HANDLE cancellation_event,
-    unsigned long long deadline, bool failure_is_fatal) {
+    unsigned long long deadline, bool failure_is_fatal,
+    bool record_service_failure = true) {
   for (size_t index = 0; index < commands.size(); ++index) {
     const unsigned long remaining = remaining_until(deadline);
     if (! remaining) {
-      if (failure_is_fatal) {
+      if (failure_is_fatal && record_service_failure) {
         record_runtime_failure(service, failure_kind_t::lifecycle, phase,
                                ERROR_TIMEOUT, ERROR_TIMEOUT,
                                L"lifecycle deadline expired");
@@ -92,7 +95,7 @@ static bool run_lifecycle_commands(
     if (! result.succeeded()) {
       std::wstring detail = L"command " + std::to_wstring(index + 1) +
                             L": " + result.detail;
-      if (failure_is_fatal) {
+      if (failure_is_fatal && record_service_failure) {
         record_runtime_failure(service, failure_kind_t::lifecycle, phase,
                                result.exit_code, result.windows_error, detail);
       }
@@ -359,28 +362,46 @@ static unsigned long WINAPI launch_service(void *arg) {
   return monitor_service((service_runtime_t *) arg);
 }
 
+struct reload_context_t {
+  service_runtime_t *service = nullptr;
+  unsigned long request = 0;
+};
+
 static unsigned long WINAPI reload_service(void *arg) {
-  auto *service = static_cast<service_runtime_t *>(arg);
+  std::unique_ptr<reload_context_t> context(
+      static_cast<reload_context_t *>(arg));
+  service_runtime_t *service = context->service;
+  unsigned long result = ERROR_SUCCESS;
   critical_section_guard lifecycle_guard(&service->lifecycle_section);
   if (! service->config || service->config->lifecycle.exec_reload.empty() ||
       ! service->process_handle ||
       WaitForSingleObject(service->stop_event, 0) == WAIT_OBJECT_0) {
-    return ERROR_CALL_NOT_IMPLEMENTED;
+    result = ERROR_CALL_NOT_IMPLEMENTED;
   }
-  std::vector<wchar_t> environment;
-  std::wstring error;
-  if (! build_child_environment(service->initial_env, service->env,
-                                service->env_extra, &environment, &error)) {
-    return ERROR_INVALID_DATA;
+  else {
+    std::vector<wchar_t> environment;
+    std::wstring error;
+    if (! build_child_environment(service->initial_env, service->env,
+                                  service->env_extra, &environment, &error)) {
+      result = ERROR_INVALID_DATA;
+    }
+    else {
+      const unsigned long long deadline =
+          GetTickCount64() + service->config->lifecycle.timeout_start_ms;
+      result = run_lifecycle_commands(service,
+                                      service->config->lifecycle.exec_reload,
+                                      L"ExecReload", environment.data(),
+                                      service->stop_event, deadline, true,
+                                      false)
+                   ? ERROR_SUCCESS
+                   : ERROR_PROCESS_ABORTED;
+    }
   }
-  const unsigned long long deadline =
-      GetTickCount64() + service->config->lifecycle.timeout_start_ms;
-  return run_lifecycle_commands(service,
-                                service->config->lifecycle.exec_reload,
-                                L"ExecReload", environment.data(),
-                                service->stop_event, deadline, true)
-             ? ERROR_SUCCESS
-             : ERROR_PROCESS_ABORTED;
+  InterlockedExchange(&service->reload_result, static_cast<LONG>(result));
+  InterlockedExchange(&service->reload_completed,
+                      static_cast<LONG>(context->request));
+  publish_status_snapshot(service);
+  return result;
 }
 
 /* About to install the service */
@@ -658,8 +679,24 @@ unsigned long WINAPI service_control_handler(unsigned long control, unsigned lon
           service->config->lifecycle.exec_reload.empty()) {
         return ERROR_CALL_NOT_IMPLEMENTED;
       }
-      if (! start_detached_thread(reload_service, service)) {
-        return GetLastError();
+      {
+        auto context = std::unique_ptr<reload_context_t>(
+            new (std::nothrow) reload_context_t);
+        if (! context) return ERROR_NOT_ENOUGH_MEMORY;
+        context->service = service;
+        context->request = static_cast<unsigned long>(
+            InterlockedIncrement(&service->reload_requested));
+        publish_status_snapshot(service);
+        if (! start_detached_thread(reload_service, context.get())) {
+          const unsigned long error = GetLastError();
+          InterlockedExchange(&service->reload_result,
+                              static_cast<LONG>(error));
+          InterlockedExchange(&service->reload_completed,
+                              static_cast<LONG>(context->request));
+          publish_status_snapshot(service);
+          return error;
+        }
+        context.release();
       }
       return NO_ERROR;
   }

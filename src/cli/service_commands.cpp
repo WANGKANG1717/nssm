@@ -21,6 +21,8 @@
 
 namespace {
 
+constexpr unsigned long kReloadResultTimeoutMs = 120000;
+
 bool managed_service(const std::wstring &name) {
   std::wstring path;
   unsigned long error = ERROR_SUCCESS;
@@ -40,6 +42,35 @@ void print_control_wait_failure(const wchar_t *service_name,
   print_message(stderr, SVP_MESSAGE_BAD_CONTROL_RESPONSE, service_name,
                 service_status_text(status.dwCurrentState),
                 service_control_text(control));
+}
+
+bool wait_for_reload_result(const std::wstring &name,
+                            unsigned long previous_request,
+                            unsigned long *result) {
+  const unsigned long long deadline =
+      GetTickCount64() + kReloadResultTimeoutMs;
+  unsigned long request = 0;
+  while (GetTickCount64() < deadline) {
+    service_status_query_t status;
+    if (! query_service_runtime_status(name, &status)) {
+      if (result) *result = status.windows_error;
+      return false;
+    }
+    if (! request && status.reload_requested != previous_request) {
+      request = status.reload_requested;
+    }
+    if (request && status.reload_completed >= request) {
+      if (result) *result = status.reload_result;
+      return status.reload_result == ERROR_SUCCESS;
+    }
+    if (status.state != SERVICE_RUNNING) {
+      if (result) *result = ERROR_SERVICE_NOT_ACTIVE;
+      return false;
+    }
+    Sleep(50);
+  }
+  if (result) *result = ERROR_SERVICE_REQUEST_TIMEOUT;
+  return false;
 }
 
 }  // namespace
@@ -208,8 +239,26 @@ int reload_services_command(bool restart_if_unsupported, int argc,
   }
   int failures = 0;
   for (wchar_t *name : arguments.positional) {
+    service_status_query_t before;
+    if (! query_service_runtime_status(name, &before)) {
+      fwprintf(stderr, L"%ls: reload: %ls\n", name,
+               error_string(before.windows_error));
+      ++failures;
+      continue;
+    }
     service_control_result_t result;
-    if (execute_service_control(kServiceControlReload, name, &result)) continue;
+    if (execute_service_control(kServiceControlReload, name, &result)) {
+      unsigned long reload_result = ERROR_SUCCESS;
+      if (wait_for_reload_result(name, before.reload_requested,
+                                 &reload_result)) {
+        wprintf(L"%ls: reload: %ls", name, error_string(ERROR_SUCCESS));
+        continue;
+      }
+      fwprintf(stderr, L"%ls: reload failed: %ls\n", name,
+               error_string(reload_result));
+      ++failures;
+      continue;
+    }
     if (restart_if_unsupported &&
         (result.windows_error == ERROR_CALL_NOT_IMPLEMENTED ||
          result.windows_error == ERROR_INVALID_SERVICE_CONTROL ||
