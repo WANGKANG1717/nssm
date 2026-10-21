@@ -5,6 +5,7 @@
 #include "command_runner.h"
 #include "config.h"
 #include "config_security.h"
+#include "dependency_order.h"
 #include "console.h"
 #include "failure.h"
 #include "health_check.h"
@@ -642,6 +643,25 @@ void failure_tests() {
          L"runtime failures should reset before a fresh start");
 }
 
+void dependency_order_tests() {
+  std::vector<dependency_node_t> nodes = {
+      {L"web", {L"database"}}, {L"database", {}},
+      {L"worker", {L"database"}}};
+  std::vector<size_t> order;
+  std::wstring error;
+  expect(dependency_order(nodes, &order, &error) && order.size() == 3 &&
+             order[0] == 1,
+         L"dependency order should place prerequisites before dependants");
+  nodes = {{L"one", {L"two"}}, {L"two", {L"one"}}};
+  expect(! dependency_order(nodes, &order, &error) &&
+             error.find(L"cycle") != std::wstring::npos,
+         L"dependency order should reject cycles");
+  nodes = {{L"same", {}}, {L"SAME", {}}};
+  expect(! dependency_order(nodes, &order, &error) &&
+             error.find(L"duplicate") != std::wstring::npos,
+         L"dependency order should reject duplicate service names");
+}
+
 SOCKET create_loopback_listener(unsigned short *port) {
   SOCKET listener = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
   expect(listener != INVALID_SOCKET, L"loopback listener socket should open");
@@ -923,6 +943,7 @@ int wmain() {
   notification_tests();
   recovery_tests();
   failure_tests();
+  dependency_order_tests();
   health_probe_tests();
   readiness_tests();
   path_security_tests();

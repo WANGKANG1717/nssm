@@ -98,7 +98,7 @@ svp status example-service
 | --- | --- |
 | `validate [--output=json] <config.toml>` | 只读校验 TOML 和业务规则 |
 | `plan [--output=json] <config.toml>` | 比较期望配置与当前状态，不写入系统 |
-| `apply [--output=json] <config.toml>` | 创建服务或原子更新配置 |
+| `apply [--output=json] <config.toml> [...]` | 创建/原子更新服务；多文件按依赖排序、先整体预检，失败时移除本批次已创建服务 |
 | `export [--output=json] <service> <file.toml>` | 导出声明式配置 |
 | `remove <service> confirm` | 删除 SvcPilot 管理的服务 |
 | `start\|stop\|restart <service> [...]` | 批量启动、停止或重启 |

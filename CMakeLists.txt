@@ -86,6 +86,7 @@ set(SVP_CLI_SOURCES
 set(SVP_CONFIG_SOURCES
   src/config/config.cpp
   src/config/config_loader.cpp
+  src/config/dependency_order.cpp
   src/config/config_parse_utils.cpp
   src/config/config_registration.cpp
   src/config/config_security.cpp
@@ -235,6 +236,7 @@ if(BUILD_TESTING)
     src/platform/console.cpp
     src/config/config.cpp
     src/config/config_parse_utils.cpp
+    src/config/dependency_order.cpp
     src/config/config_security.cpp
     src/supervisor/monitoring/health_check.cpp
     src/supervisor/process/job_object.cpp
