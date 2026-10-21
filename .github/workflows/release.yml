@@ -1,0 +1,85 @@
+name: Release SvcPilot
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: powershell
+    steps:
+      - name: Checkout exact tag
+        uses: actions/checkout@v4
+
+      - name: Validate release tag
+        id: version
+        run: |
+          $version = '${{ github.ref_name }}'.TrimStart('v')
+          if ($version -notmatch '^\d+\.\d+\.\d+$') { throw 'Tag must be vMAJOR.MINOR.PATCH' }
+          $project = Select-String -LiteralPath CMakeLists.txt -Pattern 'project\(svcpilot VERSION ([0-9.]+)'
+          if (-not $project -or $project.Matches[0].Groups[1].Value -ne $version) {
+            throw "Tag version $version does not match CMake project version"
+          }
+          "version=$version" >> $env:GITHUB_OUTPUT
+
+      - name: Set up MSYS2 UCRT64
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            mingw-w64-ucrt-x86_64-gcc
+            mingw-w64-ucrt-x86_64-cmake
+            mingw-w64-ucrt-x86_64-ninja
+            mingw-w64-ucrt-x86_64-binutils
+
+      - name: Configure, build, and test
+        shell: msys2 {0}
+        run: |
+          cmake --preset mingw-release
+          cmake --build --preset mingw-release
+          ctest --preset mingw-release
+
+      - name: SCM lifecycle integration test
+        run: .\tests\integration\service_lifecycle.ps1 -Executable .\out\Release\win64\svp.exe
+
+      - name: Require and apply Authenticode signature
+        env:
+          SIGNING_CERTIFICATE: ${{ secrets.WINDOWS_SIGNING_CERT_BASE64 }}
+          SIGNING_PASSWORD: ${{ secrets.WINDOWS_SIGNING_CERT_PASSWORD }}
+          SIGNING_SUBJECT: ${{ secrets.WINDOWS_SIGNING_CERT_SUBJECT }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:SIGNING_CERTIFICATE)) {
+            throw 'WINDOWS_SIGNING_CERT_BASE64 is required for tagged releases.'
+          }
+          .\cmake\SignWindowsBinary.ps1 `
+            -Executable .\out\Release\win64\svp.exe `
+            -CertificateBase64 $env:SIGNING_CERTIFICATE `
+            -CertificatePassword $env:SIGNING_PASSWORD `
+            -ExpectedSubject $env:SIGNING_SUBJECT
+
+      - name: Package signed release
+        run: >-
+          .\cmake\PackageRelease.ps1
+          -Executable .\out\Release\win64\svp.exe
+          -OutputDirectory .\out\package
+          -Version '${{ steps.version.outputs.version }}'
+          -SourceDirectory .
+
+      - name: Publish immutable tag artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $version = '${{ steps.version.outputs.version }}'
+          $zip = ".\out\package\svcpilot-$version-win64.zip"
+          $hash = "$zip.sha256"
+          gh release create '${{ github.ref_name }}' $zip $hash `
+            --repo '${{ github.repository }}' `
+            --title "SvcPilot $version" --generate-notes --verify-tag

@@ -217,6 +217,7 @@ Readiness 支持 `InitialDelaySec`、`IntervalSec`、`TimeoutSec`、`StartupTime
 ## 当前限制
 
 - 管理员 SCM 自动化和虚拟机 13 步验收已通过；异常注入、长期运行和压力测试尚未完成。
+- 正式 `vMAJOR.MINOR.PATCH` tag 发布强制要求 Authenticode 证书、时间戳和签名校验；普通 CI 构建仍可能未签名，不应当作正式发布包分发。
 - `reload` 会等待 `ExecReload` 完成，并按真实成功、失败或超时返回退出码；`reload-or-restart` 仅在服务不支持 reload 时回退到重启。
 - `logs --follow` 要求 stdout/stderr 共用路径；MoveFile 轮转后可能继续读取旧句柄，需要重启命令。
 - 不提供集中远程管理、Web UI、集群编排和多用户授权。
