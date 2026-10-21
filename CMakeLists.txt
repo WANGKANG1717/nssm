@@ -76,6 +76,7 @@ set(SVP_APP_SOURCES
 
 set(SVP_CLI_SOURCES
   src/cli/config_commands.cpp
+  src/cli/events.cpp
   src/cli/logs.cpp
   src/cli/output.cpp
   src/cli/service_commands.cpp
@@ -184,6 +185,7 @@ target_link_libraries(svp PRIVATE
   shell32
   shlwapi
   user32
+  wevtapi
   winhttp
   ws2_32
   tomlplusplus::tomlplusplus

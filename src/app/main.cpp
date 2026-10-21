@@ -4,6 +4,7 @@
 #include "event.h"
 #include "messages.h"
 #include "logs.h"
+#include "events.h"
 #include "output.h"
 #include "registry.h"
 #include "security.h"
@@ -162,6 +163,9 @@ int wmain(int argc, wchar_t **argv) {
     }
     if (strings_equal_ignore_case(argv[1], L"logs")) {
       return logs_command(argc - 2, argv + 2);
+    }
+    if (strings_equal_ignore_case(argv[1], L"events")) {
+      return events_command(argc - 2, argv + 2);
     }
     if (strings_equal_ignore_case(argv[1], L"start")) return control_services_command(kServiceControlStart, false, argc - 2, argv + 2);
     if (strings_equal_ignore_case(argv[1], L"stop")) return control_services_command(SERVICE_CONTROL_STOP, false, argc - 2, argv + 2);

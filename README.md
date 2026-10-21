@@ -56,6 +56,7 @@ SvcPilot（命令名 `svp`）是面向 Windows 10+ 的轻量级服务监督器�
 | 热重载 | `reload`、`reload-or-restart`、`ExecReload` | 是 | 不停止主进程地重载 |
 | 日志轮转 | 按大小轮转和 `rotate` 在线触发 | 是 | 控制日志体积 |
 | 日志查看 | `logs -n N`、`-f`、Ctrl+C 停止 | 是 | 直接查看服务日志 |
+| 事件查询 | `events -n N [-o json]` | 否 | 按服务关联 Windows Application 事件 |
 | 进程树查询 | `processes` | 是 | 查看全部受管子进程 |
 | JSON 接口 | 稳定 JSON 输出和固定退出码 | 是 | PowerShell、CI/CD、未来 Web 端 |
 | SCM 全景列表 | `list -a` | 是 | 查看非 SvcPilot 服务 |
@@ -120,6 +121,7 @@ svp status example-service
 | `list`（`list-units`）`[-a\|--all] [-v\|--verbose\|-o json\|--output=json]` | 列出服务；详细模式显示状态和 PID |
 | `processes <service>` | 列出监督的进程树 |
 | `logs [-n N\|--lines N] [-f\|--follow] <service>` | 查看并跟随日志 |
+| `events [-n N\|--lines N] [-o json\|--output=json] <service>` | 查询该服务的 SvcPilot Windows 事件 |
 | `rotate <service>` | 请求在线日志轮转 |
 | `credential set <service> <account>` | 隐藏输入并加密保存密码 |
 | `credential delete <service>` | 删除保存的凭据 |
