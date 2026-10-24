@@ -153,8 +153,12 @@ function Set-SecureAcl([string]$Path, [bool]$Directory) {
       $identity, 'FullControl', $inheritance, $propagation, 'Allow')
     [void]$acl.AddAccessRule($rule)
   }
+  # Restricted service tokens evaluate filesystem access with their restricted
+  # SID list, which includes Everyone but not the interactive user's groups.
+  # Read/execute access keeps the test payload immutable while allowing the
+  # restricted virtual-account service to load SvcPilot and its configuration.
   $readRule = New-Object Security.AccessControl.FileSystemAccessRule(
-    'Authenticated Users', 'ReadAndExecute', $inheritance, $propagation, 'Allow')
+    'Everyone', 'ReadAndExecute', $inheritance, $propagation, 'Allow')
   [void]$acl.AddAccessRule($readRule)
   Set-Acl -LiteralPath $Path -AclObject $acl
 }
@@ -683,6 +687,10 @@ try {
   Write-Step 'Create isolated, ACL-protected test workspace'
   [void](New-Item -ItemType Directory -Path $script:TestRoot)
   Set-SecureAcl $script:TestRoot $true
+  $isolatedExecutable = Join-Path $script:TestRoot 'svp.exe'
+  Copy-Item -LiteralPath $script:ExecutablePath -Destination $isolatedExecutable
+  Set-SecureAcl $isolatedExecutable $false
+  $script:ExecutablePath = $isolatedExecutable
   Write-ServiceConfig $configPath $false 'SvcPilot VM acceptance test'
   $pingPath = Join-Path ([Environment]::SystemDirectory) 'ping.exe'
   Write-StandardServiceConfig $dependencyConfig $dependencyName `
