@@ -159,6 +159,11 @@ function Set-SecureAcl([string]$Path, [bool]$Directory) {
   Set-Acl -LiteralPath $Path -AclObject $acl
 }
 
+function Write-ProbeSignal([string]$Path) {
+  'ready' | Set-Content -LiteralPath $Path -Encoding ascii
+  Set-SecureAcl $Path $false
+}
+
 function Write-ServiceConfig([string]$Path, [bool]$FailImmediately,
                              [string]$Description) {
   $systemDirectory = [Environment]::SystemDirectory
@@ -741,8 +746,7 @@ try {
     )
 
   $fileProbeSignal = Join-Path $script:TestRoot 'file-probe.ready'
-  'ready' | Set-Content -LiteralPath $fileProbeSignal -Encoding ascii
-  Set-SecureAcl $fileProbeSignal $false
+  Write-ProbeSignal $fileProbeSignal
   Write-StandardServiceConfig $fileProbeConfig $fileProbeName `
     'Arguments = ["-t", "127.0.0.1"]' -ApplicationPath $pingPath -Sections @(
       '[Readiness]',
@@ -756,8 +760,7 @@ try {
     )
 
   $healthSignal = Join-Path $script:TestRoot 'health.ready'
-  'ready' | Set-Content -LiteralPath $healthSignal -Encoding ascii
-  Set-SecureAcl $healthSignal $false
+  Write-ProbeSignal $healthSignal
   Write-StandardServiceConfig $healthProbeConfig $healthProbeName `
     'Arguments = ["-t", "127.0.0.1"]' -ApplicationPath $pingPath -Sections @(
       '[Readiness]',
@@ -1188,6 +1191,7 @@ try {
   foreach ($probe in @(
       @{ Name = $commandProbeName; Config = $commandProbeConfig },
       @{ Name = $fileProbeName; Config = $fileProbeConfig })) {
+    if ($probe.Name -eq $fileProbeName) { Write-ProbeSignal $fileProbeSignal }
     [void](Invoke-SvpJson @('apply', '--output=json', $probe.Config))
     [void](Invoke-Svp @('start', $probe.Name))
     [void](Wait-NamedServiceState $probe.Name 'running' 20)
@@ -1247,6 +1251,7 @@ try {
   [void](Invoke-Svp @('stop', $notifyProbeName))
   [void](Wait-NamedServiceState $notifyProbeName 'stopped' 15)
 
+  Write-ProbeSignal $healthSignal
   [void](Invoke-SvpJson @('apply', '--output=json', $healthProbeConfig))
   [void](Invoke-Svp @('start', $healthProbeName))
   [void](Wait-NamedServiceState $healthProbeName 'running' 20)
