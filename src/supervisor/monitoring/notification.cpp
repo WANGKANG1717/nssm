@@ -91,25 +91,41 @@ unsigned long WINAPI notification_thread(void *context) {
         connect_error != ERROR_PIPE_CONNECTED) {
       return connect_error;
     }
-    char buffer[4097] = {};
-    unsigned long read = 0;
-    ResetEvent(io_event.get());
-    ZeroMemory(&overlapped, sizeof(overlapped));
-    overlapped.hEvent = io_event.get();
-    BOOL read_ok = ReadFile(pipe.get(), buffer, 4096, &read, &overlapped);
-    unsigned long read_error = read_ok ? ERROR_SUCCESS : GetLastError();
-    if (! read_ok && read_error == ERROR_IO_PENDING) {
-      HANDLE handles[] = {service->notification_stop_event, io_event.get()};
-      const unsigned long wait = WaitForMultipleObjects(2, handles, FALSE,
-                                                        INFINITE);
-      if (wait == WAIT_OBJECT_0) {
-        CancelIoEx(pipe.get(), &overlapped);
-        return 0;
+    while (WaitForSingleObject(service->notification_stop_event, 0) !=
+           WAIT_OBJECT_0) {
+      char buffer[4097] = {};
+      unsigned long read = 0;
+      ResetEvent(io_event.get());
+      ZeroMemory(&overlapped, sizeof(overlapped));
+      overlapped.hEvent = io_event.get();
+      BOOL read_ok = ReadFile(pipe.get(), buffer, 4096, &read, &overlapped);
+      unsigned long read_error = read_ok ? ERROR_SUCCESS : GetLastError();
+      if (! read_ok && read_error == ERROR_IO_PENDING) {
+        HANDLE handles[] = {service->notification_stop_event, io_event.get()};
+        const unsigned long wait = WaitForMultipleObjects(2, handles, FALSE,
+                                                          INFINITE);
+        if (wait == WAIT_OBJECT_0) {
+          CancelIoEx(pipe.get(), &overlapped);
+          return 0;
+        }
+        if (wait != WAIT_OBJECT_0 + 1) return GetLastError();
+        read_ok = GetOverlappedResult(pipe.get(), &overlapped, &read, FALSE);
+        if (! read_ok) read_error = GetLastError();
       }
-      read_ok = wait == WAIT_OBJECT_0 + 1 &&
-                GetOverlappedResult(pipe.get(), &overlapped, &read, FALSE);
-    }
-    if (read_ok && read) {
+      if (! read_ok) {
+        if (read_error == ERROR_BROKEN_PIPE ||
+            read_error == ERROR_PIPE_NOT_CONNECTED) {
+          break;
+        }
+        if (read_error == ERROR_OPERATION_ABORTED &&
+            WaitForSingleObject(service->notification_stop_event, 0) ==
+                WAIT_OBJECT_0) {
+          return 0;
+        }
+        DisconnectNamedPipe(pipe.get());
+        return read_error;
+      }
+      if (! read) break;
       std::string message(buffer, read);
       if (message.find("READY=1") != std::string::npos) {
         SetEvent(service->notification_ready_event);
