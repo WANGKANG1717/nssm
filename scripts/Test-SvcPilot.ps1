@@ -119,14 +119,17 @@ function Invoke-SvpJson([string[]]$Arguments) {
 
 function Get-JsonProperty($Object, [string]$Name) {
   if ($null -eq $Object) { throw "Cannot read JSON property '$Name' from null." }
-  $property = $Object.PSObject.Properties[$Name]
-  if ($null -eq $property) {
+  if ($Object.PSObject.Properties.Name -notcontains $Name) {
     $names = @($Object.PSObject.Properties.Name | Where-Object { -not $_.StartsWith('_svp') }) -join ', '
-    $command = $Object.PSObject.Properties['_svpCommand'].Value
-    $raw = $Object.PSObject.Properties['_svpRawJson'].Value
+    $command = if ($Object.PSObject.Properties.Name -contains '_svpCommand') {
+      $Object.PSObject.Properties['_svpCommand'].Value
+    } else { '' }
+    $raw = if ($Object.PSObject.Properties.Name -contains '_svpRawJson') {
+      $Object.PSObject.Properties['_svpRawJson'].Value
+    } else { '' }
     throw "svp $command JSON is missing '$Name'. Fields: [$names]. Raw JSON: $raw"
   }
-  return $property.Value
+  return $Object.$Name
 }
 
 function Set-SecureAcl([string]$Path, [bool]$Directory) {
@@ -548,12 +551,14 @@ function Test-ServiceAbsent([string]$Name) {
   return $result.ExitCode -ne 0
 }
 
-function Save-FailureDiagnostics([string]$Message) {
+function Save-FailureDiagnostics([Management.Automation.ErrorRecord]$ErrorRecord) {
   if ([string]::IsNullOrWhiteSpace($script:DiagnosticPath)) { return }
   $lines = [Collections.Generic.List[string]]::new()
   $lines.Add('SvcPilot VM acceptance failure')
   $lines.Add("Time: $([DateTime]::Now.ToString('o'))")
-  $lines.Add("Message: $Message")
+  $lines.Add("Message: $($ErrorRecord.Exception.Message)")
+  $lines.Add("Location: $($ErrorRecord.InvocationInfo.PositionMessage)")
+  $lines.Add("Stack: $($ErrorRecord.ScriptStackTrace)")
   $lines.Add("Service: $($script:ServiceName)")
   $lines.Add('')
   foreach ($command in @(
@@ -1403,7 +1408,7 @@ try {
 }
 catch {
   $failure = $_
-  Save-FailureDiagnostics $failure.Exception.Message
+  Save-FailureDiagnostics $failure
 }
 finally {
   Write-Host 'Cleaning exact test services and temporary files...' -ForegroundColor DarkGray
