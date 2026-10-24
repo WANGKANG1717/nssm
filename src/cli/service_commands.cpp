@@ -254,6 +254,15 @@ int reload_services_command(bool restart_if_unsupported, int argc,
         wprintf(L"%ls: reload: %ls", name, error_string(ERROR_SUCCESS));
         continue;
       }
+      if (restart_if_unsupported &&
+          (reload_result == ERROR_CALL_NOT_IMPLEMENTED ||
+           reload_result == ERROR_INVALID_SERVICE_CONTROL ||
+           reload_result == ERROR_SERVICE_NOT_ACTIVE)) {
+        int status = control_service(SERVICE_CONTROL_STOP, 1, &name);
+        if (! status) status = control_service(kServiceControlStart, 1, &name);
+        if (status) ++failures;
+        continue;
+      }
       fwprintf(stderr, L"%ls: reload failed: %ls\n", name,
                error_string(reload_result));
       ++failures;

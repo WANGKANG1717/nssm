@@ -677,7 +677,16 @@ unsigned long WINAPI service_control_handler(unsigned long control, unsigned lon
       log_service_control(service->name, control, true);
       if (! service->config ||
           service->config->lifecycle.exec_reload.empty()) {
-        return ERROR_CALL_NOT_IMPLEMENTED;
+        /* Complete the request explicitly so clients can report unsupported
+           reload immediately and reload-or-restart can take its fallback. */
+        const unsigned long request = static_cast<unsigned long>(
+            InterlockedIncrement(&service->reload_requested));
+        InterlockedExchange(&service->reload_result,
+                            static_cast<LONG>(ERROR_CALL_NOT_IMPLEMENTED));
+        InterlockedExchange(&service->reload_completed,
+                            static_cast<LONG>(request));
+        publish_status_snapshot(service);
+        return NO_ERROR;
       }
       {
         auto context = std::unique_ptr<reload_context_t>(
