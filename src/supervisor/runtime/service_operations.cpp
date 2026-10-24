@@ -194,6 +194,17 @@ bool execute_service_control(unsigned long control,
     return false;
   }
 
+  /*
+    ControlService only succeeds after the service accepts CONTINUE and its
+    control handler returns success. Waiting for SERVICE_RUNNING is unsafe for
+    a restart-backoff service because its child may exit and re-enter PAUSED
+    between two status polls, even though the resume request worked correctly.
+  */
+  if (control == SERVICE_CONTROL_CONTINUE) {
+    result->wait_response = 0;
+    return true;
+  }
+
   result->wait_response = await_service_control_response(
       control, service.get(), &result->status, initial_status,
       &result->windows_error);
