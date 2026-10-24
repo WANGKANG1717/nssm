@@ -50,22 +50,26 @@ jobs:
       - name: SCM lifecycle integration test
         run: .\tests\integration\service_lifecycle.ps1 -Executable .\out\Release\win64\svp.exe
 
-      - name: Require and apply Authenticode signature
+      - name: Apply optional Authenticode signature
+        id: signing
         env:
           SIGNING_CERTIFICATE: ${{ secrets.WINDOWS_SIGNING_CERT_BASE64 }}
           SIGNING_PASSWORD: ${{ secrets.WINDOWS_SIGNING_CERT_PASSWORD }}
           SIGNING_SUBJECT: ${{ secrets.WINDOWS_SIGNING_CERT_SUBJECT }}
         run: |
           if ([string]::IsNullOrWhiteSpace($env:SIGNING_CERTIFICATE)) {
-            throw 'WINDOWS_SIGNING_CERT_BASE64 is required for tagged releases.'
+            Write-Warning 'WINDOWS_SIGNING_CERT_BASE64 is not configured; producing an explicitly unsigned release.'
+            'signed=false' >> $env:GITHUB_OUTPUT
+            exit 0
           }
           .\cmake\SignWindowsBinary.ps1 `
             -Executable .\out\Release\win64\svp.exe `
             -CertificateBase64 $env:SIGNING_CERTIFICATE `
             -CertificatePassword $env:SIGNING_PASSWORD `
             -ExpectedSubject $env:SIGNING_SUBJECT
+          'signed=true' >> $env:GITHUB_OUTPUT
 
-      - name: Package signed release
+      - name: Package release
         run: >-
           .\cmake\PackageRelease.ps1
           -Executable .\out\Release\win64\svp.exe
@@ -83,3 +87,8 @@ jobs:
           gh release create '${{ github.ref_name }}' $zip $hash `
             --repo '${{ github.repository }}' `
             --title "SvcPilot $version" --generate-notes --verify-tag
+          if ('${{ steps.signing.outputs.signed }}' -ne 'true') {
+            $body = gh release view '${{ github.ref_name }}' --repo '${{ github.repository }}' --json body --jq .body
+            $notice = "> [!WARNING]`n> This release is not Authenticode-signed. Verify the published SHA-256 checksum and configure Windows signing secrets before distributing it as a production release."
+            gh release edit '${{ github.ref_name }}' --repo '${{ github.repository }}' --notes "$notice`n`n$body"
+          }
