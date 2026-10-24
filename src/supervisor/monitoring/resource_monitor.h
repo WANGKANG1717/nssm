@@ -5,5 +5,7 @@ struct service_runtime_t;
 
 bool start_resource_monitor(service_runtime_t *service);
 void stop_resource_monitor(service_runtime_t *service);
+void record_job_memory_limit_failure(service_runtime_t *service,
+                                     unsigned long exit_code);
 
 #endif

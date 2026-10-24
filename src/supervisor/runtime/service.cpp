@@ -1017,6 +1017,7 @@ void CALLBACK end_service(void *arg, unsigned char why) {
   if (! why) {
     _snwprintf_s(code, _countof(code), _TRUNCATE, L"%lu", exitcode);
     log_event(EVENTLOG_INFORMATION_TYPE, SVP_EVENT_ENDED_SERVICE, service->exe, service->name, code, 0);
+    record_job_memory_limit_failure(service, exitcode);
   }
 
   /* Clean up. */

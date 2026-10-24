@@ -215,3 +215,32 @@ void stop_resource_monitor(service_runtime_t *service) {
   }
   LeaveCriticalSection(&service->resource_section);
 }
+
+void record_job_memory_limit_failure(service_runtime_t *service,
+                                     unsigned long exit_code) {
+  if (! service || ! service->config || ! service->job_handle ||
+      ! service->config->resources.memory_limit_bytes) {
+    return;
+  }
+  job_accounting_t accounting = {};
+  unsigned long error = ERROR_SUCCESS;
+  if (! query_service_job(service->job_handle, &accounting, &error)) {
+    log_event(EVENTLOG_WARNING_TYPE, SVP_EVENT_RESOURCE_EXCEEDED,
+              service->name, L"memory limit",
+              (L"unable to inspect peak Job memory after process exit: error " +
+               std::to_wstring(error)).c_str(),
+              0);
+    return;
+  }
+  const unsigned long long limit = service->config->resources.memory_limit_bytes;
+  if (accounting.peak_job_memory < limit) return;
+  const std::wstring detail =
+      L"process exceeded the Job memory limit of " + std::to_wstring(limit) +
+      L" bytes; peak was " + std::to_wstring(accounting.peak_job_memory) +
+      L" bytes";
+  if (record_runtime_failure(service, failure_kind_t::resource_memory,
+                             L"resource", exit_code, ERROR_SUCCESS, detail)) {
+    log_event(EVENTLOG_ERROR_TYPE, SVP_EVENT_RESOURCE_EXCEEDED,
+              service->name, L"memory limit", detail.c_str(), 0);
+  }
+}
