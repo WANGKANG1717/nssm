@@ -164,13 +164,9 @@ bool enforce_service_job_process_limit(HANDLE job,
   if (! query_job_process_ids(job, &process_ids, &assigned_processes, error)) {
     return false;
   }
-  if (assigned_processes <= maximum_processes) {
+  if (process_ids.size() <= maximum_processes) {
     save_error(error, ERROR_SUCCESS);
     return true;
-  }
-  if (process_ids.size() < assigned_processes) {
-    save_error(error, ERROR_ACCESS_DENIED);
-    return false;
   }
 
   std::vector<job_process_info_t> processes;
@@ -227,8 +223,28 @@ bool enforce_service_job_process_limit(HANDLE job,
     }
     WaitForSingleObject(process.get(), 1000);
   }
-  save_error(error, first_error);
-  return first_error == ERROR_SUCCESS;
+
+  /*
+    Process creation can race with the accounting snapshot. The job-wide
+    assignment counter may briefly exceed the PID snapshot, and a process may
+    exit or lose its handle while these entries are being reaped. The required
+    invariant is the steady-state PID count, so retry the snapshot briefly
+    before treating an individual termination failure as fatal.
+  */
+  for (unsigned long attempt = 0; attempt < 10; ++attempt) {
+    if (attempt) Sleep(20);
+    if (! query_job_process_ids(job, &process_ids, &assigned_processes,
+                                error)) {
+      return false;
+    }
+    if (process_ids.size() <= maximum_processes) {
+      save_error(error, ERROR_SUCCESS);
+      return true;
+    }
+  }
+
+  save_error(error, first_error ? first_error : ERROR_BUSY);
+  return false;
 }
 
 bool terminate_service_job(HANDLE job, unsigned long exit_code,
