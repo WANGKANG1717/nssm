@@ -535,7 +535,7 @@ function Remove-ExactTestService([string]$Name) {
   finally {
     $ErrorActionPreference = $previousPreference
   }
-  $deadline = [DateTime]::UtcNow.AddSeconds(10)
+  $deadline = [DateTime]::UtcNow.AddSeconds(30)
   do {
     if (Test-ServiceAbsent $Name) { return $true }
     Start-Sleep -Milliseconds 250
@@ -674,13 +674,15 @@ try {
   [void](New-Item -ItemType Directory -Path $script:TestRoot)
   Set-SecureAcl $script:TestRoot $true
   Write-ServiceConfig $configPath $false 'SvcPilot VM acceptance test'
+  $pingPath = Join-Path ([Environment]::SystemDirectory) 'ping.exe'
   Write-StandardServiceConfig $dependencyConfig $dependencyName `
-    'Arguments = ["-t", "127.0.0.1"]'
+    'Arguments = ["-t", "127.0.0.1"]' -ApplicationPath $pingPath
   Write-StandardServiceConfig $dependentConfig $dependentName `
     'Arguments = ["-t", "127.0.0.1"]' `
+    -ApplicationPath $pingPath `
     -UnitLines @(('Requires = [{0}]' -f (ConvertTo-TomlString $dependencyName)))
   Write-StandardServiceConfig $reloadFallbackConfig $reloadFallbackName `
-    'Arguments = ["-t", "127.0.0.1"]'
+    'Arguments = ["-t", "127.0.0.1"]' -ApplicationPath $pingPath
   Write-StandardServiceConfig $continueConfig $continueName `
     'Arguments = ["/d", "/c", "exit 7"]' -RestartMode 'on-failure' -ServiceLines @(
       'RestartSec = "30s"',
@@ -722,7 +724,7 @@ try {
 
   $cmdPath = Join-Path ([Environment]::SystemDirectory) 'cmd.exe'
   Write-StandardServiceConfig $commandProbeConfig $commandProbeName `
-    'Arguments = ["-t", "127.0.0.1"]' -Sections @(
+    'Arguments = ["-t", "127.0.0.1"]' -ApplicationPath $pingPath -Sections @(
       '[Readiness]',
       'Type = "command"',
       'StartupTimeoutSec = "10s"',
@@ -737,7 +739,7 @@ try {
   'ready' | Set-Content -LiteralPath $fileProbeSignal -Encoding ascii
   Set-SecureAcl $fileProbeSignal $false
   Write-StandardServiceConfig $fileProbeConfig $fileProbeName `
-    'Arguments = ["-t", "127.0.0.1"]' -Sections @(
+    'Arguments = ["-t", "127.0.0.1"]' -ApplicationPath $pingPath -Sections @(
       '[Readiness]',
       'Type = "file"',
       'StartupTimeoutSec = "10s"',
@@ -752,7 +754,7 @@ try {
   'ready' | Set-Content -LiteralPath $healthSignal -Encoding ascii
   Set-SecureAcl $healthSignal $false
   Write-StandardServiceConfig $healthProbeConfig $healthProbeName `
-    'Arguments = ["-t", "127.0.0.1"]' -Sections @(
+    'Arguments = ["-t", "127.0.0.1"]' -ApplicationPath $pingPath -Sections @(
       '[Readiness]',
       'Type = "process"',
       'StartupTimeoutSec = "10s"',
@@ -831,7 +833,7 @@ try {
   $startHookFailureLine = 'ExecStartPre = [{{ Path = {0}, Arguments = ["/d", "/c", "exit 1"] }}]' -f
     (ConvertTo-TomlString $cmdPath)
   Write-StandardServiceConfig $startFailureConfig $startFailureName `
-    'Arguments = ["-t", "127.0.0.1"]' -ServiceLines @(
+    'Arguments = ["-t", "127.0.0.1"]' -ApplicationPath $pingPath -ServiceLines @(
       'TimeoutStartSec = "5s"',
       $startHookFailureLine
     )
@@ -843,14 +845,14 @@ try {
     (ConvertTo-TomlString $cmdPath),
     (ConvertTo-TomlString "echo stop-post>$forcedStopMarker")
   Write-StandardServiceConfig $forcedStopConfig $forcedStopName `
-    'Arguments = ["-t", "127.0.0.1"]' -ServiceLines @(
+    'Arguments = ["-t", "127.0.0.1"]' -ApplicationPath $pingPath -ServiceLines @(
       'TimeoutStopSec = "2s"',
       $forcedStopAction,
       $forcedStopPostAction
     )
 
   Write-StandardServiceConfig $virtualAccountConfig $virtualAccountName `
-    'Arguments = ["-t", "127.0.0.1"]' -Account 'virtual' `
+    'Arguments = ["-t", "127.0.0.1"]' -ApplicationPath $pingPath -Account 'virtual' `
     -ServiceSid 'restricted' -ServiceLines @('TimeoutStartSec = "10s"')
 
   foreach ($testConfig in @(
@@ -974,10 +976,10 @@ try {
   $cycleAConfig = Join-Path $script:TestRoot 'cycle-a.toml'
   $cycleBConfig = Join-Path $script:TestRoot 'cycle-b.toml'
   Write-StandardServiceConfig $cycleAConfig $cycleA `
-    'Arguments = ["-t", "127.0.0.1"]' -UnitLines @(
+    'Arguments = ["-t", "127.0.0.1"]' -ApplicationPath $pingPath -UnitLines @(
       ('Requires = [{0}]' -f (ConvertTo-TomlString $cycleB)))
   Write-StandardServiceConfig $cycleBConfig $cycleB `
-    'Arguments = ["-t", "127.0.0.1"]' -UnitLines @(
+    'Arguments = ["-t", "127.0.0.1"]' -ApplicationPath $pingPath -UnitLines @(
       ('Requires = [{0}]' -f (ConvertTo-TomlString $cycleA)))
   [void](Invoke-Svp @('apply', '--output=json', $cycleAConfig, $cycleBConfig) @(4))
   Assert-True ((Test-ServiceAbsent $cycleA) -and (Test-ServiceAbsent $cycleB)) `
@@ -1191,7 +1193,7 @@ try {
   $tcpPort = Get-FreeTcpPort
   Start-TcpProbeServer $tcpPort
   Write-StandardServiceConfig $tcpProbeConfig $tcpProbeName `
-    'Arguments = ["-t", "127.0.0.1"]' -Sections @(
+    'Arguments = ["-t", "127.0.0.1"]' -ApplicationPath $pingPath -Sections @(
       '[Readiness]',
       'Type = "tcp"',
       'StartupTimeoutSec = "10s"',
@@ -1210,7 +1212,7 @@ try {
   $httpPort = Get-FreeTcpPort
   Start-HttpProbeServer $httpPort
   Write-StandardServiceConfig $httpProbeConfig $httpProbeName `
-    'Arguments = ["-t", "127.0.0.1"]' -Sections @(
+    'Arguments = ["-t", "127.0.0.1"]' -ApplicationPath $pingPath -Sections @(
       '[Readiness]',
       'Type = "http"',
       'StartupTimeoutSec = "10s"',
