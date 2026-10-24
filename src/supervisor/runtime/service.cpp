@@ -922,19 +922,6 @@ int stop_service(service_runtime_t *service, unsigned long exitcode) {
                            stop_post_deadline, false);
   }
 
-  /* Signal we stopped */
-  update_service_status(service, [exitcode](SERVICE_STATUS &status) {
-    status.dwCurrentState = SERVICE_STOPPED;
-    if (exitcode) {
-      status.dwWin32ExitCode = ERROR_SERVICE_SPECIFIC_ERROR;
-      status.dwServiceSpecificExitCode = exitcode;
-    }
-    else {
-      status.dwWin32ExitCode = NO_ERROR;
-      status.dwServiceSpecificExitCode = 0;
-    }
-  });
-
   if (exitcode && service->config) {
     failure_record_t failure = runtime_failure(service);
     if (failure.kind == failure_kind_t::none) {
@@ -951,6 +938,24 @@ int stop_service(service_runtime_t *service, unsigned long exitcode) {
                 service->name, error_string(failure_error), 0);
     }
   }
+
+  /*
+    Publish the stopped state only after the failure record is durable.  The
+    SCM may tear down the service host as soon as SERVICE_STOPPED is visible,
+    which previously could cut off the registry write and leave a terminated
+    service with failed=false.
+  */
+  update_service_status(service, [exitcode](SERVICE_STATUS &status) {
+    status.dwCurrentState = SERVICE_STOPPED;
+    if (exitcode) {
+      status.dwWin32ExitCode = ERROR_SERVICE_SPECIFIC_ERROR;
+      status.dwServiceSpecificExitCode = exitcode;
+    }
+    else {
+      status.dwWin32ExitCode = NO_ERROR;
+      status.dwServiceSpecificExitCode = 0;
+    }
+  });
 
   if (service->service_done_event) SetEvent(service->service_done_event);
 
