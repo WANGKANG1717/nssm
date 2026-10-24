@@ -1440,7 +1440,13 @@ finally {
   }
   foreach ($path in @($script:TestRoot, $script:UnsafeRoot)) {
     if (-not [string]::IsNullOrWhiteSpace($path) -and (Test-Path -LiteralPath $path)) {
-      Remove-Item -LiteralPath $path -Recurse -Force -ErrorAction SilentlyContinue
+      # Service deletion only removes the SCM registration. Give a terminating
+      # wrapper a short grace period to release its image and test files.
+      for ($attempt = 0; $attempt -lt 40 -and (Test-Path -LiteralPath $path);
+           ++$attempt) {
+        Remove-Item -LiteralPath $path -Recurse -Force -ErrorAction SilentlyContinue
+        if (Test-Path -LiteralPath $path) { Start-Sleep -Milliseconds 250 }
+      }
       if (Test-Path -LiteralPath $path) {
         $cleanupErrors.Add("Directory remains after cleanup: $path")
       }
