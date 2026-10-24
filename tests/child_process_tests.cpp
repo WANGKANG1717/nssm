@@ -356,6 +356,41 @@ void job_object_tests() {
          L"closing the job must terminate its child process tree");
   CloseHandle(process.hThread);
   CloseHandle(process.hProcess);
+
+  job = create_service_job(&error);
+  expect(job != nullptr, L"process-limit test job should be created");
+  if (! job) return;
+  std::vector<PROCESS_INFORMATION> members;
+  for (unsigned long index = 0; index < 4; ++index) {
+    process = {};
+    created = CreateProcessW(executable.c_str(), command.data(), nullptr,
+                             nullptr, false,
+                             CREATE_SUSPENDED | CREATE_NO_WINDOW, nullptr,
+                             nullptr, &startup, &process) != FALSE;
+    expect(created, L"process-limit test member should start suspended");
+    if (! created) break;
+    expect(assign_process_to_service_job(job, process.hProcess, &error),
+           L"process-limit test member should join the job");
+    ResumeThread(process.hThread);
+    members.push_back(process);
+  }
+  expect(members.size() == 4,
+         L"process-limit test should have four active members");
+  if (members.size() == 4) {
+    expect(enforce_service_job_process_limit(job, 2, members[0].dwProcessId,
+                                             &error),
+           L"process-limit enforcement should terminate excess members");
+    Sleep(100);
+    job_accounting_t limited = {};
+    expect(query_service_job(job, &limited, &error) &&
+               limited.active_processes <= 2,
+           L"process-limit enforcement should leave at most two members");
+  }
+  for (const PROCESS_INFORMATION &member : members) {
+    CloseHandle(member.hThread);
+    CloseHandle(member.hProcess);
+  }
+  CloseHandle(job);
 }
 
 void configuration_tests() {

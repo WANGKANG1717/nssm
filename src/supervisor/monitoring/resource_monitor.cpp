@@ -23,6 +23,9 @@ void terminate_for_resource(service_runtime_t *service, const wchar_t *reason,
   else if (wcscmp(reason, L"CPU limit") == 0) {
     kind = failure_kind_t::resource_cpu;
   }
+  else if (wcscmp(reason, L"process limit") == 0) {
+    kind = failure_kind_t::resource_processes;
+  }
   record_runtime_failure(service, kind, L"resource",
                          kResourceWatchdogExitCode, ERROR_SUCCESS, detail);
   unsigned long error = ERROR_SUCCESS;
@@ -85,6 +88,35 @@ unsigned long WINAPI resource_monitor_thread(void *argument) {
       continue;
     }
     query_failures = 0;
+
+    /*
+      Windows enforces ActiveProcessLimit at process creation, but concurrent
+      launches can momentarily overshoot it.  Keep the hard OS limit and prune
+      the newest excess members so TasksMax remains a reliable upper bound.
+    */
+    if (config.maximum_processes &&
+        current.active_processes > config.maximum_processes) {
+      unsigned long enforce_error = ERROR_SUCCESS;
+      if (! enforce_service_job_process_limit(
+              service->job_handle, config.maximum_processes, service->pid,
+              &enforce_error)) {
+        terminate_for_resource(
+            service, L"process limit",
+            L"unable to terminate excess processes (error " +
+                std::to_wstring(enforce_error) + L")");
+        return kResourceWatchdogExitCode;
+      }
+      if (! query_service_job(service->job_handle, &current, &error)) {
+        if (++query_failures >= 3) {
+          terminate_for_resource(service, L"monitor failure",
+                                 L"re-querying the Job Object failed with error " +
+                                     std::to_wstring(error));
+          return kResourceWatchdogExitCode;
+        }
+        continue;
+      }
+      query_failures = 0;
+    }
 
     if (config.memory_limit_bytes &&
         current.job_memory >= config.memory_limit_bytes) {
