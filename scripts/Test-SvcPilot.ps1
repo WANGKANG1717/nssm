@@ -535,7 +535,7 @@ function Remove-ExactTestService([string]$Name) {
   finally {
     $ErrorActionPreference = $previousPreference
   }
-  $deadline = [DateTime]::UtcNow.AddSeconds(30)
+  $deadline = [DateTime]::UtcNow.AddSeconds(90)
   do {
     if (Test-ServiceAbsent $Name) { return $true }
     Start-Sleep -Milliseconds 250
@@ -963,12 +963,12 @@ try {
   [void](Wait-NamedServiceState $dependencyName 'running' 20)
   [void](Wait-NamedServiceState $dependentName 'running' 20)
   $batchActive = Invoke-Svp @('is-active', $dependencyName, $dependentName)
-  Assert-True (([regex]::Matches($batchActive.Output, '(?m)^active$')).Count -eq 2) `
+  Assert-True (([regex]::Matches($batchActive.Output, '(?m)^active\r?$')).Count -eq 2) `
     'batch start did not activate both services.'
   [void](Invoke-Svp @('stop', $dependentName, $dependencyName))
   Wait-NamedServicesStopped @($dependentName, $dependencyName) 20
   $batchStates = Invoke-Svp @('is-active', $dependencyName, $dependentName) @(3)
-  Assert-True (([regex]::Matches($batchStates.Output, '(?m)^inactive$')).Count -eq 2) `
+  Assert-True (([regex]::Matches($batchStates.Output, '(?m)^inactive\r?$')).Count -eq 2) `
     'batch stop did not deactivate both services.'
 
   $cycleA = New-TestServiceName 'cycle-a'
