@@ -8,7 +8,7 @@ SvcPilot（命令名 `svp`）是面向 Windows 10+ 的轻量级服务监督器�
 
 ## 当前成熟度
 
-项目尚未投入生产。普通构建、单元测试、GitHub Actions 管理员 SCM 集成测试和此前的 Windows 虚拟机基础验收均已通过；扩展后的全功能非交互验收脚本已经加入，仍待在隔离虚拟机完成本轮回归。异常注入、长期运行和压力测试同样只能在可丢弃虚拟机执行。在此之前，不建议用于关键生产服务。
+项目尚未投入生产。普通构建、单元测试、GitHub Actions 管理员 SCM 集成测试和 Windows 虚拟机 22 步全功能非交互验收均已通过。异常注入、持续负载、长期运行和断电恢复仍只能在可丢弃虚拟机执行，在这些测试完成前不建议用于关键生产服务。
 
 技术基线：Windows 10+、x64、Unicode、C++20、CMake 3.25+、Ninja、MinGW-w64 GCC 14+、`windmc`、`windres`。仅提供 CLI，无 GUI、MSVC 和 32 位版本。
 
@@ -218,8 +218,8 @@ Readiness 支持 `InitialDelaySec`、`IntervalSec`、`TimeoutSec`、`StartupTime
 
 ## 当前限制
 
-- 管理员 SCM 自动化和此前的基础虚拟机验收已通过；扩展后的全功能验收、异常注入、长期运行和压力测试仍需在可丢弃虚拟机完成。
-- 正式 `vMAJOR.MINOR.PATCH` tag 发布强制要求 Authenticode 证书、时间戳和签名校验；普通 CI 构建仍可能未签名，不应当作正式发布包分发。
+- 管理员 SCM 自动化和 Windows 虚拟机 22 步全功能验收已通过；异常注入、长期运行和压力测试仍需在可丢弃虚拟机完成。
+- 正式 `vMAJOR.MINOR.PATCH` tag 在配置 Authenticode 证书后必须通过时间戳和签名校验；未配置证书时工作流会生成明确标注的 unsigned release，生产分发前必须完成签名。
 - `reload` 会等待 `ExecReload` 完成，并按真实成功、失败或超时返回退出码；`reload-or-restart` 仅在服务不支持 reload 时回退到重启。
 - `logs --follow` 要求 stdout/stderr 共用路径；MoveFile 轮转后可能继续读取旧句柄，需要重启命令。
 - 不提供集中远程管理、Web UI、集群编排和多用户授权。
