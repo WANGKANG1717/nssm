@@ -17,7 +17,10 @@ int service_control_response(unsigned long control, unsigned long status) {
   switch (control) {
     case kServiceControlStart:
       if (status == SERVICE_START_PENDING) return 1;
-      return status == SERVICE_RUNNING ? 0 : -1;
+      // SvcPilot represents restart backoff as SERVICE_PAUSED. A service which
+      // exits before reaching RUNNING is still successfully started when its
+      // recovery policy has already moved it into that managed backoff state.
+      return status == SERVICE_RUNNING || status == SERVICE_PAUSED ? 0 : -1;
     case SERVICE_CONTROL_STOP:
     case SERVICE_CONTROL_SHUTDOWN:
       if (status == SERVICE_RUNNING || status == SERVICE_STOP_PENDING) return 1;
