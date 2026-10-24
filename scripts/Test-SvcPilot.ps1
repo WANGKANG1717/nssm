@@ -1003,7 +1003,7 @@ try {
   Assert-True ($verboseList.Output -match
     ('(stopped|running)\s+\d+\s+' + [regex]::Escape($script:ServiceName))) `
     'verbose list did not expose state and PID.'
-  $allList = Invoke-Svp @('list', '-a', '-o', 'json')
+  $allList = Invoke-SvpJson @('list', '-a', '-o', 'json')
   Assert-True ((@(Get-JsonProperty $allList 'services')).Count -gt
     (@($services)).Count) 'list --all did not include native Windows services.'
   $state = Invoke-Svp @('is-enabled', $script:ServiceName) @(1)
